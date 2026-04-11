@@ -1586,18 +1586,10 @@ domain types, but that is outside the scope of this protocol.
 
 The following items are intentionally left for upcoming drafts:
 
-- Group receipt wire format.
-- Receipt exchange/discovery UX between parties.
-- Proximity pairing discovery mechanism (NFC, BLE, mDNS, etc.).
-- rpp:// URI scheme registration and full parameter set.
-- QR code encoding format and maximum payload constraints.
 - Content rating dispute resolution process.
-- Public invitation directory: standardized endpoint and format for listing a
-  domain's public invitations.
-- Public invitation abuse prevention: rate limiting acceptance from unknown
-  domains, CAPTCHA-like proof-of-work for acceptance, or other anti-scraping
-  measures.
 - Display name abuse: whether servers should enforce any content policy on
   display names presented in public invitations or receipts.
+- Public invitation abuse prevention: rate limiting acceptance from unknown
+  domains
 - Domain verification key rotation: standardized historical key endpoint format
   and maximum key age for verifying older invitation attestations.
