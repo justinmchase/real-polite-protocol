@@ -97,3 +97,38 @@ automatically.
    the requirement.
 3. Implement the feature in `src/` until the requirement test passes.
 4. Keep unit tests (`*.test.ts`) next to their modules for focused coverage.
+
+## Avoiding tautological tests
+
+A tautological test is one that passes regardless of whether the system actually
+works. These tests give a false sense of correctness and **MUST NOT** be written
+or accepted.
+
+### Common tautologies to reject
+
+- **Existence-only checks**: asserting that a function or module exists without
+  calling it. If a requirement says "start() MUST execute", the test must
+  actually invoke `start()` and observe that it succeeds.
+- **Type-only checks**: asserting `typeof fn === "function"` instead of
+  exercising the behavior the requirement specifies.
+- **Stubbed assertions**: placeholder steps that contain no assert calls or only
+  assert hard-coded literals (e.g., `assertEquals(true, true)`).
+- **Dead assertions**: assertions on values that are constructed inside the test
+  itself rather than produced by the system under test.
+
+### When a test fails
+
+If a requirement test fails, the correct response is to **diagnose and fix the
+root cause** — not to weaken the test until it passes. Specifically:
+
+1. Read the error message and stack trace carefully.
+2. Investigate configuration, permissions, environment, or missing setup that
+   the code or test runner needs (e.g., `--allow-env`, `--unstable-kv`,
+   `deno.json` settings).
+3. Fix the underlying issue in the code, configuration, or test setup.
+4. If the root cause is genuinely unclear after investigation, **ask the user**
+   rather than silently weakening the test.
+
+**Never** reduce a test's scope or remove assertions to work around a failure.
+The requirement document is the source of truth — the test must faithfully
+verify what the requirement states.
