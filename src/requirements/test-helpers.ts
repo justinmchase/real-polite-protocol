@@ -6,6 +6,10 @@ export interface ToolCallResult {
   body: Record<string, unknown>;
 }
 
+export interface StartedServerContext {
+  kvPath: string;
+}
+
 export async function callTool(
   token: string,
   toolName: string,
@@ -30,10 +34,12 @@ export async function callTool(
 }
 
 export async function withStartedServer(
-  run: () => Promise<void>,
+  run: (context: StartedServerContext) => Promise<void>,
 ): Promise<void> {
+  const kvDir = await Deno.makeTempDir({ prefix: "rpp-test-kv-" });
+  const kvPath = `${kvDir}/kv.sqlite3`;
   const controller = new AbortController();
-  const started = start({ signal: controller.signal });
+  const started = start({ signal: controller.signal, kvPath });
 
   try {
     const healthy = await checkHealth();
@@ -43,10 +49,11 @@ export async function withStartedServer(
       "Server did not become healthy within timeout",
     );
 
-    await run();
+    await run({ kvPath });
   } finally {
     controller.abort();
     await started;
+    await Deno.remove(kvDir, { recursive: true });
     await new Promise((r) => setTimeout(r, 200));
   }
 }

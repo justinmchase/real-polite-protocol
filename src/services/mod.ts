@@ -11,9 +11,16 @@ export interface Services {
   auth: AuthService;
 }
 
-export async function initServices(logger: Logger): Promise<Services> {
+export interface ServiceInitOptions {
+  kvPath?: string;
+}
+
+export async function initServices(
+  logger: Logger,
+  options: ServiceInitOptions = {},
+): Promise<Services> {
   const config = await ConfigService.create();
-  const kv = await KvService.create(logger);
+  const kv = await KvService.create(logger, options.kvPath);
   const mcp = McpService.create();
   const auth = AuthService.create(logger, config);
   return { config, kv, mcp, auth };

@@ -13,7 +13,7 @@ const DomainIdentityOutputSchema = {
   categories_offered: z.array(z.string()).optional().describe(
     "Content categories offered",
   ),
-  rpp_since: z.string().datetime().optional().describe(
+  rpp_since: z.iso.datetime().optional().describe(
     "ISO 8601 date when RPP support began",
   ),
   contact_policy_url: z.string().url().optional().describe(
@@ -39,7 +39,7 @@ const HistoricalVerificationKeySchema = {
       "Base64-encoded public key in SPKI format",
     ),
   }).describe("Archived public verification key metadata"),
-  archived_at: z.string().datetime().describe(
+  archived_at: z.iso.datetime().describe(
     "ISO 8601 timestamp when the key was archived",
   ),
 };

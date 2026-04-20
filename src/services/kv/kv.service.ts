@@ -5,8 +5,8 @@ export class KvService {
     private readonly kv: Deno.Kv,
   ) {}
 
-  static async create(_logger: Logger): Promise<KvService> {
-    const kv = await Deno.openKv();
+  static async create(_logger: Logger, kvPath?: string): Promise<KvService> {
+    const kv = await Deno.openKv(kvPath);
     return new KvService(kv);
   }
 

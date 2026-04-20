@@ -14,7 +14,7 @@ interface AccountRecord {
 
 Deno.test("req:account-003 - Account display_name is optional and not required for MCP operations", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ kvPath }) => {
       await t.step(
         "authenticated request succeeds without any display name",
         async () => {
@@ -31,7 +31,7 @@ Deno.test("req:account-003 - Account display_name is optional and not required f
       );
 
       await t.step("new account defaults to no display_name", async () => {
-        const kv = await Deno.openKv();
+        const kv = await Deno.openKv(kvPath);
         try {
           const entry = await kv.get<AccountRecord>([
             "accounts",

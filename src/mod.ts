@@ -9,6 +9,7 @@ import { initTools } from "./tools/mod.ts";
 
 export interface StartOptions {
   signal?: AbortSignal;
+  kvPath?: string;
 }
 
 export async function start(options?: StartOptions): Promise<void> {
@@ -16,7 +17,7 @@ export async function start(options?: StartOptions): Promise<void> {
 
   async function initContext(): Promise<Context> {
     const logger = new ConsoleLogger();
-    services = await initServices(logger);
+    services = await initServices(logger, { kvPath: options?.kvPath });
     const repositories = await initRepositories(services);
     const managers = await initManagers(repositories, services);
     const tools = initTools(managers);
