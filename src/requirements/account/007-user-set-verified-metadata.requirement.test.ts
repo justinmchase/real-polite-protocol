@@ -20,6 +20,7 @@ Deno.test({
               name: "Alice Example",
               email: "alice@example.test",
               preferred_username: "alice",
+              ctry: "US",
             });
 
             const { status, body } = await callTool(
@@ -47,6 +48,7 @@ Deno.test({
               "alice@example.test",
             );
             assertEquals(record.verified_fields?.preferred_username, "alice");
+            assertEquals(record.verified_fields?.ctry, "US");
             assertExists(record.updated_at);
           },
         );

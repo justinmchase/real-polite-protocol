@@ -38,7 +38,10 @@ export class AccountManager {
   }
 
   async setVerifiedMetadataFromToken(
-    auth: Pick<AuthInfo, "oid" | "name" | "email" | "preferred_username">,
+    auth: Pick<
+      AuthInfo,
+      "oid" | "name" | "email" | "preferred_username" | "ctry"
+    >,
   ): Promise<UserVerifiedMetadataRecord> {
     const existing = await this.accounts.getVerifiedMetadata(auth.oid);
     const currentFields = existing?.verified_fields ?? {};
@@ -48,6 +51,7 @@ export class AccountManager {
     if (auth.preferred_username) {
       updates.preferred_username = auth.preferred_username;
     }
+    if (auth.ctry) updates.ctry = auth.ctry;
     return await this.accounts.setVerifiedMetadata(auth.oid, {
       ...currentFields,
       ...updates,

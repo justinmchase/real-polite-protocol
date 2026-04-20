@@ -13,6 +13,7 @@ export interface AuthInfo {
   name?: string;
   email?: string;
   preferred_username?: string;
+  ctry?: string;
 }
 
 export interface Context extends IContext {

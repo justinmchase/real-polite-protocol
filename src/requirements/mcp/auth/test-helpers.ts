@@ -24,6 +24,7 @@ export interface IssueTokenOverrides {
   name?: string;
   email?: string;
   preferred_username?: string;
+  ctry?: string;
   header?: Record<string, unknown>;
 }
 
@@ -131,6 +132,7 @@ export async function withAuthTestContext(
           ...(overrides.preferred_username
             ? { preferred_username: overrides.preferred_username }
             : {}),
+          ...(overrides.ctry ? { ctry: overrides.ctry } : {}),
         };
 
         const encodedHeader = encodeBase64UrlJson(header);

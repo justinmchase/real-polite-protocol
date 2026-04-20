@@ -21,6 +21,7 @@ interface JwtPayload {
   name?: string;
   email?: string;
   preferred_username?: string;
+  ctry?: string;
 }
 
 interface Jwk {
@@ -131,6 +132,7 @@ export class AuthService {
       name: payload.name || undefined,
       email: payload.email || undefined,
       preferred_username: payload.preferred_username || undefined,
+      ctry: payload.ctry || undefined,
     };
   }
 
