@@ -1,5 +1,5 @@
 import { Controller, type GroveApp, type IContext, type IState } from "@justinmchase/grove";
-import type { ConfigService } from "../../services/config/mod.ts";
+import type { ConfigService } from "../../services/config/config.service.ts";
 
 export class AuthDiscoveryController extends Controller {
   constructor(private readonly config: ConfigService) {

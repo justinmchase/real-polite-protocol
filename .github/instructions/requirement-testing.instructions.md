@@ -22,6 +22,32 @@ src/requirements/
     {name}.requirement.test.ts       # mirrors the requirement path
 ```
 
+## Authority and conflict handling
+
+- Apply this strict authority order when implementing or evaluating behavior:
+  1. RFC/spec (`spec/rpp-spec.md`)
+  2. Requirement documents (`.github/requirements/**`)
+  3. Requirement tests (`src/requirements/**`)
+  4. Implementation code (`src/**`)
+- Tests MUST validate requirement intent and MUST NOT redefine it.
+- If existing requirements conflict with user-requested behavior, ask for
+  clarification before changing requirements/tests/code.
+- Only alter RFC/spec or requirement documents when explicitly directed by the
+  user.
+
+## Coverage and gap analysis expectations
+
+- During requirement/test planning or review, perform both analyses:
+  - Requirement-to-test coverage: each requirement mapped to meaningful tests.
+  - RFC-to-requirement coverage: relevant RFC behaviors represented in
+    requirements.
+- Report a coverage score when scope includes requirement work, using this
+  format: `X/Y requirements covered by tests (Z%)`.
+- Call out significant gaps explicitly, including:
+  - Missing requirement docs for RFC behavior.
+  - Requirement behaviors with no corresponding tests.
+  - Weak tests that do not validate normative requirement outcomes.
+
 ## Requirement Documents
 
 Requirement files live in `.github/requirements/` and use the

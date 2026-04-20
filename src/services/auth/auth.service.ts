@@ -1,5 +1,5 @@
 import type { Logger } from "@justinmchase/grove";
-import type { ConfigService } from "../config/mod.ts";
+import type { ConfigService } from "../config/config.service.ts";
 import type { AuthInfo } from "../../context.ts";
 
 interface JwtHeader {
@@ -10,11 +10,14 @@ interface JwtHeader {
 interface JwtPayload {
   iss: string;
   sub: string;
+  oid?: string;
   aud: string | string[];
   exp: number;
   iat: number;
   nbf?: number;
   scope?: string;
+  scp?: string;
+  roles?: string[] | string;
 }
 
 interface Jwk {
@@ -42,6 +45,8 @@ export class AuthService {
     private readonly audience: string | undefined,
     private readonly azureTenantId: string | undefined,
     private readonly azureApiAppClientId: string,
+    private readonly debugLogTokenPayload: boolean,
+    private readonly debugLogRawAccessToken: boolean,
   ) {}
 
   static create(
@@ -57,6 +62,8 @@ export class AuthService {
       audience,
       config.azureTenantId,
       config.azureApiAppClientId,
+      config.authDebugLogTokenPayload,
+      config.authDebugLogRawAccessToken,
     );
   }
 
@@ -84,6 +91,10 @@ export class AuthService {
 
     const token = match[1];
 
+    if (this.debugLogRawAccessToken) {
+      this.logger.info("Raw access token", { token });
+    }
+
     if (!this.issuer || !this.audience) {
       throw new AuthError(
         "Auth not configured on this server",
@@ -93,12 +104,35 @@ export class AuthService {
     }
 
     const payload = await this.verifyJwt(token);
-    this.verifyMcpScopes(payload.scope);
+    const resolvedScope = payload.scope ?? payload.scp;
+    const resolvedRoles = this.normalizeRoles(payload.roles);
+    this.verifyMcpScopes(resolvedScope, resolvedRoles);
+    if (!payload.oid || !payload.oid.trim()) {
+      throw new AuthError("Missing oid claim", 401, "MISSING_OID");
+    }
+
     return {
       sub: payload.sub,
       aud: payload.aud,
-      scope: payload.scope,
+      scope: resolvedScope,
+      oid: payload.oid,
+      roles: resolvedRoles,
     };
+  }
+
+  private normalizeRoles(roles: string[] | string | undefined): string[] {
+    if (Array.isArray(roles)) {
+      return roles.map((role) => role.trim()).filter(Boolean);
+    }
+
+    if (typeof roles === "string") {
+      return roles
+        .split(/\s+/)
+        .map((role) => role.trim())
+        .filter(Boolean);
+    }
+
+    return [];
   }
 
   private async verifyJwt(token: string): Promise<JwtPayload> {
@@ -110,6 +144,12 @@ export class AuthService {
     const header = JSON.parse(this.decodeBase64Url(parts[0])) as JwtHeader;
     const payload = JSON.parse(this.decodeBase64Url(parts[1])) as JwtPayload;
     const signature = parts[2];
+
+    if (this.debugLogTokenPayload) {
+      this.logger.info("Decoded access token payload", {
+        payload,
+      });
+    }
 
     // Verify payload claims
     const now = Math.floor(Date.now() / 1000);
@@ -147,7 +187,7 @@ export class AuthService {
     }
 
     const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!aud.includes(this.audience!)) {
+    if (!this.isValidAudience(aud)) {
       this.logger.error("Token audience validation failed", {
         actual: aud,
         expected: this.audience,
@@ -201,25 +241,41 @@ export class AuthService {
     return keys;
   }
 
-  private verifyMcpScopes(scope: string | undefined): void {
+  private verifyMcpScopes(scope: string | undefined, roles: string[]): void {
     const actualScopes = (scope ?? "")
       .split(/\s+/)
       .map((value) => value.trim())
       .filter(Boolean);
     const requiredScopes = this.getRequiredScopes();
+    const actualNormalized = new Set(actualScopes.map((value) => this.normalizeScopeName(value)));
+    const requiredNormalized = requiredScopes.map((value) => this.normalizeScopeName(value));
 
-    if (requiredScopes.some((requiredScope) => actualScopes.includes(requiredScope))) {
+    if (requiredNormalized.some((required) => actualNormalized.has(required))) {
       return;
     }
 
     this.logger.error("Token scope validation failed", {
       actual: actualScopes,
+      actualNormalized: Array.from(actualNormalized),
+      roles,
       expectedAnyOf: requiredScopes,
+      expectedNormalizedAnyOf: requiredNormalized,
     });
     throw new AuthError("Insufficient scope", 403, "INSUFFICIENT_SCOPE", {
       actual: actualScopes,
+      actualNormalized: Array.from(actualNormalized),
+      roles,
       expectedAnyOf: requiredScopes,
+      expectedNormalizedAnyOf: requiredNormalized,
     });
+  }
+
+  private normalizeScopeName(scopeValue: string): string {
+    const slashIndex = scopeValue.lastIndexOf("/");
+    if (slashIndex < 0) {
+      return scopeValue;
+    }
+    return scopeValue.slice(slashIndex + 1);
   }
 
   private resolveJwksUrl(): string {
@@ -309,6 +365,19 @@ export class AuthService {
 
   private normalizeIssuer(issuer: string | undefined): string {
     return (issuer ?? "").replace(/\/+$/, "");
+  }
+
+  private isValidAudience(actual: string[]): boolean {
+    if (!this.audience) return false;
+
+    // Accept exact match
+    if (actual.includes(this.audience)) return true;
+
+    // Azure v2.0 tokens use bare client ID, v1.0/config may use api:// prefix.
+    // Normalize both sides to bare client ID for comparison.
+    const normalizeAud = (value: string) => value.replace(/^api:\/\//, "");
+    const expectedNormalized = normalizeAud(this.audience);
+    return actual.some((a) => normalizeAud(a) === expectedNormalized);
   }
 
   private isValidIssuer(actual: string | undefined): boolean {

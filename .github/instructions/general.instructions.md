@@ -49,6 +49,37 @@ This repository targets Deno Deploy first.
 - Validate request input and return stable JSON error shapes for API endpoints.
 - Prefer straightforward code paths over clever abstractions.
 
+## Specification authority and change control
+
+- Treat specification sources with this strict authority order:
+  1. RFC/spec (`spec/rpp-spec.md`)
+  2. Requirement documents (`.github/requirements/**`)
+  3. Requirement tests (`src/requirements/**`)
+  4. Implementation code (`src/**`)
+- When implementing or modifying tests/code, always consult relevant requirement
+  documents first and keep tests/code aligned to those requirements.
+- Do not silently reinterpret lower-authority artifacts to contradict higher
+  authority sources.
+- If the user asks for behavior that conflicts with existing requirements,
+  request clarification before changing requirements, tests, or code.
+- Only change RFC/spec or requirement documents when the user explicitly directs
+  those changes.
+
+## Requirement gap analysis
+
+- In planning or review-oriented tasks, perform a requirement gap analysis:
+  - Coverage check A: do tests adequately cover each existing requirement?
+  - Coverage check B: do requirements adequately cover relevant RFC behavior?
+- When gaps are found between RFC and requirements, call them out explicitly
+  before implementation.
+- Provide a simple coverage score and significant gap list in analysis-style
+  responses when scope includes requirements/testing/review:
+  - Coverage score format: `X/Y requirements covered by tests (Z%)`.
+  - Significant gaps: missing requirements, weak requirement language, or
+    untested requirement behaviors.
+- Never "patch over" requirement gaps only in code/tests; flag the gap and ask
+  whether requirements should be updated.
+
 ## Copilot guidance
 
 - When scaffolding handlers or routes, keep Deno Deploy compatibility in mind.

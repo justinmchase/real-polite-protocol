@@ -1,8 +1,8 @@
 import type { Logger } from "@justinmchase/grove";
-import { AuthService } from "./auth/mod.ts";
-import { ConfigService } from "./config/mod.ts";
-import { KvService } from "./kv/mod.ts";
-import { McpService } from "./mcp/mod.ts";
+import { AuthService } from "./auth/auth.service.ts";
+import { ConfigService } from "./config/config.service.ts";
+import { KvService } from "./kv/kv.service.ts";
+import { McpService } from "./mcp/mcp.service.ts";
 
 export interface Services {
   config: ConfigService;

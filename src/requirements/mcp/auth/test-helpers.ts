@@ -3,6 +3,7 @@ import { stub } from "@std/testing/mock";
 
 export const testIssuer = "https://issuer.example.test/";
 export const testAudience = "api://test-api-app";
+export const testBareAudience = "test-api-app";
 export const testApiAppClientId = "test-api-app";
 export const requiredScopes = [
   `${testAudience}/rpp.tools.read`,
@@ -16,7 +17,10 @@ export interface IssueTokenOverrides {
   iat?: number;
   nbf?: number;
   scope?: string;
+  scp?: string;
   sub?: string;
+  oid?: string;
+  roles?: string[] | string;
   header?: Record<string, unknown>;
 }
 
@@ -101,11 +105,14 @@ export async function withAuthTestContext(
         const payload = {
           iss: overrides.iss ?? testIssuer,
           sub: overrides.sub ?? "test-subject",
+          oid: overrides.oid ?? "test-oid",
           aud: overrides.aud ?? testAudience,
           exp: overrides.exp ?? now + 3600,
           iat: overrides.iat ?? now,
           ...(overrides.nbf ? { nbf: overrides.nbf } : {}),
           ...(overrides.scope ? { scope: overrides.scope } : {}),
+          ...(overrides.scp ? { scp: overrides.scp } : {}),
+          ...(overrides.roles ? { roles: overrides.roles } : {}),
         };
 
         const encodedHeader = encodeBase64UrlJson(header);

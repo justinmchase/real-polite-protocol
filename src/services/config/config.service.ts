@@ -1,4 +1,4 @@
-import { getEnv, readOptionalString } from "@justinmchase/grove";
+import { getEnv, readOptionalBoolean, readOptionalString } from "@justinmchase/grove";
 
 export class ConfigService {
   constructor(
@@ -8,6 +8,8 @@ export class ConfigService {
     public readonly azureClientAppClientId: string,
     public readonly issuer: string | undefined,
     public readonly audience: string | undefined,
+    public readonly authDebugLogTokenPayload: boolean,
+    public readonly authDebugLogRawAccessToken: boolean,
   ) {}
 
   static async create(): Promise<ConfigService> {
@@ -22,6 +24,8 @@ export class ConfigService {
         "4464c8c6-8a29-4f23-a2ae-09d8cf068f71",
       readOptionalString(env, "AUTH_ISSUER"),
       readOptionalString(env, "AUTH_AUDIENCE"),
+      readOptionalBoolean(env, "AUTH_DEBUG_LOG_TOKEN_PAYLOAD") ?? false,
+      readOptionalBoolean(env, "AUTH_DEBUG_LOG_RAW_ACCESS_TOKEN") ?? false,
     );
   }
 }

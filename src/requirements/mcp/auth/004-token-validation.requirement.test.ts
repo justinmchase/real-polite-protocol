@@ -60,6 +60,33 @@ Deno.test({
 
           await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
         });
+
+        await t.step("accepts Azure-style scp claim with required scope", async () => {
+          const token = await issueToken({
+            scp: requiredScopes[0],
+          });
+
+          const response = await fetch("http://localhost:8000/mcp", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "accept": "application/json, text/event-stream",
+              authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: "req-1",
+              method: "tools/call",
+              params: {
+                name: "get_permissions",
+                arguments: {},
+              },
+            }),
+          });
+
+          assertEquals(response.status, 200);
+          await response.text();
+        });
       });
     });
   },

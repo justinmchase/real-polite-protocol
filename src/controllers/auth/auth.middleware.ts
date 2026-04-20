@@ -4,8 +4,8 @@ import {
   type IContext,
   type IState,
 } from "@justinmchase/grove";
-import type { AuthService } from "../../services/auth/mod.ts";
-import { AuthError } from "../../services/auth/mod.ts";
+import type { AuthService } from "../../services/auth/auth.service.ts";
+import { AuthError } from "../../services/auth/auth.service.ts";
 
 export class AuthMiddleware extends Controller {
   constructor(private readonly auth: AuthService) {

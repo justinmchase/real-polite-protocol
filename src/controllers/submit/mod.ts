@@ -4,7 +4,7 @@ import {
   type IContext,
   type IState,
 } from "@justinmchase/grove";
-import type { KvService } from "../../services/kv/mod.ts";
+import type { KvService } from "../../services/kv/kv.service.ts";
 
 export class SubmitController extends Controller {
   constructor(private readonly kv: KvService) {
