@@ -1388,7 +1388,8 @@ domain's public identity, verification key, and server-level configuration.
 |                           | server serves historical keys.                                      |
 | `get_verification_key`    | Retrieve the current public verification key and key_id.            |
 | `list_historical_keys`    | List archived verification keys with their key_id and archived_at   |
-|                           | timestamp. Used to support verification of older attestations.      |
+|                           | timestamp. Used to support verification of older attestations. This |
+|                           | tool MUST support resume-token pagination (Section 10B.10).         |
 | `delete_historical_key`   | Remove an archived verification key by key_id. Attestations signed  |
 |                           | with the deleted key become permanently unverifiable.               |
 
@@ -1405,6 +1406,7 @@ required.
 | ---------------------------- | ------------------------------------------------------------------ |
 | `list_verifiable_users`      | List users whose metadata the server can verify, along with the    |
 |                              | verifiable fields (e.g., display_name) and their current values.   |
+|                              | This tool MUST support resume-token pagination (Section 10B.10).   |
 | `get_user_verified_metadata` | Retrieve the verified metadata record for a specific user: which   |
 |                              | fields are on file, their verified values, and last-verified       |
 |                              | timestamps.                                                        |
@@ -1425,6 +1427,57 @@ domain identity endpoint (Section 12).
 | `get_contact_policy_url` | Retrieve the current `contact_policy_url` from domain identity. |
 | `set_contact_policy_url` | Set or update the `contact_policy_url`. This is the sole        |
 |                          | out-of-band channel for domain administrator communication.     |
+
+### 10B.10 Pagination for List Tools
+
+All MCP tools that return potentially unbounded lists MUST use
+resume-token-based pagination. Offset-based pagination (e.g., `offset`,
+`page`) MUST NOT be used.
+
+The following conventions apply to list-style tools (including but not limited
+to `list_historical_keys` and `list_verifiable_users`):
+
+- Request parameters:
+  - `page_size` (optional integer): number of entries requested.
+  - `resume_token` (optional string): opaque token returned by a prior call.
+- Response shape:
+  - `<items_field>`: tool-specific array payload (e.g., `keys`, `users`).
+  - `next_resume_token` (optional string): opaque token for the next page.
+    If absent, there are no more results.
+
+Example request:
+
+```json
+{
+  "page_size": 100,
+  "resume_token": "eyJrZXkiOiJhYmMifQ"
+}
+```
+
+Example response:
+
+```json
+{
+  "users": [
+    {
+      "oid": "8c946dc0-a255-4757-8b28-52a81072a784",
+      "verified_fields": {
+        "name": "Justin Chase"
+      }
+    }
+  ],
+  "next_resume_token": "eyJrZXkiOiJkZWYifQ"
+}
+```
+
+Rules:
+
+- Resume tokens MUST be treated as opaque by clients.
+- Servers MAY encode implementation details in tokens, but clients MUST NOT
+  rely on token structure.
+- Servers SHOULD provide a stable traversal order per tool.
+- Servers MUST reject malformed or expired tokens with a stable MCP error code
+  (Section 11.3).
 
 ## 11. Error Model
 
@@ -1480,6 +1533,100 @@ reference:
 | GROUP_NOT_FOUND           | 403  | group_id not recognized by this server             |
 | GROUP_SENDER_NOT_MEMBER   | 403  | sender_domain is not in the group's member list    |
 | INTERNAL_ERROR            | 500  | Unexpected server-side failure                     |
+
+### 11.2 MCP Endpoint Error Structures
+
+RPP MCP endpoints use two error layers:
+
+1. HTTP/MCP endpoint authentication and request setup failures.
+2. Tool execution failures returned through MCP tool results.
+
+#### 11.2.1 HTTP/MCP Authentication Error Envelope
+
+When the `/mcp` endpoint rejects a request before tool execution (for example,
+authentication or token validation failure), the response MUST be JSON with the
+following shape:
+
+```json
+{
+  "ok": false,
+  "error": "Insufficient scope",
+  "code": "E_INSUFFICIENT_SCOPE",
+  "metadata": {
+    "expectedAnyOf": ["api://.../rpp.tools.read"]
+  }
+}
+```
+
+- `code` MUST be one of the MCP auth codes in Section 11.3.
+- `metadata` MAY be omitted when not needed.
+
+#### 11.2.2 MCP Tool Error Envelope
+
+When a tool executes but fails with an application error, the MCP tool response
+MUST set `isError: true` and return structured JSON containing:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "name": "AccountNotFoundError",
+    "status": 404,
+    "code": "E_ACCOUNT_NOT_FOUND",
+    "message": "No registered account found for oid ..."
+  }
+}
+```
+
+- `error.code` MUST be one of the MCP tool error codes in Section 11.3.
+- `error.status` SHOULD map to an equivalent HTTP semantics for diagnostics.
+
+#### 11.2.3 JSON-RPC/MCP Protocol Errors
+
+Implementations MUST surface protocol-level JSON-RPC errors using standard
+JSON-RPC numeric error codes.
+
+| Code   | Meaning          |
+| ------ | ---------------- |
+| -32700 | Parse error      |
+| -32600 | Invalid request  |
+| -32601 | Method not found |
+| -32602 | Invalid params   |
+| -32603 | Internal error   |
+
+### 11.3 MCP Error Code Registry
+
+#### 11.3.1 MCP Authentication and Request Codes
+
+| MCP Code                      | Typical HTTP | Description                                  |
+| ----------------------------- | ------------ | -------------------------------------------- |
+| E_MISSING_HEADER              | 401          | Authorization header is missing              |
+| E_INVALID_FORMAT              | 401          | Authorization header format is invalid       |
+| E_NOT_CONFIGURED              | 500          | Auth system is not configured                |
+| E_INVALID_ORIGIN              | 400          | Origin header is invalid or mismatched       |
+| E_MISSING_OID                 | 401          | Required `oid` claim is absent               |
+| E_INVALID_TOKEN_FORMAT        | 401          | JWT structure is invalid                     |
+| E_EXPIRED                     | 401          | Token is expired                             |
+| E_NOT_YET_VALID               | 401          | Token `nbf` is in the future                |
+| E_INVALID_ISSUER              | 401          | Token issuer does not match expected issuer  |
+| E_INVALID_AUDIENCE            | 401          | Token audience does not match expected       |
+| E_KEY_NOT_FOUND               | 401          | Signing key could not be resolved            |
+| E_JWKS_FETCH_FAILED           | 500          | JWKS retrieval failed                        |
+| E_INSUFFICIENT_SCOPE          | 403          | Required MCP scopes are missing              |
+| E_UNSUPPORTED_ALGORITHM       | 400          | JWT algorithm is not supported               |
+| E_INVALID_KEY_FORMAT          | 400          | JWKS key payload is malformed                |
+| E_INVALID_SIGNATURE           | 401          | JWT signature validation failed              |
+| E_SIGNATURE_VERIFICATION_FAILED | 401        | Signature verification process failed        |
+
+#### 11.3.2 MCP Tool/Application Error Codes
+
+| MCP Tool Code                    | Typical HTTP | Description                                              |
+| -------------------------------- | ------------ | -------------------------------------------------------- |
+| E_INTERNAL                       | 500          | Unexpected tool failure                                  |
+| E_ACCOUNT_NOT_FOUND              | 404          | Target account does not exist                            |
+| E_USER_VERIFIED_METADATA_NOT_FOUND | 404        | No verified metadata exists for the requested user       |
+| E_INVALID_RESUME_TOKEN           | 400          | Pagination resume token is malformed or expired          |
+| E_INVALID_PAGE_SIZE              | 400          | Pagination page_size is invalid                          |
 
 ## 12. Domain Identity
 

@@ -4,6 +4,14 @@ import type {
   StoredDomainVerificationKey,
 } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
+import {
+  type PaginatedResult,
+  type PaginationInput,
+  InvalidResumeTokenError,
+  nextResumeToken,
+  normalizePageSize,
+  normalizeResumeToken,
+} from "../../utils/mod.ts";
 
 const DOMAIN_IDENTITY_KEY: Deno.KvKey = ["domain_identity"];
 const ACTIVE_VERIFICATION_KEY: Deno.KvKey = ["domain_verification", "active"];
@@ -58,6 +66,35 @@ export class DomainIdentityRepository {
       keys.push(entry.value);
     }
     return keys;
+  }
+
+  async listHistoricalVerificationKeysPage(
+    pagination: PaginationInput = {},
+  ): Promise<PaginatedResult<HistoricalVerificationKey>> {
+    const pageSize = normalizePageSize(pagination.page_size);
+    const cursor = normalizeResumeToken(pagination.resume_token);
+
+    let entries: Deno.KvListIterator<HistoricalVerificationKey>;
+    try {
+      entries = this.kv.store.list<HistoricalVerificationKey>({
+        prefix: HISTORICAL_VERIFICATION_KEY_PREFIX,
+      }, {
+        limit: pageSize,
+        ...(cursor ? { cursor } : {}),
+      });
+    } catch {
+      throw new InvalidResumeTokenError();
+    }
+
+    const keys: HistoricalVerificationKey[] = [];
+    for await (const entry of entries) {
+      keys.push(entry.value);
+    }
+
+    return {
+      items: keys,
+      next_resume_token: nextResumeToken(entries.cursor),
+    };
   }
 
   async deleteHistoricalVerificationKey(keyId: string): Promise<void> {

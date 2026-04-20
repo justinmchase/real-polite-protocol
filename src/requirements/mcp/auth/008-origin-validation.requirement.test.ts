@@ -17,7 +17,7 @@ Deno.test({
 
         assertEquals(response.status, 400);
         const body = await response.json();
-        assertEquals(body.code, "INVALID_ORIGIN");
+        assertEquals(body.code, "E_INVALID_ORIGIN");
       });
 
       await t.step("rejects mismatched origin header", async () => {
@@ -32,7 +32,7 @@ Deno.test({
 
         assertEquals(response.status, 400);
         const body = await response.json();
-        assertEquals(body.code, "INVALID_ORIGIN");
+        assertEquals(body.code, "E_INVALID_ORIGIN");
       });
 
       await t.step(
@@ -49,7 +49,7 @@ Deno.test({
 
           assertEquals(response.status, 401);
           const body = await response.json();
-          assertEquals(body.code, "MISSING_HEADER");
+          assertEquals(body.code, "E_MISSING_HEADER");
         },
       );
     });

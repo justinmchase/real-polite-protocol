@@ -12,4 +12,8 @@ inspect archived verification keys.
 
 - The tool is available only to authenticated accounts with `domain.admin`.
 - The tool returns archived key identifiers and archive metadata.
+- The tool supports resume-token pagination via optional `page_size` and
+  `resume_token` inputs.
+- The response includes optional `next_resume_token`; absence indicates the
+  end of results.
 - The output supports verification of older attestations.

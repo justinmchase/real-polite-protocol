@@ -27,7 +27,7 @@ Deno.test({
         assertExists(response.headers.get("WWW-Authenticate"));
 
         const body = await response.json();
-        assertEquals(body.code, "MISSING_HEADER");
+        assertEquals(body.code, "E_MISSING_HEADER");
       });
 
       await t.step("rejects token passed in request body", async () => {
@@ -41,7 +41,7 @@ Deno.test({
         assertExists(response.headers.get("WWW-Authenticate"));
 
         const body = await response.json();
-        assertEquals(body.code, "MISSING_HEADER");
+        assertEquals(body.code, "E_MISSING_HEADER");
       });
 
       await t.step(
@@ -60,7 +60,7 @@ Deno.test({
           assertExists(response.headers.get("WWW-Authenticate"));
 
           const body = await response.json();
-          assertEquals(body.code, "INVALID_TOKEN_FORMAT");
+          assertEquals(body.code, "E_INVALID_TOKEN_FORMAT");
         },
       );
 
@@ -83,7 +83,7 @@ Deno.test({
           assertEquals(second.status, 401);
 
           const secondBody = await second.json();
-          assertEquals(secondBody.code, "MISSING_HEADER");
+          assertEquals(secondBody.code, "E_MISSING_HEADER");
         },
       );
     });

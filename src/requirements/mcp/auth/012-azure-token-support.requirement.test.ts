@@ -103,7 +103,7 @@ Deno.test({
               scp: requiredScopes[0],
             });
 
-            await assertAuthFailure(token, 401, "INVALID_AUDIENCE");
+            await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE");
           },
         );
 
@@ -115,7 +115,7 @@ Deno.test({
               scp: "some.other.scope",
             });
 
-            await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
+            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
           },
         );
       });

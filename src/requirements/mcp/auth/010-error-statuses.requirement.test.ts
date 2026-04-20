@@ -23,7 +23,7 @@ Deno.test({
           assertEquals(response.status, 401);
           const body = await response.json();
           assertEquals(body.ok, false);
-          assertEquals(body.code, "MISSING_HEADER");
+          assertEquals(body.code, "E_MISSING_HEADER");
           assertEquals(typeof body.error, "string");
         });
 
@@ -31,7 +31,7 @@ Deno.test({
           const token = await issueToken({
             scope: `${testAudience}/custom.scope`,
           });
-          await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
+          await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
         });
 
         await t.step(
@@ -53,7 +53,7 @@ Deno.test({
             assertEquals(response.status, 400);
             const body = await response.json();
             assertEquals(body.ok, false);
-            assertEquals(body.code, "UNSUPPORTED_ALGORITHM");
+            assertEquals(body.code, "E_UNSUPPORTED_ALGORITHM");
             assertEquals(typeof body.error, "string");
           },
         );

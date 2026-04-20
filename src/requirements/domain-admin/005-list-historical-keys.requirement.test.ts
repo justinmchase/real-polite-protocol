@@ -72,6 +72,59 @@ Deno.test({
         );
 
         await t.step(
+          "list_historical_keys supports resume-token pagination",
+          async () => {
+            const token = await issueToken({
+              oid: "oid-domain-admin-pagination",
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            // Ensure multiple historical records exist.
+            await callTool(token, "get_verification_key");
+            await callTool(token, "rotate_verification_key");
+            await callTool(token, "rotate_verification_key");
+
+            const firstPage = await callTool(token, "list_historical_keys", {
+              page_size: 1,
+            });
+            assertEquals(firstPage.status, 200);
+            const firstText = (firstPage.body.result as {
+              content?: Array<{ text?: string }>;
+            }).content?.[0]?.text;
+            assertExists(firstText);
+            const firstPayload = JSON.parse(firstText) as {
+              keys?: Array<{ key_id?: string }>;
+              next_resume_token?: string;
+            };
+            assertExists(firstPayload.keys);
+            assertEquals(firstPayload.keys.length, 1);
+            assertExists(firstPayload.next_resume_token);
+
+            const secondPage = await callTool(token, "list_historical_keys", {
+              page_size: 1,
+              resume_token: firstPayload.next_resume_token,
+            });
+            assertEquals(secondPage.status, 200);
+            const secondText = (secondPage.body.result as {
+              content?: Array<{ text?: string }>;
+            }).content?.[0]?.text;
+            assertExists(secondText);
+            const secondPayload = JSON.parse(secondText) as {
+              keys?: Array<{ key_id?: string }>;
+            };
+            assertExists(secondPayload.keys);
+            assertEquals(secondPayload.keys.length, 1);
+
+            const firstKeyId = firstPayload.keys[0]?.key_id;
+            const secondKeyId = secondPayload.keys[0]?.key_id;
+            assertExists(firstKeyId);
+            assertExists(secondKeyId);
+            assertEquals(firstKeyId === secondKeyId, false);
+          },
+        );
+
+        await t.step(
           "non-admin user cannot call list_historical_keys",
           async () => {
             const token = await issueToken({

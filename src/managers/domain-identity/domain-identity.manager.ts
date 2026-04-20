@@ -6,6 +6,7 @@ import type {
 } from "../../models/mod.ts";
 import type { DomainIdentityRepository } from "../../repositories/mod.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
+import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
 
 export type DomainIdentityUpdate = Partial<Omit<DomainIdentity, "domain">>;
 
@@ -80,9 +81,12 @@ export class DomainIdentityManager {
     };
   }
 
-  async listHistoricalVerificationKeys(): Promise<HistoricalVerificationKey[]> {
-    const keys = await this.domainIdentity.listHistoricalVerificationKeys();
-    return keys.sort((a, b) => b.archived_at.localeCompare(a.archived_at));
+  async listHistoricalVerificationKeys(
+    pagination: PaginationInput = {},
+  ): Promise<PaginatedResult<HistoricalVerificationKey>> {
+    return await this.domainIdentity.listHistoricalVerificationKeysPage(
+      pagination,
+    );
   }
 
   async deleteHistoricalVerificationKey(

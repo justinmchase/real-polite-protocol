@@ -1,6 +1,14 @@
 import type { Account, UserVerifiedMetadataRecord } from "../../models/mod.ts";
 import { newAccount } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
+import {
+  type PaginatedResult,
+  type PaginationInput,
+  InvalidResumeTokenError,
+  nextResumeToken,
+  normalizePageSize,
+  normalizeResumeToken,
+} from "../../utils/mod.ts";
 
 const VERIFIED_METADATA_PREFIX: Deno.KvKey = ["accounts", "verified_metadata"];
 
@@ -77,5 +85,34 @@ export class AccountRepository {
       records.push(entry.value);
     }
     return records;
+  }
+
+  async listVerifiedMetadataPage(
+    pagination: PaginationInput = {},
+  ): Promise<PaginatedResult<UserVerifiedMetadataRecord>> {
+    const pageSize = normalizePageSize(pagination.page_size);
+    const cursor = normalizeResumeToken(pagination.resume_token);
+
+    let entries: Deno.KvListIterator<UserVerifiedMetadataRecord>;
+    try {
+      entries = this.kv.store.list<UserVerifiedMetadataRecord>({
+        prefix: VERIFIED_METADATA_PREFIX,
+      }, {
+        limit: pageSize,
+        ...(cursor ? { cursor } : {}),
+      });
+    } catch {
+      throw new InvalidResumeTokenError();
+    }
+
+    const records: UserVerifiedMetadataRecord[] = [];
+    for await (const entry of entries) {
+      records.push(entry.value);
+    }
+
+    return {
+      items: records,
+      next_resume_token: nextResumeToken(entries.cursor),
+    };
   }
 }

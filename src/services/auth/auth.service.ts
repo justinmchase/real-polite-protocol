@@ -88,7 +88,7 @@ export class AuthService {
       throw new AuthError(
         "Missing Authorization header",
         401,
-        "MISSING_HEADER",
+        "E_MISSING_HEADER",
       );
     }
 
@@ -97,7 +97,7 @@ export class AuthService {
       throw new AuthError(
         "Invalid Authorization header format",
         401,
-        "INVALID_FORMAT",
+        "E_INVALID_FORMAT",
       );
     }
 
@@ -111,7 +111,7 @@ export class AuthService {
       throw new AuthError(
         "Auth not configured on this server",
         500,
-        "NOT_CONFIGURED",
+        "E_NOT_CONFIGURED",
       );
     }
 
@@ -120,7 +120,7 @@ export class AuthService {
     const resolvedRoles = this.normalizeRoles(payload.roles);
     this.verifyMcpScopes(resolvedScope, resolvedRoles);
     if (!payload.oid || !payload.oid.trim()) {
-      throw new AuthError("Missing oid claim", 401, "MISSING_OID");
+      throw new AuthError("Missing oid claim", 401, "E_MISSING_OID");
     }
 
     return {
@@ -154,7 +154,7 @@ export class AuthService {
   private async verifyJwt(token: string): Promise<JwtPayload> {
     const parts = token.split(".");
     if (parts.length !== 3) {
-      throw new AuthError("Invalid token format", 401, "INVALID_TOKEN_FORMAT");
+      throw new AuthError("Invalid token format", 401, "E_INVALID_TOKEN_FORMAT");
     }
 
     const header = JSON.parse(this.decodeBase64Url(parts[0])) as JwtHeader;
@@ -174,7 +174,7 @@ export class AuthService {
         exp: payload.exp,
         now: now,
       });
-      throw new AuthError("Token expired", 401, "EXPIRED", {
+      throw new AuthError("Token expired", 401, "E_EXPIRED", {
         exp: payload.exp,
         now: now,
       });
@@ -185,7 +185,7 @@ export class AuthService {
         nbf: payload.nbf,
         now: now,
       });
-      throw new AuthError("Token not yet valid", 401, "NOT_YET_VALID", {
+      throw new AuthError("Token not yet valid", 401, "E_NOT_YET_VALID", {
         nbf: payload.nbf,
         now: now,
       });
@@ -196,7 +196,7 @@ export class AuthService {
         actual: payload.iss,
         expected: this.issuer,
       });
-      throw new AuthError("Invalid issuer", 401, "INVALID_ISSUER", {
+      throw new AuthError("Invalid issuer", 401, "E_INVALID_ISSUER", {
         actual: payload.iss,
         expected: this.issuer,
       });
@@ -208,7 +208,7 @@ export class AuthService {
         actual: aud,
         expected: this.audience,
       });
-      throw new AuthError("Invalid audience", 401, "INVALID_AUDIENCE", {
+      throw new AuthError("Invalid audience", 401, "E_INVALID_AUDIENCE", {
         actual: aud,
         expected: this.audience,
       });
@@ -220,7 +220,7 @@ export class AuthService {
     const key = kid ? jwks.get(kid) : jwks.values().next().value;
 
     if (!key) {
-      throw new AuthError("Key not found", 401, "KEY_NOT_FOUND");
+      throw new AuthError("Key not found", 401, "E_KEY_NOT_FOUND");
     }
 
     await this.verifySignature(token, signature, key, header.alg);
@@ -240,7 +240,7 @@ export class AuthService {
       throw new AuthError(
         `Failed to fetch JWKS: ${res.status}`,
         500,
-        "JWKS_FETCH_FAILED",
+        "E_JWKS_FETCH_FAILED",
       );
     }
 
@@ -285,7 +285,7 @@ export class AuthService {
       expectedAnyOf: requiredScopes,
       expectedNormalizedAnyOf: requiredNormalized,
     });
-    throw new AuthError("Insufficient scope", 403, "INSUFFICIENT_SCOPE", {
+    throw new AuthError("Insufficient scope", 403, "E_INSUFFICIENT_SCOPE", {
       actual: actualScopes,
       actualNormalized: Array.from(actualNormalized),
       roles,
@@ -328,7 +328,7 @@ export class AuthService {
       throw new AuthError(
         `Unsupported algorithm: ${alg}`,
         400,
-        "UNSUPPORTED_ALGORITHM",
+        "E_UNSUPPORTED_ALGORITHM",
       );
     }
 
@@ -338,7 +338,7 @@ export class AuthService {
         hasN: Boolean(key.n),
         hasE: Boolean(key.e),
       });
-      throw new AuthError("Invalid key format", 400, "INVALID_KEY_FORMAT", {
+      throw new AuthError("Invalid key format", 400, "E_INVALID_KEY_FORMAT", {
         kty: key.kty,
         hasN: Boolean(key.n),
         hasE: Boolean(key.e),
@@ -361,7 +361,7 @@ export class AuthService {
 
       if (!isValid) {
         this.logger.error("Signature verification failed", {});
-        throw new AuthError("Invalid signature", 401, "INVALID_SIGNATURE");
+        throw new AuthError("Invalid signature", 401, "E_INVALID_SIGNATURE");
       }
     } catch (e) {
       if (e instanceof AuthError) throw e;
@@ -369,7 +369,7 @@ export class AuthService {
       throw new AuthError(
         `Signature verification failed: ${String(e)}`,
         401,
-        "SIGNATURE_VERIFICATION_FAILED",
+        "E_SIGNATURE_VERIFICATION_FAILED",
       );
     }
   }

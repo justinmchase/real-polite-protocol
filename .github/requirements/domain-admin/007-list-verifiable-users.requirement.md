@@ -14,4 +14,8 @@ to list users whose metadata can be verified by the domain.
 - The tool lists all registered accounts and their current verified metadata fields.
 - Because verified metadata is seeded at account creation (requirement account-002),
   every registered account appears in the list even if no admin override has been applied.
+- The tool supports resume-token pagination via optional `page_size` and
+    `resume_token` inputs.
+- The response includes optional `next_resume_token`; absence indicates the
+    end of results.
 - The output is suitable for selecting users for metadata maintenance.

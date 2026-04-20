@@ -26,7 +26,7 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "INVALID_ISSUER");
+          await assertAuthFailure(token, 401, "E_INVALID_ISSUER");
         });
 
         await t.step("rejects tokens with invalid audience", async () => {
@@ -35,7 +35,7 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "INVALID_AUDIENCE");
+          await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE");
         });
 
         await t.step("rejects expired tokens", async () => {
@@ -44,14 +44,14 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "EXPIRED");
+          await assertAuthFailure(token, 401, "E_EXPIRED");
         });
 
         await t.step("rejects tokens with invalid signatures", async () => {
           const token = await issueToken({ scope: requiredScopes[0] });
           const tampered = tamperPayloadWithoutResigning(token);
 
-          await assertAuthFailure(tampered, 401, "INVALID_SIGNATURE");
+          await assertAuthFailure(tampered, 401, "E_INVALID_SIGNATURE");
         });
 
         await t.step(
@@ -61,7 +61,7 @@ Deno.test({
               scope: `${testAudience}/custom.scope`,
             });
 
-            await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
+            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
           },
         );
 

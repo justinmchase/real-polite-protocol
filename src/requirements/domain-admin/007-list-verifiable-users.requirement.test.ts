@@ -87,6 +87,71 @@ Deno.test({
         );
 
         await t.step(
+          "list_verifiable_users supports resume-token pagination",
+          async () => {
+            const kv = await Deno.openKv(kvPath);
+            try {
+              await kv.set([
+                "accounts",
+                "verified_metadata",
+                "oid-verifiable-3",
+              ], {
+                oid: "oid-verifiable-3",
+                verified_fields: {
+                  display_name: "Carol White",
+                },
+                updated_at: "2026-04-20T00:00:00.000Z",
+              });
+            } finally {
+              kv.close();
+            }
+
+            const token = await issueToken({
+              oid: "oid-domain-admin-pagination",
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            const firstPage = await callTool(token, "list_verifiable_users", {
+              page_size: 1,
+            });
+            assertEquals(firstPage.status, 200);
+            const firstText = (firstPage.body.result as {
+              content?: Array<{ text?: string }>;
+            }).content?.[0]?.text;
+            assertExists(firstText);
+            const firstPayload = JSON.parse(firstText) as {
+              users?: Array<{ oid?: string }>;
+              next_resume_token?: string;
+            };
+            assertExists(firstPayload.users);
+            assertEquals(firstPayload.users.length, 1);
+            assertExists(firstPayload.next_resume_token);
+
+            const secondPage = await callTool(token, "list_verifiable_users", {
+              page_size: 1,
+              resume_token: firstPayload.next_resume_token,
+            });
+            assertEquals(secondPage.status, 200);
+            const secondText = (secondPage.body.result as {
+              content?: Array<{ text?: string }>;
+            }).content?.[0]?.text;
+            assertExists(secondText);
+            const secondPayload = JSON.parse(secondText) as {
+              users?: Array<{ oid?: string }>;
+            };
+            assertExists(secondPayload.users);
+            assertEquals(secondPayload.users.length, 1);
+
+            const firstOid = firstPayload.users[0]?.oid;
+            const secondOid = secondPayload.users[0]?.oid;
+            assertExists(firstOid);
+            assertExists(secondOid);
+            assertEquals(firstOid === secondOid, false);
+          },
+        );
+
+        await t.step(
           "non-admin user cannot call list_verifiable_users",
           async () => {
             const token = await issueToken({

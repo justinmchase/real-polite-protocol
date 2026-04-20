@@ -1,6 +1,7 @@
 import type { AuthInfo } from "../../context.ts";
 import type { Account, UserVerifiedMetadataRecord, VerifiableUser } from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
+import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
 
@@ -75,13 +76,16 @@ export class AccountManager {
     return await this.accounts.setVerifiedMetadata(oid, verifiedFields);
   }
 
-  async listVerifiableUsers(): Promise<VerifiableUser[]> {
-    const records = await this.accounts.listVerifiedMetadata();
-    return records
-      .map((record) => ({
+  async listVerifiableUsers(
+    pagination: PaginationInput = {},
+  ): Promise<PaginatedResult<VerifiableUser>> {
+    const page = await this.accounts.listVerifiedMetadataPage(pagination);
+    return {
+      items: page.items.map((record) => ({
         oid: record.oid,
         verified_fields: record.verified_fields,
-      }))
-      .sort((a, b) => a.oid.localeCompare(b.oid));
+      })),
+      next_resume_token: page.next_resume_token,
+    };
   }
 }

@@ -58,13 +58,13 @@ export class AuthMiddleware extends Controller {
       origin = new URL(originHeader);
       requestOrigin = new URL(requestUrl).origin;
     } catch {
-      throw new AuthError("Invalid origin", 400, "INVALID_ORIGIN", {
+      throw new AuthError("Invalid origin", 400, "E_INVALID_ORIGIN", {
         actual: originHeader,
       });
     }
 
     if (origin.origin !== requestOrigin) {
-      throw new AuthError("Invalid origin", 400, "INVALID_ORIGIN", {
+      throw new AuthError("Invalid origin", 400, "E_INVALID_ORIGIN", {
         actual: origin.origin,
         expected: requestOrigin,
       });

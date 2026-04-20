@@ -26,7 +26,7 @@ Deno.test({
 
           const body = await response.json();
           assertEquals(body.ok, false);
-          assertEquals(body.code, "MISSING_HEADER");
+          assertEquals(body.code, "E_MISSING_HEADER");
         },
       );
 
@@ -47,7 +47,7 @@ Deno.test({
 
           const body = await response.json();
           assertEquals(body.ok, false);
-          assertEquals(body.code, "INVALID_FORMAT");
+          assertEquals(body.code, "E_INVALID_FORMAT");
         },
       );
 
@@ -66,7 +66,7 @@ Deno.test({
 
         const body = await response.json();
         assertEquals(body.ok, false);
-        assertEquals(body.code, "INVALID_TOKEN_FORMAT");
+        assertEquals(body.code, "E_INVALID_TOKEN_FORMAT");
       });
     });
   },

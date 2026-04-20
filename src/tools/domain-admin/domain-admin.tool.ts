@@ -9,6 +9,15 @@ import {
 } from "./domain-admin.error.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 
+const PaginationInputSchema = {
+  page_size: z.number().int().min(1).max(200).optional().describe(
+    "Maximum number of items to return",
+  ),
+  resume_token: z.string().optional().describe(
+    "Opaque token from the previous page",
+  ),
+};
+
 const DomainIdentityOutputSchema = {
   domain: z.string().describe("The domain name"),
   display_name: z.string().describe("Human-readable display name"),
@@ -52,6 +61,9 @@ const HistoricalKeysOutputSchema = {
   keys: z.array(z.object(HistoricalVerificationKeySchema)).describe(
     "Archived verification keys",
   ),
+  next_resume_token: z.string().optional().describe(
+    "Opaque token to fetch the next page",
+  ),
 };
 
 const DeleteHistoricalKeyInputSchema = {
@@ -70,6 +82,17 @@ const VerifiableUsersOutputSchema = {
       "Verified metadata fields keyed by field name",
     ),
   })).describe("Users with verifiable metadata"),
+  next_resume_token: z.string().optional().describe(
+    "Opaque token to fetch the next page",
+  ),
+};
+
+const ListHistoricalKeysInputSchema = {
+  ...PaginationInputSchema,
+};
+
+const ListVerifiableUsersInputSchema = {
+  ...PaginationInputSchema,
 };
 
 const GetUserVerifiedMetadataInputSchema = {
@@ -120,6 +143,14 @@ type UpdateDomainIdentityArgs = z.infer<
 
 type DeleteHistoricalKeyArgs = z.infer<
   z.ZodObject<typeof DeleteHistoricalKeyInputSchema>
+>;
+
+type ListHistoricalKeysArgs = z.infer<
+  z.ZodObject<typeof ListHistoricalKeysInputSchema>
+>;
+
+type ListVerifiableUsersArgs = z.infer<
+  z.ZodObject<typeof ListVerifiableUsersInputSchema>
 >;
 
 type GetUserVerifiedMetadataArgs = z.infer<
@@ -200,12 +231,19 @@ export class DomainAdminTool {
       {
         description:
           "List archived verification keys with key_id and archived_at metadata.",
+        inputSchema: ListHistoricalKeysInputSchema,
         outputSchema: HistoricalKeysOutputSchema,
       },
-      withToolErrorHandling(async () => {
-        const keys = await this.domainIdentityManager
-          .listHistoricalVerificationKeys();
-        return toolResult({ keys });
+      withToolErrorHandling(async (params: ListHistoricalKeysArgs) => {
+        const page = await this.domainIdentityManager
+          .listHistoricalVerificationKeys({
+            page_size: params.page_size,
+            resume_token: params.resume_token,
+          });
+        return toolResult({
+          keys: page.items,
+          next_resume_token: page.next_resume_token,
+        });
       }),
     );
 
@@ -229,11 +267,18 @@ export class DomainAdminTool {
       {
         description:
           "List users whose metadata the server can verify, along with their verifiable fields.",
+        inputSchema: ListVerifiableUsersInputSchema,
         outputSchema: VerifiableUsersOutputSchema,
       },
-      withToolErrorHandling(async () => {
-        const users = await this.accountManager.listVerifiableUsers();
-        return toolResult({ users });
+      withToolErrorHandling(async (params: ListVerifiableUsersArgs) => {
+        const page = await this.accountManager.listVerifiableUsers({
+          page_size: params.page_size,
+          resume_token: params.resume_token,
+        });
+        return toolResult({
+          users: page.items,
+          next_resume_token: page.next_resume_token,
+        });
       }),
     );
 
