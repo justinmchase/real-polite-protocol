@@ -22,3 +22,7 @@ export interface StoredDomainVerificationKey extends DomainVerificationKey {
   private_key: string;
   created_at: string;
 }
+
+export interface HistoricalVerificationKey extends DomainVerificationKey {
+  archived_at: string;
+}

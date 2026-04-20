@@ -1,6 +1,7 @@
 import type {
   DomainIdentity,
   DomainVerificationKey,
+  HistoricalVerificationKey,
   StoredDomainVerificationKey,
 } from "../../models/mod.ts";
 import type { DomainIdentityRepository } from "../../repositories/mod.ts";
@@ -52,6 +53,25 @@ export class DomainIdentityManager {
     return {
       key_id: generated.key_id,
       public_key: generated.public_key,
+    };
+  }
+
+  async rotateVerificationKey(): Promise<DomainVerificationKey> {
+    const current = await this.domainIdentity.getActiveVerificationKey();
+    if (current) {
+      const historical: HistoricalVerificationKey = {
+        key_id: current.key_id,
+        public_key: current.public_key,
+        archived_at: new Date().toISOString(),
+      };
+      await this.domainIdentity.appendHistoricalVerificationKey(historical);
+    }
+
+    const newKey = await this.generateVerificationKey();
+    await this.domainIdentity.setActiveVerificationKey(newKey);
+    return {
+      key_id: newKey.key_id,
+      public_key: newKey.public_key,
     };
   }
 

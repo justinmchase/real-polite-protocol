@@ -1,11 +1,16 @@
 import type {
   DomainIdentity,
+  HistoricalVerificationKey,
   StoredDomainVerificationKey,
 } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 
 const DOMAIN_IDENTITY_KEY: Deno.KvKey = ["domain_identity"];
 const ACTIVE_VERIFICATION_KEY: Deno.KvKey = ["domain_verification", "active"];
+const HISTORICAL_VERIFICATION_KEY_PREFIX: Deno.KvKey = [
+  "domain_verification",
+  "historical",
+];
 
 export class DomainIdentityRepository {
   constructor(private readonly kv: KvService) {}
@@ -32,5 +37,26 @@ export class DomainIdentityRepository {
     key: StoredDomainVerificationKey,
   ): Promise<void> {
     await this.kv.store.set(ACTIVE_VERIFICATION_KEY, key);
+  }
+
+  async appendHistoricalVerificationKey(
+    key: HistoricalVerificationKey,
+  ): Promise<void> {
+    const kvKey: Deno.KvKey = [
+      ...HISTORICAL_VERIFICATION_KEY_PREFIX,
+      key.key_id,
+    ];
+    await this.kv.store.set(kvKey, key);
+  }
+
+  async listHistoricalVerificationKeys(): Promise<HistoricalVerificationKey[]> {
+    const entries = this.kv.store.list<HistoricalVerificationKey>({
+      prefix: HISTORICAL_VERIFICATION_KEY_PREFIX,
+    });
+    const keys: HistoricalVerificationKey[] = [];
+    for await (const entry of entries) {
+      keys.push(entry.value);
+    }
+    return keys;
   }
 }

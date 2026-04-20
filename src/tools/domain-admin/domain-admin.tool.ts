@@ -107,5 +107,18 @@ export class DomainAdminTool {
         return toolResult(key);
       },
     );
+
+    server.registerTool(
+      "rotate_verification_key",
+      {
+        description:
+          "Generate a new Ed25519 keypair for domain-verified invitations. Archives the previous active key.",
+        outputSchema: VerificationKeyOutputSchema,
+      },
+      async () => {
+        const key = await this.domainIdentityManager.rotateVerificationKey();
+        return toolResult(key);
+      },
+    );
   }
 }
