@@ -21,6 +21,9 @@ export interface IssueTokenOverrides {
   sub?: string;
   oid?: string;
   roles?: string[] | string;
+  name?: string;
+  email?: string;
+  preferred_username?: string;
   header?: Record<string, unknown>;
 }
 
@@ -123,6 +126,11 @@ export async function withAuthTestContext(
           ...(overrides.scope ? { scope: overrides.scope } : {}),
           ...(overrides.scp ? { scp: overrides.scp } : {}),
           ...(overrides.roles ? { roles: overrides.roles } : {}),
+          ...(overrides.name ? { name: overrides.name } : {}),
+          ...(overrides.email ? { email: overrides.email } : {}),
+          ...(overrides.preferred_username
+            ? { preferred_username: overrides.preferred_username }
+            : {}),
         };
 
         const encodedHeader = encodeBase64UrlJson(header);

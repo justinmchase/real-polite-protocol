@@ -16,6 +16,14 @@ const PermissionsOutputSchema = {
   ),
 };
 
+const VerifiedMetadataOutputSchema = {
+  oid: z.string().describe("User object identifier"),
+  verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields from the token",
+  ),
+  updated_at: z.string().describe("ISO 8601 timestamp of last update"),
+};
+
 export class AccountTool {
   constructor(private readonly accountManager: AccountManager) {}
 
@@ -29,6 +37,22 @@ export class AccountTool {
       async () => {
         const permissions = await this.accountManager.getPermissions(auth);
         return toolResult(permissions);
+      },
+    );
+
+    server.registerTool(
+      "set_verified_metadata",
+      {
+        description:
+          "Refresh your verified metadata record from your current token claims (name, email, preferred_username). No arguments required — the token is the source of truth.",
+        inputSchema: {},
+        outputSchema: VerifiedMetadataOutputSchema,
+      },
+      async () => {
+        const record = await this.accountManager.setVerifiedMetadataFromToken(
+          auth,
+        );
+        return toolResult(record);
       },
     );
   }

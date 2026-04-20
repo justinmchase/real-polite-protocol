@@ -1,5 +1,5 @@
 import type { AuthInfo } from "../../context.ts";
-import type { Account, VerifiableUser } from "../../models/mod.ts";
+import type { Account, UserVerifiedMetadataRecord, VerifiableUser } from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
@@ -35,6 +35,23 @@ export class AccountManager {
 
   isDomainAdmin(roles: string[]): boolean {
     return roles.includes(DOMAIN_ADMIN_ROLE);
+  }
+
+  async setVerifiedMetadataFromToken(
+    auth: Pick<AuthInfo, "oid" | "name" | "email" | "preferred_username">,
+  ): Promise<UserVerifiedMetadataRecord> {
+    const existing = await this.accounts.getVerifiedMetadata(auth.oid);
+    const currentFields = existing?.verified_fields ?? {};
+    const updates: Record<string, string> = {};
+    if (auth.name) updates.name = auth.name;
+    if (auth.email) updates.email = auth.email;
+    if (auth.preferred_username) {
+      updates.preferred_username = auth.preferred_username;
+    }
+    return await this.accounts.setVerifiedMetadata(auth.oid, {
+      ...currentFields,
+      ...updates,
+    });
   }
 
   async listVerifiableUsers(): Promise<VerifiableUser[]> {

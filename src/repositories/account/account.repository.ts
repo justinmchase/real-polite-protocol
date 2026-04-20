@@ -46,6 +46,14 @@ export class AccountRepository {
     return await this.createByOid(oid);
   }
 
+  async getVerifiedMetadata(
+    oid: string,
+  ): Promise<UserVerifiedMetadataRecord | undefined> {
+    const key: Deno.KvKey = [...VERIFIED_METADATA_PREFIX, oid];
+    const entry = await this.kv.store.get<UserVerifiedMetadataRecord>(key);
+    return entry.value ?? undefined;
+  }
+
   async setVerifiedMetadata(
     oid: string,
     verifiedFields: Record<string, string>,

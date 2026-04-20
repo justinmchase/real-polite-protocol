@@ -18,6 +18,9 @@ interface JwtPayload {
   scope?: string;
   scp?: string;
   roles?: string[] | string;
+  name?: string;
+  email?: string;
+  preferred_username?: string;
 }
 
 interface Jwk {
@@ -125,6 +128,9 @@ export class AuthService {
       scope: resolvedScope,
       oid: payload.oid,
       roles: resolvedRoles,
+      name: payload.name || undefined,
+      email: payload.email || undefined,
+      preferred_username: payload.preferred_username || undefined,
     };
   }
 

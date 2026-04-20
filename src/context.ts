@@ -10,6 +10,9 @@ export interface AuthInfo {
   scope?: string;
   oid: string;
   roles: string[];
+  name?: string;
+  email?: string;
+  preferred_username?: string;
 }
 
 export interface Context extends IContext {
