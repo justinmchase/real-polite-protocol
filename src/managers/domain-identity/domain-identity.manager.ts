@@ -9,6 +9,11 @@ import type { ConfigService } from "../../services/config/config.service.ts";
 
 export type DomainIdentityUpdate = Partial<Omit<DomainIdentity, "domain">>;
 
+export interface DeleteHistoricalKeyResult {
+  key_id: string;
+  deleted: boolean;
+}
+
 export class DomainIdentityManager {
   constructor(
     private readonly domainIdentity: DomainIdentityRepository,
@@ -78,6 +83,16 @@ export class DomainIdentityManager {
   async listHistoricalVerificationKeys(): Promise<HistoricalVerificationKey[]> {
     const keys = await this.domainIdentity.listHistoricalVerificationKeys();
     return keys.sort((a, b) => b.archived_at.localeCompare(a.archived_at));
+  }
+
+  async deleteHistoricalVerificationKey(
+    keyId: string,
+  ): Promise<DeleteHistoricalKeyResult> {
+    await this.domainIdentity.deleteHistoricalVerificationKey(keyId);
+    return {
+      key_id: keyId,
+      deleted: true,
+    };
   }
 
   private async generateVerificationKey(): Promise<

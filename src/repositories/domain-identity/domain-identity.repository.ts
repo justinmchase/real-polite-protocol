@@ -59,4 +59,9 @@ export class DomainIdentityRepository {
     }
     return keys;
   }
+
+  async deleteHistoricalVerificationKey(keyId: string): Promise<void> {
+    const kvKey: Deno.KvKey = [...HISTORICAL_VERIFICATION_KEY_PREFIX, keyId];
+    await this.kv.store.delete(kvKey);
+  }
 }

@@ -50,6 +50,15 @@ const HistoricalKeysOutputSchema = {
   ),
 };
 
+const DeleteHistoricalKeyInputSchema = {
+  key_id: z.string().describe("Identifier of the historical key to delete"),
+};
+
+const DeleteHistoricalKeyOutputSchema = {
+  key_id: z.string().describe("Identifier of the deleted historical key"),
+  deleted: z.boolean().describe("Whether deletion was applied"),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -73,6 +82,10 @@ const UpdateDomainIdentityInputSchema = {
 
 type UpdateDomainIdentityArgs = z.infer<
   z.ZodObject<typeof UpdateDomainIdentityInputSchema>
+>;
+
+type DeleteHistoricalKeyArgs = z.infer<
+  z.ZodObject<typeof DeleteHistoricalKeyInputSchema>
 >;
 
 export class DomainAdminTool {
@@ -151,6 +164,21 @@ export class DomainAdminTool {
         const keys = await this.domainIdentityManager
           .listHistoricalVerificationKeys();
         return toolResult({ keys });
+      },
+    );
+
+    server.registerTool(
+      "delete_historical_key",
+      {
+        description:
+          "Remove an archived verification key by key_id. Prior attestations using that key become unverifiable.",
+        inputSchema: DeleteHistoricalKeyInputSchema,
+        outputSchema: DeleteHistoricalKeyOutputSchema,
+      },
+      async (params: DeleteHistoricalKeyArgs) => {
+        const result = await this.domainIdentityManager
+          .deleteHistoricalVerificationKey(params.key_id);
+        return toolResult(result);
       },
     );
   }
