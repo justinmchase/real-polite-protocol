@@ -64,6 +64,14 @@ export class AuthService {
     return this.azureApiAppClientId;
   }
 
+  getRequiredScopes(): string[] {
+    const apiScopePrefix = `api://${this.azureApiAppClientId}`;
+    return [
+      `${apiScopePrefix}/rpp.tools.read`,
+      `${apiScopePrefix}/rpp.messages.submit`,
+    ];
+  }
+
   async validateBearerToken(authHeader: string | undefined): Promise<AuthInfo> {
     if (!authHeader) {
       throw new AuthError("Missing Authorization header", 401, "MISSING_HEADER");
@@ -85,6 +93,7 @@ export class AuthService {
     }
 
     const payload = await this.verifyJwt(token);
+    this.verifyMcpScopes(payload.scope);
     return {
       sub: payload.sub,
       aud: payload.aud,
@@ -169,9 +178,7 @@ export class AuthService {
       return this.jwksCache.keys;
     }
 
-    const jwksUrl = this.azureTenantId
-      ? `https://login.microsoftonline.com/${this.azureTenantId}/discovery/v2.0/keys`
-      : `${this.issuer}.well-known/jwks.json`;
+    const jwksUrl = this.resolveJwksUrl();
     const res = await fetch(jwksUrl);
     if (!res.ok) {
       throw new AuthError(`Failed to fetch JWKS: ${res.status}`, 500, "JWKS_FETCH_FAILED");
@@ -192,6 +199,42 @@ export class AuthService {
     };
 
     return keys;
+  }
+
+  private verifyMcpScopes(scope: string | undefined): void {
+    const actualScopes = (scope ?? "")
+      .split(/\s+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const requiredScopes = this.getRequiredScopes();
+
+    if (requiredScopes.some((requiredScope) => actualScopes.includes(requiredScope))) {
+      return;
+    }
+
+    this.logger.error("Token scope validation failed", {
+      actual: actualScopes,
+      expectedAnyOf: requiredScopes,
+    });
+    throw new AuthError("Insufficient scope", 403, "INSUFFICIENT_SCOPE", {
+      actual: actualScopes,
+      expectedAnyOf: requiredScopes,
+    });
+  }
+
+  private resolveJwksUrl(): string {
+    const normalizedIssuer = this.normalizeIssuer(this.issuer);
+    const isAzureIssuer = /https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\//i
+      .test(normalizedIssuer);
+
+    if (this.azureTenantId && isAzureIssuer) {
+      return `https://login.microsoftonline.com/${this.azureTenantId}/discovery/v2.0/keys`;
+    }
+
+    return new URL(
+      ".well-known/jwks.json",
+      `${normalizedIssuer}/`,
+    ).toString();
   }
 
   private async verifySignature(
@@ -270,6 +313,10 @@ export class AuthService {
 
   private isValidIssuer(actual: string | undefined): boolean {
     if (!actual || !this.issuer) return false;
+
+    if (this.normalizeIssuer(actual) === this.normalizeIssuer(this.issuer)) {
+      return true;
+    }
 
     // Extract tenant ID from both issuers (works for both v1.0 and v2.0)
     // v1.0: https://sts.windows.net/{tenant}/
