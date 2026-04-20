@@ -5,9 +5,8 @@ title: Domain administrators can retrieve the active verification key
 
 # Get Verification Key
 
-The MCP server SHOULD expose `get_verification_key` for domain
-administrators to retrieve the currently active invitation verification key
-metadata.
+The MCP server SHOULD expose `get_verification_key` for domain administrators to
+retrieve the currently active invitation verification key metadata.
 
 ## Expected behavior
 

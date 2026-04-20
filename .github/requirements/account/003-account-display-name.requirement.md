@@ -16,5 +16,5 @@ display name as a condition of account creation or any MCP operation.
 - Display names MUST NOT be used for routing, authentication, or authorization.
 - The listener MAY set or clear their display name at any time via the
   `set_display_name` MCP tool (Section 10B.6).
-- The listener MAY retrieve their current display name via the `get_display_name`
-  MCP tool (Section 10B.6).
+- The listener MAY retrieve their current display name via the
+  `get_display_name` MCP tool (Section 10B.6).

@@ -1,8 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AuthInfo } from "../../context.ts";
-import type { AccountManager } from "../../managers/mod.ts";
-import { AccountTool } from "../../tools/mod.ts";
+import type {
+  AccountManager,
+  DomainIdentityManager,
+} from "../../managers/mod.ts";
+import { AccountTool, DomainAdminTool } from "../../tools/mod.ts";
 
 export class McpService {
   private constructor() {}
@@ -15,21 +18,25 @@ export class McpService {
     request: Request,
     auth: AuthInfo,
     accountManager: AccountManager,
+    domainIdentityManager: DomainIdentityManager,
   ): Promise<Response> {
     const server = new McpServer({
       name: "rpp-api",
       version: "0.1.0",
     });
 
-    server.tool(
+    server.registerTool(
       "hello_world",
-      "Return a hello world message.",
+      { description: "Return a hello world message." },
       () => ({
         content: [{ type: "text", text: "Hello, world!" }],
       }),
     );
 
     new AccountTool(accountManager, auth).register(server);
+    new DomainAdminTool(accountManager, domainIdentityManager, auth).register(
+      server,
+    );
 
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

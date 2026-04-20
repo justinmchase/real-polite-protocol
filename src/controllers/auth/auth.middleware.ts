@@ -44,7 +44,10 @@ export class AuthMiddleware extends Controller {
     });
   }
 
-  private validateOriginHeader(requestUrl: string, originHeader: string | undefined): void {
+  private validateOriginHeader(
+    requestUrl: string,
+    originHeader: string | undefined,
+  ): void {
     if (!originHeader) {
       return;
     }

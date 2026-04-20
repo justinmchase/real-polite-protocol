@@ -5,13 +5,17 @@ import {
   type IState,
 } from "@justinmchase/grove";
 import type { AuthInfo } from "../../context.ts";
-import type { AccountManager } from "../../managers/mod.ts";
+import type {
+  AccountManager,
+  DomainIdentityManager,
+} from "../../managers/mod.ts";
 import type { McpService } from "../../services/mcp/mcp.service.ts";
 
 export class McpController extends Controller {
   constructor(
     private readonly mcp: McpService,
     private readonly accounts: AccountManager,
+    private readonly domainIdentity: DomainIdentityManager,
   ) {
     super();
   }
@@ -24,11 +28,20 @@ export class McpController extends Controller {
       const state = ctx.var.state as Record<string, unknown>;
       const auth = state.auth as AuthInfo | undefined;
       if (!auth) {
-        return ctx.json({ ok: false, error: "Unauthorized", code: "MISSING_AUTH" }, 401);
+        return ctx.json({
+          ok: false,
+          error: "Unauthorized",
+          code: "MISSING_AUTH",
+        }, 401);
       }
 
       await this.accounts.ensureAccount(auth);
-      return await this.mcp.handleRequest(ctx.req.raw, auth, this.accounts);
+      return await this.mcp.handleRequest(
+        ctx.req.raw,
+        auth,
+        this.accounts,
+        this.domainIdentity,
+      );
     });
   }
 }

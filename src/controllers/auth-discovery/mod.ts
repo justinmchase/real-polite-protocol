@@ -1,4 +1,9 @@
-import { Controller, type GroveApp, type IContext, type IState } from "@justinmchase/grove";
+import {
+  Controller,
+  type GroveApp,
+  type IContext,
+  type IState,
+} from "@justinmchase/grove";
 import type { ConfigService } from "../../services/config/config.service.ts";
 
 export class AuthDiscoveryController extends Controller {
@@ -35,7 +40,8 @@ export class AuthDiscoveryController extends Controller {
         issuer: origin,
         authorization_endpoint: `${origin}/authorize`,
         token_endpoint: `${origin}/token`,
-        jwks_uri: `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
+        jwks_uri:
+          `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
         response_types_supported: ["code"],
         grant_types_supported: [
           "authorization_code",
@@ -82,8 +88,8 @@ export class AuthDiscoveryController extends Controller {
       const tenantId = this.config.azureTenantId;
       const azureTokenUrl =
         `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-      const contentType =
-        ctx.req.header("content-type") ?? "application/x-www-form-urlencoded";
+      const contentType = ctx.req.header("content-type") ??
+        "application/x-www-form-urlencoded";
       let body = await ctx.req.text();
 
       // Remove resource parameter for v2.0 OAuth (uses fully-qualified scopes instead)

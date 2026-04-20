@@ -81,12 +81,20 @@ export class AuthService {
 
   async validateBearerToken(authHeader: string | undefined): Promise<AuthInfo> {
     if (!authHeader) {
-      throw new AuthError("Missing Authorization header", 401, "MISSING_HEADER");
+      throw new AuthError(
+        "Missing Authorization header",
+        401,
+        "MISSING_HEADER",
+      );
     }
 
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
     if (!match) {
-      throw new AuthError("Invalid Authorization header format", 401, "INVALID_FORMAT");
+      throw new AuthError(
+        "Invalid Authorization header format",
+        401,
+        "INVALID_FORMAT",
+      );
     }
 
     const token = match[1];
@@ -221,7 +229,11 @@ export class AuthService {
     const jwksUrl = this.resolveJwksUrl();
     const res = await fetch(jwksUrl);
     if (!res.ok) {
-      throw new AuthError(`Failed to fetch JWKS: ${res.status}`, 500, "JWKS_FETCH_FAILED");
+      throw new AuthError(
+        `Failed to fetch JWKS: ${res.status}`,
+        500,
+        "JWKS_FETCH_FAILED",
+      );
     }
 
     const data = (await res.json()) as JwksResponse;
@@ -247,8 +259,12 @@ export class AuthService {
       .map((value) => value.trim())
       .filter(Boolean);
     const requiredScopes = this.getRequiredScopes();
-    const actualNormalized = new Set(actualScopes.map((value) => this.normalizeScopeName(value)));
-    const requiredNormalized = requiredScopes.map((value) => this.normalizeScopeName(value));
+    const actualNormalized = new Set(
+      actualScopes.map((value) => this.normalizeScopeName(value)),
+    );
+    const requiredNormalized = requiredScopes.map((value) =>
+      this.normalizeScopeName(value)
+    );
 
     if (requiredNormalized.some((required) => actualNormalized.has(required))) {
       return;
@@ -280,8 +296,9 @@ export class AuthService {
 
   private resolveJwksUrl(): string {
     const normalizedIssuer = this.normalizeIssuer(this.issuer);
-    const isAzureIssuer = /https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\//i
-      .test(normalizedIssuer);
+    const isAzureIssuer =
+      /https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\//i
+        .test(normalizedIssuer);
 
     if (this.azureTenantId && isAzureIssuer) {
       return `https://login.microsoftonline.com/${this.azureTenantId}/discovery/v2.0/keys`;
@@ -300,7 +317,11 @@ export class AuthService {
     alg: string,
   ): Promise<void> {
     if (alg !== "RS256") {
-      throw new AuthError(`Unsupported algorithm: ${alg}`, 400, "UNSUPPORTED_ALGORITHM");
+      throw new AuthError(
+        `Unsupported algorithm: ${alg}`,
+        400,
+        "UNSUPPORTED_ALGORITHM",
+      );
     }
 
     if (key.kty !== "RSA" || !key.n || !key.e) {
@@ -337,7 +358,11 @@ export class AuthService {
     } catch (e) {
       if (e instanceof AuthError) throw e;
       this.logger.error("Signature verification error", { error: String(e) });
-      throw new AuthError(`Signature verification failed: ${String(e)}`, 401, "SIGNATURE_VERIFICATION_FAILED");
+      throw new AuthError(
+        `Signature verification failed: ${String(e)}`,
+        401,
+        "SIGNATURE_VERIFICATION_FAILED",
+      );
     }
   }
 
@@ -390,8 +415,12 @@ export class AuthService {
     // Extract tenant ID from both issuers (works for both v1.0 and v2.0)
     // v1.0: https://sts.windows.net/{tenant}/
     // v2.0: https://login.microsoftonline.com/{tenant}/v2.0
-    const actualMatch = actual.match(/https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\/([a-f0-9-]+)/i);
-    const expectedMatch = this.issuer.match(/https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\/([a-f0-9-]+)/i);
+    const actualMatch = actual.match(
+      /https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\/([a-f0-9-]+)/i,
+    );
+    const expectedMatch = this.issuer.match(
+      /https:\/\/(?:sts\.windows\.net|login\.microsoftonline\.com)\/([a-f0-9-]+)/i,
+    );
 
     if (!actualMatch || !expectedMatch) {
       return false;

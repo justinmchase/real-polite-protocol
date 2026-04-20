@@ -5,9 +5,8 @@ title: Domain administrators can rotate the invitation verification key
 
 # Rotate Verification Key
 
-The MCP server SHOULD expose `rotate_verification_key` for domain
-administrators to rotate the active verification key used for invitation
-attestation.
+The MCP server SHOULD expose `rotate_verification_key` for domain administrators
+to rotate the active verification key used for invitation attestation.
 
 ## Expected behavior
 

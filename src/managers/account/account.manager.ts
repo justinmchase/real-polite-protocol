@@ -27,7 +27,9 @@ export class AccountManager {
       oid: account.oid,
       roles: auth.roles,
       is_domain_admin: isDomainAdmin,
-      allowed_tool_groups: isDomainAdmin ? ["listener", "domain"] : ["listener"],
+      allowed_tool_groups: isDomainAdmin
+        ? ["listener", "domain"]
+        : ["listener"],
     };
   }
 

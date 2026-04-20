@@ -8,7 +8,8 @@ import {
 } from "./test-helpers.ts";
 
 Deno.test({
-  name: "req:mcp-auth-004 - Access token validation enforces audience and token validity",
+  name:
+    "req:mcp-auth-004 - Access token validation enforces audience and token validity",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async () => {
@@ -53,40 +54,46 @@ Deno.test({
           await assertAuthFailure(tampered, 401, "INVALID_SIGNATURE");
         });
 
-        await t.step("rejects valid tokens with insufficient scope", async () => {
-          const token = await issueToken({
-            scope: `${testAudience}/custom.scope`,
-          });
+        await t.step(
+          "rejects valid tokens with insufficient scope",
+          async () => {
+            const token = await issueToken({
+              scope: `${testAudience}/custom.scope`,
+            });
 
-          await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
-        });
+            await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
+          },
+        );
 
-        await t.step("accepts Azure-style scp claim with required scope", async () => {
-          const token = await issueToken({
-            scp: requiredScopes[0],
-          });
+        await t.step(
+          "accepts Azure-style scp claim with required scope",
+          async () => {
+            const token = await issueToken({
+              scp: requiredScopes[0],
+            });
 
-          const response = await fetch("http://localhost:8000/mcp", {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "accept": "application/json, text/event-stream",
-              authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: "req-1",
-              method: "tools/call",
-              params: {
-                name: "get_permissions",
-                arguments: {},
+            const response = await fetch("http://localhost:8000/mcp", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "accept": "application/json, text/event-stream",
+                authorization: `Bearer ${token}`,
               },
-            }),
-          });
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: "req-1",
+                method: "tools/call",
+                params: {
+                  name: "get_permissions",
+                  arguments: {},
+                },
+              }),
+            });
 
-          assertEquals(response.status, 200);
-          await response.text();
-        });
+            assertEquals(response.status, 200);
+            await response.text();
+          },
+        );
       });
     });
   },
@@ -94,7 +101,10 @@ Deno.test({
 
 function tamperPayloadWithoutResigning(token: string): string {
   const [header, payload, signature] = token.split(".");
-  const decodedPayload = JSON.parse(decodeBase64Url(payload)) as Record<string, unknown>;
+  const decodedPayload = JSON.parse(decodeBase64Url(payload)) as Record<
+    string,
+    unknown
+  >;
   decodedPayload.sub = "tampered-subject";
   const tamperedPayload = encodeBase64Url(
     new TextEncoder().encode(JSON.stringify(decodedPayload)),

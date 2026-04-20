@@ -1,4 +1,8 @@
-import { getEnv, readOptionalBoolean, readOptionalString } from "@justinmchase/grove";
+import {
+  getEnv,
+  readOptionalBoolean,
+  readOptionalString,
+} from "@justinmchase/grove";
 
 export class ConfigService {
   constructor(

@@ -27,15 +27,15 @@ characteristics:
 
 - The `scp` claim is used for delegated permission scopes (e.g.,
   `"rpp.tools.read rpp.messages.submit"`) instead of `scope`.
-- The server MUST extract scopes from the `scp` claim if present, and treat
-  them equivalently to the `scope` claim.
-- Scopes appear in short form (e.g., `rpp.tools.read`) without the
-  `api://` prefix. The server MUST normalize scope names before comparison.
+- The server MUST extract scopes from the `scp` claim if present, and treat them
+  equivalently to the `scope` claim.
+- Scopes appear in short form (e.g., `rpp.tools.read`) without the `api://`
+  prefix. The server MUST normalize scope names before comparison.
 
 ### Roles (`roles`)
 
-- Azure v2.0 tokens include assigned app roles in the `roles` claim as an
-  array of strings (e.g., `["domain.admin"]`).
+- Azure v2.0 tokens include assigned app roles in the `roles` claim as an array
+  of strings (e.g., `["domain.admin"]`).
 - The server MUST read and honour the `roles` claim for authorization decisions.
 
 ### Additional claims
@@ -71,4 +71,5 @@ Azure app registrations.
 
 **Authority:** RFC/spec > requirements > tests > code
 
-**Test:** See `src/requirements/mcp/auth/012-azure-token-support.requirement.test.ts`.
+**Test:** See
+`src/requirements/mcp/auth/012-azure-token-support.requirement.test.ts`.

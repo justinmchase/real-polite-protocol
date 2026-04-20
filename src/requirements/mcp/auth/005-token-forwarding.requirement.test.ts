@@ -15,21 +15,24 @@ Deno.test({
           await res.text();
         });
 
-        await t.step("does not forward client bearer token on outbound auth fetches", async () => {
-          const token = await issueToken({ scope: requiredScopes[0] });
-          const response = await fetch("http://localhost:8000/mcp", {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({}),
-          });
+        await t.step(
+          "does not forward client bearer token on outbound auth fetches",
+          async () => {
+            const token = await issueToken({ scope: requiredScopes[0] });
+            const response = await fetch("http://localhost:8000/mcp", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({}),
+            });
 
-          const bodyText = await response.text();
-          assertEquals(forwardedAuthorization, null);
-          assertEquals(bodyText.includes(token), false);
-        });
+            const bodyText = await response.text();
+            assertEquals(forwardedAuthorization, null);
+            assertEquals(bodyText.includes(token), false);
+          },
+        );
       });
     }, {
       onJwksRequest: (request) => {

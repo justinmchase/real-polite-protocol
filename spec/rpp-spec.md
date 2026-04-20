@@ -1252,6 +1252,22 @@ needed to implement the features defined in this specification.
 All tools are invoked over the MCP endpoint (Section 4.1) and require OAuth 2.1
 bearer token authentication (Section 5.2).
 
+### 10B.0 Tool Output Format
+
+All MCP tools that return structured data MUST declare an `outputSchema` (JSON
+Schema) describing the shape of the result. Tool results MUST include both:
+
+1. **`structuredContent`** — The structured result object, conforming to the
+   declared `outputSchema`. Clients that support structured output SHOULD use
+   this field directly.
+2. **`content`** — A `type: "text"` content item containing the JSON-serialized
+   `structuredContent`. This provides backwards compatibility with clients that
+   do not support `structuredContent` and serves as a text representation for
+   LLM consumption.
+
+Servers MUST NOT return raw unstructured text when the result is structured
+data.
+
 ### 10B.1 Messaging Tools
 
 These tools allow listeners to send and receive messages through their own RPP

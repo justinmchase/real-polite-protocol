@@ -12,21 +12,24 @@ Deno.test({
         assertEquals(body.ok, true);
       });
 
-      await t.step("mcp endpoint is exposed and challenges unauthenticated requests", async () => {
-        const response = await fetch("http://localhost:8000/mcp", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({}),
-        });
+      await t.step(
+        "mcp endpoint is exposed and challenges unauthenticated requests",
+        async () => {
+          const response = await fetch("http://localhost:8000/mcp", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({}),
+          });
 
-        assertEquals(response.status, 401);
-        assertExists(response.headers.get("WWW-Authenticate"));
+          assertEquals(response.status, 401);
+          assertExists(response.headers.get("WWW-Authenticate"));
 
-        const body = await response.json();
-        assertEquals(body.ok, false);
-      });
+          const body = await response.json();
+          assertEquals(body.ok, false);
+        },
+      );
     });
   },
 });

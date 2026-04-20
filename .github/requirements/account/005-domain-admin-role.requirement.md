@@ -17,7 +17,7 @@ only when the token `roles` claim contains `domain.admin`.
 - Accounts whose token includes `domain.admin` MAY invoke domain tools.
 - Accounts whose token does not include `domain.admin` MUST receive an
   authorization failure when invoking domain tools.
-- Normal account-scoped tools (Sections 10B.1 through 10B.6) remain available
-  to authenticated accounts regardless of `domain.admin` presence.
+- Normal account-scoped tools (Sections 10B.1 through 10B.6) remain available to
+  authenticated accounts regardless of `domain.admin` presence.
 - Role evaluation is performed per request from token claims, not from mutable
   client-supplied request payload fields.

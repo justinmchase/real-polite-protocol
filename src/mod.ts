@@ -17,7 +17,7 @@ export async function start(options?: StartOptions): Promise<void> {
     const logger = new ConsoleLogger();
     services = await initServices(logger);
     const repositories = await initRepositories(services);
-    const managers = await initManagers(repositories);
+    const managers = await initManagers(repositories, services);
     return { logger, services, repositories, managers };
   }
 

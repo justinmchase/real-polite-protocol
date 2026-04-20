@@ -41,16 +41,24 @@ const rfcCoverage = await runJson<RfcCoverage>(
 
 const significantGaps: string[] = [];
 if (reqCoverage.mirroredMissingCount > 0) {
-  significantGaps.push(`${reqCoverage.mirroredMissingCount} requirements missing mirrored tests`);
+  significantGaps.push(
+    `${reqCoverage.mirroredMissingCount} requirements missing mirrored tests`,
+  );
 }
 if (reqCoverage.idCoverageMissingCount > 0) {
-  significantGaps.push(`${reqCoverage.idCoverageMissingCount} requirement IDs not referenced in tests`);
+  significantGaps.push(
+    `${reqCoverage.idCoverageMissingCount} requirement IDs not referenced in tests`,
+  );
 }
 if (reqCoverage.orphanTestsCount > 0) {
-  significantGaps.push(`${reqCoverage.orphanTestsCount} orphan requirement tests with no matching requirement doc`);
+  significantGaps.push(
+    `${reqCoverage.orphanTestsCount} orphan requirement tests with no matching requirement doc`,
+  );
 }
 if (rfcCoverage.uncoveredToolCount > 0) {
-  significantGaps.push(`${rfcCoverage.uncoveredToolCount} RFC MCP tools missing requirement coverage`);
+  significantGaps.push(
+    `${rfcCoverage.uncoveredToolCount} RFC MCP tools missing requirement coverage`,
+  );
 }
 
 const output = {
@@ -102,7 +110,14 @@ async function runJson<T>(
   scopeValue: string,
   requirementsPrefixValue?: string,
 ): Promise<T> {
-  const commandArgs = ["run", "-A", scriptPath, "--json", "--scope", scopeValue];
+  const commandArgs = [
+    "run",
+    "-A",
+    scriptPath,
+    "--json",
+    "--scope",
+    scopeValue,
+  ];
   if (requirementsPrefixValue) {
     commandArgs.push("--requirements-prefix", requirementsPrefixValue);
   }

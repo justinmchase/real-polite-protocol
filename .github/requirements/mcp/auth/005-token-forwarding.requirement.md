@@ -11,6 +11,6 @@ upstream service.
 ## Expected behavior
 
 - Access tokens are consumed only for local authorization decisions.
-- No outbound call includes the incoming bearer token unless explicitly
-  replaced by service-owned credentials.
+- No outbound call includes the incoming bearer token unless explicitly replaced
+  by service-owned credentials.
 - Logging and error handling avoid leaking raw access tokens.

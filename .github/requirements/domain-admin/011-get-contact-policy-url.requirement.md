@@ -5,8 +5,8 @@ title: Domain administrators can retrieve contact policy URL
 
 # Get Contact Policy URL
 
-The MCP server SHOULD expose `get_contact_policy_url` for domain
-administrators to retrieve the current domain contact policy URL.
+The MCP server SHOULD expose `get_contact_policy_url` for domain administrators
+to retrieve the current domain contact policy URL.
 
 ## Expected behavior
 

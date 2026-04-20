@@ -5,8 +5,8 @@ title: Domain administrators can list archived verification keys
 
 # List Historical Keys
 
-The MCP server SHOULD expose `list_historical_keys` for domain administrators
-to inspect archived verification keys.
+The MCP server SHOULD expose `list_historical_keys` for domain administrators to
+inspect archived verification keys.
 
 ## Expected behavior
 

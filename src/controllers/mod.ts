@@ -23,6 +23,10 @@ export async function initControllers(
   await new SubmitController(context.services.kv).use(app);
   await new AuthDiscoveryController(context.services.config).use(app);
   await new AuthMiddleware(context.services.auth).use(app);
-  await new McpController(context.services.mcp, context.managers.accounts).use(app);
+  await new McpController(
+    context.services.mcp,
+    context.managers.accounts,
+    context.managers.domainIdentity,
+  ).use(app);
   await new NotFoundController().use(app);
 }

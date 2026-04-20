@@ -949,6 +949,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@justinmchase/grove@1.0.0",
+      "jsr:@justinmchase/serializable@~0.3.13",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/testing@^1.0.17",
       "npm:@modelcontextprotocol/sdk@^1.29.0",

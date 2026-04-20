@@ -5,8 +5,8 @@ title: Domain administrators can update domain identity fields
 
 # Update Domain Identity
 
-The MCP server SHOULD expose `update_domain_identity` for domain
-administrators to modify mutable domain identity fields.
+The MCP server SHOULD expose `update_domain_identity` for domain administrators
+to modify mutable domain identity fields.
 
 ## Expected behavior
 

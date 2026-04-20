@@ -22,7 +22,11 @@ export async function collectFiles(
   return output;
 }
 
-async function walk(dir: string, output: string[], endsWith: string): Promise<void> {
+async function walk(
+  dir: string,
+  output: string[],
+  endsWith: string,
+): Promise<void> {
   let entries: Deno.DirEntry[] = [];
   try {
     entries = await readDirArray(dir);
@@ -58,14 +62,18 @@ export function toRelative(path: string, root: string): string {
   return path;
 }
 
-export function requirementDocToMirroredTestPath(relativeDocPath: string): string {
+export function requirementDocToMirroredTestPath(
+  relativeDocPath: string,
+): string {
   return `src/requirements/${relativeDocPath}`.replace(
     /\.requirement\.md$/,
     ".requirement.test.ts",
   );
 }
 
-export function requirementTestToMirroredDocPath(relativeTestPath: string): string {
+export function requirementTestToMirroredDocPath(
+  relativeTestPath: string,
+): string {
   return `.github/requirements/${relativeTestPath}`.replace(
     /\.requirement\.test\.ts$/,
     ".requirement.md",

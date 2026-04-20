@@ -1,6 +1,34 @@
 import { assertEquals } from "@std/assert";
 import { start } from "../mod.ts";
 
+export interface ToolCallResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+export async function callTool(
+  token: string,
+  toolName: string,
+  args: Record<string, unknown> = {},
+): Promise<ToolCallResult> {
+  const response = await fetch("http://localhost:8000/mcp", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "accept": "application/json, text/event-stream",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "req-1",
+      method: "tools/call",
+      params: { name: toolName, arguments: args },
+    }),
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
 export async function withStartedServer(
   run: () => Promise<void>,
 ): Promise<void> {

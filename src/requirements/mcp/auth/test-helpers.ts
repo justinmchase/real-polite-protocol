@@ -52,8 +52,14 @@ export async function withAuthTestContext(
     modulusLength: 2048,
     publicExponent: new Uint8Array([1, 0, 1]),
   } as const;
-  const keyPair = await crypto.subtle.generateKey(algorithm, true, ["sign", "verify"]);
-  const exportedPublicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey) as JsonWebKey;
+  const keyPair = await crypto.subtle.generateKey(algorithm, true, [
+    "sign",
+    "verify",
+  ]);
+  const exportedPublicJwk = await crypto.subtle.exportKey(
+    "jwk",
+    keyPair.publicKey,
+  ) as JsonWebKey;
   const publicJwk = {
     ...exportedPublicJwk,
     kid: "test-key",
@@ -81,7 +87,11 @@ export async function withAuthTestContext(
     },
   );
 
-  const envKeys = ["AUTH_ISSUER", "AUTH_AUDIENCE", "AZURE_API_APP_CLIENT_ID"] as const;
+  const envKeys = [
+    "AUTH_ISSUER",
+    "AUTH_AUDIENCE",
+    "AZURE_API_APP_CLIENT_ID",
+  ] as const;
   const previousEnv = new Map<string, string | undefined>();
 
   try {
@@ -117,14 +127,18 @@ export async function withAuthTestContext(
 
         const encodedHeader = encodeBase64UrlJson(header);
         const encodedPayload = encodeBase64UrlJson(payload);
-        const data = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
+        const data = new TextEncoder().encode(
+          `${encodedHeader}.${encodedPayload}`,
+        );
         const signature = await crypto.subtle.sign(
           "RSASSA-PKCS1-v1_5",
           keyPair.privateKey,
           data,
         );
 
-        return `${encodedHeader}.${encodedPayload}.${encodeBase64UrlBytes(new Uint8Array(signature))}`;
+        return `${encodedHeader}.${encodedPayload}.${
+          encodeBase64UrlBytes(new Uint8Array(signature))
+        }`;
       },
     });
   } finally {

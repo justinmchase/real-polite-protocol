@@ -17,8 +17,14 @@ const scope = getArgValue(args, "--scope") ?? "all";
 const requirementsPrefix = getArgValue(args, "--requirements-prefix") ??
   deriveRequirementsPrefix(scope);
 
-const allDocsAbs = await collectFiles(`${root}/.github/requirements`, ".requirement.md");
-const allTestsAbs = await collectFiles(`${root}/src/requirements`, ".requirement.test.ts");
+const allDocsAbs = await collectFiles(
+  `${root}/.github/requirements`,
+  ".requirement.md",
+);
+const allTestsAbs = await collectFiles(
+  `${root}/src/requirements`,
+  ".requirement.test.ts",
+);
 
 const docsAbs = allDocsAbs.filter((path) => {
   const relative = toRelative(path, `${root}/.github/requirements`);
@@ -57,15 +63,23 @@ const tests = await Promise.all(
 );
 
 const testPathSet = new Set(tests.map((t) => `src/requirements/${t.relative}`));
-const docPathSet = new Set(docs.map((d) => `.github/requirements/${d.relative}`));
+const docPathSet = new Set(
+  docs.map((d) => `.github/requirements/${d.relative}`),
+);
 
 const missingMirroredTests = docs
   .filter((doc) => !testPathSet.has(doc.mirroredTestPath))
-  .map((doc) => ({ requirement: `.github/requirements/${doc.relative}`, expectedTest: doc.mirroredTestPath }));
+  .map((doc) => ({
+    requirement: `.github/requirements/${doc.relative}`,
+    expectedTest: doc.mirroredTestPath,
+  }));
 
 const orphanTests = tests
   .filter((test) => !docPathSet.has(test.mirroredDocPath))
-  .map((test) => ({ test: `src/requirements/${test.relative}`, expectedRequirement: test.mirroredDocPath }));
+  .map((test) => ({
+    test: `src/requirements/${test.relative}`,
+    expectedRequirement: test.mirroredDocPath,
+  }));
 
 const testReferencedIds = new Set<string>();
 for (const test of tests) {
@@ -77,7 +91,10 @@ for (const test of tests) {
 const docsWithIds = docs.filter((d) => Boolean(d.id));
 const missingIdCoverage = docsWithIds
   .filter((doc) => !testReferencedIds.has(doc.id!))
-  .map((doc) => ({ requirement: `.github/requirements/${doc.relative}`, id: doc.id! }));
+  .map((doc) => ({
+    requirement: `.github/requirements/${doc.relative}`,
+    id: doc.id!,
+  }));
 
 const idSet = new Set(docsWithIds.map((d) => d.id!));
 const unknownReferencedIds = Array.from(testReferencedIds)
@@ -97,7 +114,8 @@ const result = {
   orphanTestsCount: orphanTests.length,
   idCoverageMissingCount: missingIdCoverage.length,
   mirroredCoveragePercent: coveragePercent,
-  scoreLine: `${mirroredCovered}/${docs.length} requirements covered by tests (${coveragePercent}%)`,
+  scoreLine:
+    `${mirroredCovered}/${docs.length} requirements covered by tests (${coveragePercent}%)`,
   missingMirroredTests,
   orphanTests,
   missingIdCoverage,
@@ -119,8 +137,12 @@ console.log(`Requirement docs: ${result.docsCount}`);
 console.log(`Requirement tests: ${result.testsCount}`);
 console.log(`Missing mirrored tests: ${result.mirroredMissingCount}`);
 console.log(`Orphan tests: ${result.orphanTestsCount}`);
-console.log(`Requirements missing ID coverage: ${result.idCoverageMissingCount}`);
-console.log(`Unknown req IDs referenced by tests: ${result.unknownReferencedIds.length}`);
+console.log(
+  `Requirements missing ID coverage: ${result.idCoverageMissingCount}`,
+);
+console.log(
+  `Unknown req IDs referenced by tests: ${result.unknownReferencedIds.length}`,
+);
 
 if (result.missingMirroredTests.length) {
   console.log("\nMissing mirrored tests:");
@@ -150,7 +172,10 @@ if (result.unknownReferencedIds.length) {
   }
 }
 
-function shouldIncludeRelative(relative: string, prefix: string | undefined): boolean {
+function shouldIncludeRelative(
+  relative: string,
+  prefix: string | undefined,
+): boolean {
   if (!prefix) {
     return true;
   }

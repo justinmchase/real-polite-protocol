@@ -1,6 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../test-helpers.ts";
-import { withAuthTestContext, requiredScopes } from "../mcp/auth/test-helpers.ts";
+import {
+  requiredScopes,
+  withAuthTestContext,
+} from "../mcp/auth/test-helpers.ts";
 import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-002 - Account is auto-provisioned on first authenticated MCP request", async (t) => {
@@ -18,18 +21,21 @@ Deno.test("req:account-002 - Account is auto-provisioned on first authenticated 
         assertExists(permissions.account_id);
       });
 
-      await t.step("subsequent calls resolve same account without duplication", async () => {
-        const token = await issueToken({
-          oid: "account-provision-oid",
-          scope: requiredScopes.join(" "),
-        });
+      await t.step(
+        "subsequent calls resolve same account without duplication",
+        async () => {
+          const token = await issueToken({
+            oid: "account-provision-oid",
+            scope: requiredScopes.join(" "),
+          });
 
-        const first = await callGetPermissions(token);
-        const second = await callGetPermissions(token);
+          const first = await callGetPermissions(token);
+          const second = await callGetPermissions(token);
 
-        assertEquals(first.account_id, second.account_id);
-        assertEquals(first.oid, second.oid);
-      });
+          assertEquals(first.account_id, second.account_id);
+          assertEquals(first.oid, second.oid);
+        },
+      );
     });
   });
 });

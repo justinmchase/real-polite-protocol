@@ -1,6 +1,9 @@
 import { assertEquals, assertExists, assertNotEquals } from "@std/assert";
 import { withStartedServer } from "../test-helpers.ts";
-import { withAuthTestContext, requiredScopes } from "../mcp/auth/test-helpers.ts";
+import {
+  requiredScopes,
+  withAuthTestContext,
+} from "../mcp/auth/test-helpers.ts";
 import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", async (t) => {
@@ -25,23 +28,26 @@ Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", 
         assertExists(first.account_id);
       });
 
-      await t.step("different oid resolves to different account id", async () => {
-        const tokenA = await issueToken({
-          oid: "account-identity-oid-a",
-          scope: requiredScopes.join(" "),
-        });
-        const tokenB = await issueToken({
-          oid: "account-identity-oid-b",
-          scope: requiredScopes.join(" "),
-        });
+      await t.step(
+        "different oid resolves to different account id",
+        async () => {
+          const tokenA = await issueToken({
+            oid: "account-identity-oid-a",
+            scope: requiredScopes.join(" "),
+          });
+          const tokenB = await issueToken({
+            oid: "account-identity-oid-b",
+            scope: requiredScopes.join(" "),
+          });
 
-        const accountA = await callGetPermissions(tokenA);
-        const accountB = await callGetPermissions(tokenB);
+          const accountA = await callGetPermissions(tokenA);
+          const accountB = await callGetPermissions(tokenB);
 
-        assertNotEquals(accountA.account_id, accountB.account_id);
-        assertEquals(accountA.oid, "account-identity-oid-a");
-        assertEquals(accountB.oid, "account-identity-oid-b");
-      });
+          assertNotEquals(accountA.account_id, accountB.account_id);
+          assertEquals(accountA.oid, "account-identity-oid-a");
+          assertEquals(accountB.oid, "account-identity-oid-b");
+        },
+      );
     });
   });
 });

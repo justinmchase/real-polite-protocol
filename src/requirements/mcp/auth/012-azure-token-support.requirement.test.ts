@@ -19,29 +19,32 @@ Deno.test({
           assertEquals(body.ok, true);
         });
 
-        await t.step("accepts v2.0 token with bare client ID audience", async () => {
-          const token = await issueToken({
-            aud: testBareAudience,
-            scp: requiredScopes[0],
-          });
+        await t.step(
+          "accepts v2.0 token with bare client ID audience",
+          async () => {
+            const token = await issueToken({
+              aud: testBareAudience,
+              scp: requiredScopes[0],
+            });
 
-          const response = await fetch("http://localhost:8000/mcp", {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "accept": "application/json, text/event-stream",
-              authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: "req-1",
-              method: "tools/list",
-            }),
-          });
+            const response = await fetch("http://localhost:8000/mcp", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "accept": "application/json, text/event-stream",
+                authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: "req-1",
+                method: "tools/list",
+              }),
+            });
 
-          assertEquals(response.status, 200);
-          await response.text();
-        });
+            assertEquals(response.status, 200);
+            await response.text();
+          },
+        );
 
         await t.step("accepts v2.0 token with scp claim", async () => {
           const token = await issueToken({
@@ -92,23 +95,29 @@ Deno.test({
           await response.text();
         });
 
-        await t.step("rejects v2.0 token with wrong bare audience", async () => {
-          const token = await issueToken({
-            aud: "wrong-client-id",
-            scp: requiredScopes[0],
-          });
+        await t.step(
+          "rejects v2.0 token with wrong bare audience",
+          async () => {
+            const token = await issueToken({
+              aud: "wrong-client-id",
+              scp: requiredScopes[0],
+            });
 
-          await assertAuthFailure(token, 401, "INVALID_AUDIENCE");
-        });
+            await assertAuthFailure(token, 401, "INVALID_AUDIENCE");
+          },
+        );
 
-        await t.step("rejects v2.0 token with insufficient scp scopes", async () => {
-          const token = await issueToken({
-            aud: testBareAudience,
-            scp: "some.other.scope",
-          });
+        await t.step(
+          "rejects v2.0 token with insufficient scp scopes",
+          async () => {
+            const token = await issueToken({
+              aud: testBareAudience,
+              scp: "some.other.scope",
+            });
 
-          await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
-        });
+            await assertAuthFailure(token, 403, "INSUFFICIENT_SCOPE");
+          },
+        );
       });
     });
   },

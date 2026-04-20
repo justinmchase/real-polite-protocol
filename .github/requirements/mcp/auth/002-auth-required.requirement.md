@@ -5,8 +5,8 @@ title: MCP endpoint requires bearer token authentication
 
 # MCP Authentication Requirement
 
-Every client request to the MCP endpoint MUST be authenticated with OAuth
-bearer tokens.
+Every client request to the MCP endpoint MUST be authenticated with OAuth bearer
+tokens.
 
 ## Expected behavior
 
