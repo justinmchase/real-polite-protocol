@@ -1,5 +1,5 @@
 import type { AuthInfo } from "../../context.ts";
-import type { Account } from "../../models/mod.ts";
+import type { Account, VerifiableUser } from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
@@ -35,5 +35,15 @@ export class AccountManager {
 
   isDomainAdmin(roles: string[]): boolean {
     return roles.includes(DOMAIN_ADMIN_ROLE);
+  }
+
+  async listVerifiableUsers(): Promise<VerifiableUser[]> {
+    const records = await this.accounts.listVerifiedMetadata();
+    return records
+      .map((record) => ({
+        oid: record.oid,
+        verified_fields: record.verified_fields,
+      }))
+      .sort((a, b) => a.oid.localeCompare(b.oid));
   }
 }

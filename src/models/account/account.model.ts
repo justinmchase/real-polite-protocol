@@ -15,3 +15,14 @@ export function newAccount(oid: string, now = new Date()): Account {
     updated_at: timestamp,
   };
 }
+
+export interface UserVerifiedMetadataRecord {
+  oid: string;
+  verified_fields: Record<string, string>;
+  updated_at: string;
+}
+
+export interface VerifiableUser {
+  oid: string;
+  verified_fields: Record<string, string>;
+}

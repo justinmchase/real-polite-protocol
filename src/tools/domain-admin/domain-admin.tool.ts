@@ -59,6 +59,15 @@ const DeleteHistoricalKeyOutputSchema = {
   deleted: z.boolean().describe("Whether deletion was applied"),
 };
 
+const VerifiableUsersOutputSchema = {
+  users: z.array(z.object({
+    oid: z.string().describe("User object identifier"),
+    verified_fields: z.record(z.string(), z.string()).describe(
+      "Verified metadata fields keyed by field name",
+    ),
+  })).describe("Users with verifiable metadata"),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -179,6 +188,19 @@ export class DomainAdminTool {
         const result = await this.domainIdentityManager
           .deleteHistoricalVerificationKey(params.key_id);
         return toolResult(result);
+      },
+    );
+
+    server.registerTool(
+      "list_verifiable_users",
+      {
+        description:
+          "List users whose metadata the server can verify, along with their verifiable fields.",
+        outputSchema: VerifiableUsersOutputSchema,
+      },
+      async () => {
+        const users = await this.accountManager.listVerifiableUsers();
+        return toolResult({ users });
       },
     );
   }

@@ -1,6 +1,8 @@
-import type { Account } from "../../models/mod.ts";
+import type { Account, UserVerifiedMetadataRecord } from "../../models/mod.ts";
 import { newAccount } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
+
+const VERIFIED_METADATA_PREFIX: Deno.KvKey = ["accounts", "verified_metadata"];
 
 export class AccountRepository {
   constructor(private readonly kv: KvService) {}
@@ -42,5 +44,30 @@ export class AccountRepository {
       return existing;
     }
     return await this.createByOid(oid);
+  }
+
+  async setVerifiedMetadata(
+    oid: string,
+    verifiedFields: Record<string, string>,
+  ): Promise<UserVerifiedMetadataRecord> {
+    const record: UserVerifiedMetadataRecord = {
+      oid,
+      verified_fields: verifiedFields,
+      updated_at: new Date().toISOString(),
+    };
+    const key: Deno.KvKey = [...VERIFIED_METADATA_PREFIX, oid];
+    await this.kv.store.set(key, record);
+    return record;
+  }
+
+  async listVerifiedMetadata(): Promise<UserVerifiedMetadataRecord[]> {
+    const entries = this.kv.store.list<UserVerifiedMetadataRecord>({
+      prefix: VERIFIED_METADATA_PREFIX,
+    });
+    const records: UserVerifiedMetadataRecord[] = [];
+    for await (const entry of entries) {
+      records.push(entry.value);
+    }
+    return records;
   }
 }
