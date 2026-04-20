@@ -58,6 +58,12 @@ export class AccountManager {
     });
   }
 
+  async getUserVerifiedMetadata(
+    oid: string,
+  ): Promise<UserVerifiedMetadataRecord | undefined> {
+    return await this.accounts.getVerifiedMetadata(oid);
+  }
+
   async listVerifiableUsers(): Promise<VerifiableUser[]> {
     const records = await this.accounts.listVerifiedMetadata();
     return records

@@ -10,3 +10,21 @@ export function toolResult<T extends object>(
     structuredContent: serializableContent,
   };
 }
+
+export function toolError(
+  code: string,
+  message: string,
+): CallToolResult {
+  const serializableContent = toSerializable({
+    ok: false,
+    error: {
+      code,
+      message,
+    },
+  });
+  return {
+    isError: true,
+    content: [{ type: "text", text: JSON.stringify(serializableContent) }],
+    structuredContent: serializableContent,
+  };
+}

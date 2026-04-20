@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
 import type { DomainIdentityManager } from "../../managers/mod.ts";
-import { toolResult } from "../tool-result.ts";
+import { toolError, toolResult } from "../tool-result.ts";
 
 const DomainIdentityOutputSchema = {
   domain: z.string().describe("The domain name"),
@@ -68,6 +68,20 @@ const VerifiableUsersOutputSchema = {
   })).describe("Users with verifiable metadata"),
 };
 
+const GetUserVerifiedMetadataInputSchema = {
+  oid: z.string().describe("Target user object identifier"),
+};
+
+const UserVerifiedMetadataOutputSchema = {
+  oid: z.string().describe("User object identifier"),
+  verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields keyed by field name",
+  ),
+  updated_at: z.iso.datetime().describe(
+    "ISO 8601 timestamp of the latest verification update",
+  ),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -95,6 +109,10 @@ type UpdateDomainIdentityArgs = z.infer<
 
 type DeleteHistoricalKeyArgs = z.infer<
   z.ZodObject<typeof DeleteHistoricalKeyInputSchema>
+>;
+
+type GetUserVerifiedMetadataArgs = z.infer<
+  z.ZodObject<typeof GetUserVerifiedMetadataInputSchema>
 >;
 
 export class DomainAdminTool {
@@ -201,6 +219,28 @@ export class DomainAdminTool {
       async () => {
         const users = await this.accountManager.listVerifiableUsers();
         return toolResult({ users });
+      },
+    );
+
+    server.registerTool(
+      "get_user_verified_metadata",
+      {
+        description:
+          "Retrieve verified metadata for a specific user by oid.",
+        inputSchema: GetUserVerifiedMetadataInputSchema,
+        outputSchema: UserVerifiedMetadataOutputSchema,
+      },
+      async (params: GetUserVerifiedMetadataArgs) => {
+        const metadata = await this.accountManager.getUserVerifiedMetadata(
+          params.oid,
+        );
+        if (!metadata) {
+          return toolError(
+            "USER_VERIFIED_METADATA_NOT_FOUND",
+            `No verified metadata found for oid ${params.oid}`,
+          );
+        }
+        return toolResult(metadata);
       },
     );
   }
