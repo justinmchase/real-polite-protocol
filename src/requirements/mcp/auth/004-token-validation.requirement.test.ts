@@ -113,17 +113,11 @@ function tamperPayloadWithoutResigning(token: string): string {
 }
 
 function decodeBase64Url(value: string): string {
-  const padded = value.padEnd(value.length + (4 - (value.length % 4)) % 4, "=")
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
   return new TextDecoder().decode(
-    Uint8Array.from(atob(padded), (character) => character.charCodeAt(0)),
+    Uint8Array.fromBase64(value, { alphabet: "base64url" }),
   );
 }
 
 function encodeBase64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  return bytes.toBase64({ alphabet: "base64url", omitPadding: true });
 }

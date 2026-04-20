@@ -431,27 +431,17 @@ export class AuthService {
   }
 
   private decodeBase64Url(str: string): string {
-    const padded = str.padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
-    const bytes = Uint8Array.from(
-      atob(padded.replace(/-/g, "+").replace(/_/g, "/")),
-      (c) => c.charCodeAt(0),
+    return new TextDecoder().decode(
+      Uint8Array.fromBase64(str, { alphabet: "base64url" }),
     );
-    return new TextDecoder().decode(bytes);
   }
 
   private decodeBase64UrlToBytes(str: string): Uint8Array {
-    const padded = str.padEnd(str.length + (4 - (str.length % 4)) % 4, "=");
-    return Uint8Array.from(
-      atob(padded.replace(/-/g, "+").replace(/_/g, "/")),
-      (c) => c.charCodeAt(0),
-    );
+    return Uint8Array.fromBase64(str, { alphabet: "base64url" });
   }
 
   private bytesToBase64Url(bytes: Uint8Array): string {
-    return btoa(String.fromCharCode(...bytes))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
+    return bytes.toBase64({ alphabet: "base64url", omitPadding: true });
   }
 }
 

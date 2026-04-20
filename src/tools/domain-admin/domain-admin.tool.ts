@@ -21,6 +21,16 @@ const DomainIdentityOutputSchema = {
   ),
 };
 
+const VerificationKeyOutputSchema = {
+  key_id: z.string().describe("Identifier for the active verification key"),
+  public_key: z.object({
+    algorithm: z.literal("Ed25519").describe("Public key algorithm"),
+    key: z.string().describe(
+      "Base64-encoded public key in SPKI format",
+    ),
+  }).describe("Current public verification key metadata"),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -82,6 +92,19 @@ export class DomainAdminTool {
           params,
         );
         return toolResult(identity);
+      },
+    );
+
+    server.registerTool(
+      "get_verification_key",
+      {
+        description:
+          "Retrieve the active public verification key and key identifier.",
+        outputSchema: VerificationKeyOutputSchema,
+      },
+      async () => {
+        const key = await this.domainIdentityManager.getVerificationKey();
+        return toolResult(key);
       },
     );
   }

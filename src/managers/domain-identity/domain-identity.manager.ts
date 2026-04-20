@@ -1,4 +1,8 @@
-import type { DomainIdentity } from "../../models/mod.ts";
+import type {
+  DomainIdentity,
+  DomainVerificationKey,
+  StoredDomainVerificationKey,
+} from "../../models/mod.ts";
 import type { DomainIdentityRepository } from "../../repositories/mod.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
 
@@ -32,5 +36,55 @@ export class DomainIdentityManager {
     };
     await this.domainIdentity.set(updated);
     return updated;
+  }
+
+  async getVerificationKey(): Promise<DomainVerificationKey> {
+    const existing = await this.domainIdentity.getActiveVerificationKey();
+    if (existing) {
+      return {
+        key_id: existing.key_id,
+        public_key: existing.public_key,
+      };
+    }
+
+    const generated = await this.generateVerificationKey();
+    await this.domainIdentity.setActiveVerificationKey(generated);
+    return {
+      key_id: generated.key_id,
+      public_key: generated.public_key,
+    };
+  }
+
+  private async generateVerificationKey(): Promise<
+    StoredDomainVerificationKey
+  > {
+    const generated = await crypto.subtle.generateKey(
+      {
+        name: "Ed25519",
+      },
+      true,
+      ["sign", "verify"],
+    );
+
+    if (!("publicKey" in generated) || !("privateKey" in generated)) {
+      throw new TypeError("Expected Ed25519 key pair generation result");
+    }
+
+    const publicKeySpki = new Uint8Array(
+      await crypto.subtle.exportKey("spki", generated.publicKey),
+    );
+    const privateKeyPkcs8 = new Uint8Array(
+      await crypto.subtle.exportKey("pkcs8", generated.privateKey),
+    );
+
+    return {
+      key_id: `key_${crypto.randomUUID()}`,
+      public_key: {
+        algorithm: "Ed25519",
+        key: publicKeySpki.toBase64(),
+      },
+      private_key: privateKeyPkcs8.toBase64(),
+      created_at: new Date().toISOString(),
+    };
   }
 }
