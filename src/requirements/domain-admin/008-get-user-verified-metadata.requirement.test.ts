@@ -100,7 +100,7 @@ Deno.test({
             assertEquals(payload.ok, false);
             assertEquals(
               payload.error?.code,
-              "USER_VERIFIED_METADATA_NOT_FOUND",
+              "E_USER_VERIFIED_METADATA_NOT_FOUND",
             );
             assertEquals(
               payload.error?.message,

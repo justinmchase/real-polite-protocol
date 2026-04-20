@@ -3,7 +3,11 @@ import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
 import type { DomainIdentityManager } from "../../managers/mod.ts";
-import { toolError, toolResult } from "../tool-result.ts";
+import {
+  AccountNotFoundError,
+  UserVerifiedMetadataNotFoundError,
+} from "./domain-admin.error.ts";
+import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 
 const DomainIdentityOutputSchema = {
   domain: z.string().describe("The domain name"),
@@ -82,6 +86,13 @@ const UserVerifiedMetadataOutputSchema = {
   ),
 };
 
+const SetUserVerifiedMetadataInputSchema = {
+  oid: z.string().describe("Target user object identifier"),
+  verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields keyed by field name",
+  ),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -115,6 +126,10 @@ type GetUserVerifiedMetadataArgs = z.infer<
   z.ZodObject<typeof GetUserVerifiedMetadataInputSchema>
 >;
 
+type SetUserVerifiedMetadataArgs = z.infer<
+  z.ZodObject<typeof SetUserVerifiedMetadataInputSchema>
+>;
+
 export class DomainAdminTool {
   constructor(
     private readonly accountManager: AccountManager,
@@ -133,10 +148,10 @@ export class DomainAdminTool {
           "Retrieve the current domain identity as published by the server.",
         outputSchema: DomainIdentityOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const identity = await this.domainIdentityManager.getDomainIdentity();
         return toolResult(identity);
-      },
+      }),
     );
 
     server.registerTool(
@@ -146,12 +161,12 @@ export class DomainAdminTool {
         inputSchema: UpdateDomainIdentityInputSchema,
         outputSchema: DomainIdentityOutputSchema,
       },
-      async (params: UpdateDomainIdentityArgs) => {
+      withToolErrorHandling(async (params: UpdateDomainIdentityArgs) => {
         const identity = await this.domainIdentityManager.updateDomainIdentity(
           params,
         );
         return toolResult(identity);
-      },
+      }),
     );
 
     server.registerTool(
@@ -161,10 +176,10 @@ export class DomainAdminTool {
           "Retrieve the active public verification key and key identifier.",
         outputSchema: VerificationKeyOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const key = await this.domainIdentityManager.getVerificationKey();
         return toolResult(key);
-      },
+      }),
     );
 
     server.registerTool(
@@ -174,10 +189,10 @@ export class DomainAdminTool {
           "Generate a new Ed25519 keypair for domain-verified invitations. Archives the previous active key.",
         outputSchema: VerificationKeyOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const key = await this.domainIdentityManager.rotateVerificationKey();
         return toolResult(key);
-      },
+      }),
     );
 
     server.registerTool(
@@ -187,11 +202,11 @@ export class DomainAdminTool {
           "List archived verification keys with key_id and archived_at metadata.",
         outputSchema: HistoricalKeysOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const keys = await this.domainIdentityManager
           .listHistoricalVerificationKeys();
         return toolResult({ keys });
-      },
+      }),
     );
 
     server.registerTool(
@@ -202,11 +217,11 @@ export class DomainAdminTool {
         inputSchema: DeleteHistoricalKeyInputSchema,
         outputSchema: DeleteHistoricalKeyOutputSchema,
       },
-      async (params: DeleteHistoricalKeyArgs) => {
+      withToolErrorHandling(async (params: DeleteHistoricalKeyArgs) => {
         const result = await this.domainIdentityManager
           .deleteHistoricalVerificationKey(params.key_id);
         return toolResult(result);
-      },
+      }),
     );
 
     server.registerTool(
@@ -216,10 +231,10 @@ export class DomainAdminTool {
           "List users whose metadata the server can verify, along with their verifiable fields.",
         outputSchema: VerifiableUsersOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const users = await this.accountManager.listVerifiableUsers();
         return toolResult({ users });
-      },
+      }),
     );
 
     server.registerTool(
@@ -230,18 +245,33 @@ export class DomainAdminTool {
         inputSchema: GetUserVerifiedMetadataInputSchema,
         outputSchema: UserVerifiedMetadataOutputSchema,
       },
-      async (params: GetUserVerifiedMetadataArgs) => {
+      withToolErrorHandling(async (params: GetUserVerifiedMetadataArgs) => {
         const metadata = await this.accountManager.getUserVerifiedMetadata(
           params.oid,
         );
         if (!metadata) {
-          return toolError(
-            "USER_VERIFIED_METADATA_NOT_FOUND",
-            `No verified metadata found for oid ${params.oid}`,
-          );
+          throw new UserVerifiedMetadataNotFoundError(params.oid);
         }
         return toolResult(metadata);
+      }),
+    );
+
+    server.registerTool(
+      "set_user_verified_metadata",
+      {
+        description:
+          "Create or update verified metadata fields for a specific registered user.",
+        inputSchema: SetUserVerifiedMetadataInputSchema,
+        outputSchema: UserVerifiedMetadataOutputSchema,
       },
+      withToolErrorHandling(async (params: SetUserVerifiedMetadataArgs) => {
+        const metadata = await this.accountManager
+          .setUserVerifiedMetadataByAdmin(params.oid, params.verified_fields);
+        if (!metadata) {
+          throw new AccountNotFoundError(params.oid);
+        }
+        return toolResult(metadata);
+      }),
     );
   }
 }

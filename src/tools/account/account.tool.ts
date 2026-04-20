@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
-import { toolResult } from "../tool-result.ts";
+import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 
 const PermissionsOutputSchema = {
   account_id: z.string().describe("The account identifier"),
@@ -34,10 +34,10 @@ export class AccountTool {
         description: "Return current account permission levels.",
         outputSchema: PermissionsOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const permissions = await this.accountManager.getPermissions(auth);
         return toolResult(permissions);
-      },
+      }),
     );
 
     server.registerTool(
@@ -48,12 +48,12 @@ export class AccountTool {
         inputSchema: {},
         outputSchema: VerifiedMetadataOutputSchema,
       },
-      async () => {
+      withToolErrorHandling(async () => {
         const record = await this.accountManager.setVerifiedMetadataFromToken(
           auth,
         );
         return toolResult(record);
-      },
+      }),
     );
   }
 }

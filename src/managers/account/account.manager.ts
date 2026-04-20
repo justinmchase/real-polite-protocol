@@ -64,6 +64,17 @@ export class AccountManager {
     return await this.accounts.getVerifiedMetadata(oid);
   }
 
+  async setUserVerifiedMetadataByAdmin(
+    oid: string,
+    verifiedFields: Record<string, string>,
+  ): Promise<UserVerifiedMetadataRecord | undefined> {
+    const account = await this.accounts.findByOid(oid);
+    if (!account) {
+      return undefined;
+    }
+    return await this.accounts.setVerifiedMetadata(oid, verifiedFields);
+  }
+
   async listVerifiableUsers(): Promise<VerifiableUser[]> {
     const records = await this.accounts.listVerifiedMetadata();
     return records
