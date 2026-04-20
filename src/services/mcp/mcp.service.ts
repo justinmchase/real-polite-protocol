@@ -1,11 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AuthInfo } from "../../context.ts";
-import type {
-  AccountManager,
-  DomainIdentityManager,
-} from "../../managers/mod.ts";
-import { AccountTool, DomainAdminTool } from "../../tools/mod.ts";
+import type { Tool } from "../../tools/mod.ts";
 
 export class McpService {
   private constructor() {}
@@ -16,9 +12,8 @@ export class McpService {
 
   async handleRequest(
     request: Request,
+    tools: Tool[],
     auth: AuthInfo,
-    accountManager: AccountManager,
-    domainIdentityManager: DomainIdentityManager,
   ): Promise<Response> {
     const server = new McpServer({
       name: "rpp-api",
@@ -33,10 +28,9 @@ export class McpService {
       }),
     );
 
-    new AccountTool(accountManager, auth).register(server);
-    new DomainAdminTool(accountManager, domainIdentityManager, auth).register(
-      server,
-    );
+    for (const tool of tools) {
+      tool.register(server, auth);
+    }
 
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

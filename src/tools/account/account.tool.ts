@@ -17,12 +17,9 @@ const PermissionsOutputSchema = {
 };
 
 export class AccountTool {
-  constructor(
-    private readonly accountManager: AccountManager,
-    private readonly auth: AuthInfo,
-  ) {}
+  constructor(private readonly accountManager: AccountManager) {}
 
-  register(server: McpServer): void {
+  register(server: McpServer, auth: AuthInfo): void {
     server.registerTool(
       "get_permissions",
       {
@@ -30,7 +27,7 @@ export class AccountTool {
         outputSchema: PermissionsOutputSchema,
       },
       async () => {
-        const permissions = await this.accountManager.getPermissions(this.auth);
+        const permissions = await this.accountManager.getPermissions(auth);
         return toolResult(permissions);
       },
     );

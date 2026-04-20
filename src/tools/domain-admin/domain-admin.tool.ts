@@ -13,10 +13,10 @@ const DomainIdentityOutputSchema = {
   categories_offered: z.array(z.string()).optional().describe(
     "Content categories offered",
   ),
-  rpp_since: z.string().optional().describe(
+  rpp_since: z.string().datetime().optional().describe(
     "ISO 8601 date when RPP support began",
   ),
-  contact_policy_url: z.string().optional().describe(
+  contact_policy_url: z.string().url().optional().describe(
     "URL to the domain's contact policy",
   ),
 };
@@ -50,11 +50,10 @@ export class DomainAdminTool {
   constructor(
     private readonly accountManager: AccountManager,
     private readonly domainIdentityManager: DomainIdentityManager,
-    private readonly auth: AuthInfo,
   ) {}
 
-  register(server: McpServer): void {
-    if (!this.accountManager.isDomainAdmin(this.auth.roles)) {
+  register(server: McpServer, auth: AuthInfo): void {
+    if (!this.accountManager.isDomainAdmin(auth.roles)) {
       return;
     }
 

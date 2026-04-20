@@ -5,6 +5,7 @@ import { initManagers } from "./managers/mod.ts";
 import { initRepositories } from "./repositories/mod.ts";
 import { initServices } from "./services/mod.ts";
 import type { Services } from "./services/mod.ts";
+import { initTools } from "./tools/mod.ts";
 
 export interface StartOptions {
   signal?: AbortSignal;
@@ -18,7 +19,8 @@ export async function start(options?: StartOptions): Promise<void> {
     services = await initServices(logger);
     const repositories = await initRepositories(services);
     const managers = await initManagers(repositories, services);
-    return { logger, services, repositories, managers };
+    const tools = initTools(managers);
+    return { logger, services, repositories, managers, tools };
   }
 
   const grove = new Grove({

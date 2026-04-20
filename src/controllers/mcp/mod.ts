@@ -5,17 +5,13 @@ import {
   type IState,
 } from "@justinmchase/grove";
 import type { AuthInfo } from "../../context.ts";
-import type {
-  AccountManager,
-  DomainIdentityManager,
-} from "../../managers/mod.ts";
+import type { Tool } from "../../tools/mod.ts";
 import type { McpService } from "../../services/mcp/mcp.service.ts";
 
 export class McpController extends Controller {
   constructor(
     private readonly mcp: McpService,
-    private readonly accounts: AccountManager,
-    private readonly domainIdentity: DomainIdentityManager,
+    private readonly tools: Tool[],
   ) {
     super();
   }
@@ -35,13 +31,7 @@ export class McpController extends Controller {
         }, 401);
       }
 
-      await this.accounts.ensureAccount(auth);
-      return await this.mcp.handleRequest(
-        ctx.req.raw,
-        auth,
-        this.accounts,
-        this.domainIdentity,
-      );
+      return await this.mcp.handleRequest(ctx.req.raw, this.tools, auth);
     });
   }
 }
