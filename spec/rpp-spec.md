@@ -1598,7 +1598,44 @@ domain types, but that is outside the scope of this protocol.
   maintain reasonably synchronized clocks. Servers SHOULD use NTP or a similar
   time synchronization protocol.
 
-## 15. Open Questions
+## 15. Deployment Architecture
+
+RPP server implementations SHOULD deploy one server instance per domain to
+ensure data isolation by design. This single-tenant-per-instance model is
+recommended for the following reasons:
+
+- **Data Isolation by Design**: Each domain's KV store, user metadata, receipts,
+  and domain verification keys are isolated at the infrastructure level,
+  reducing the risk of cross-domain data leakage.
+- **Simplified Access Control**: No need to manually namespace persistent
+  storage by domain ID; the isolation is enforced by the deployment boundary.
+- **Independent Scaling and Versioning**: Each domain can scale independently
+  and be updated or rolled back without affecting other domains.
+- **Compliance and Auditability**: Easier to satisfy data residency
+  requirements, audit trails, and regulatory compliance (e.g., GDPR, HIPAA) when
+  domains are segregated.
+- **Reduced Blast Radius**: A bug, security incident, or resource exhaustion in
+  one instance affects only that domain.
+
+Implementations MAY use a multi-tenant-shared deployment (one server instance
+for multiple domains) if isolation is enforced through strong namespace
+discipline (prefixing all persistent storage records with a domain identifier)
+and strict access controls. Multi-tenant deployments MUST implement the
+following safeguards:
+
+- Domain ID MUST be included as a prefix in all primary keys or identifiers:
+  `domain_id:entity_type:...` (or equivalent namespace pattern for SQL,
+  document-based, or other database systems).
+- Authentication and authorization code MUST verify domain membership before
+  granting access to domain-specific resources.
+- Quota and rate limiting MUST be enforced per domain, not globally.
+- Testing MUST include multi-domain scenarios to prevent accidental cross-domain
+  data access.
+
+Single-tenant-per-instance deployments are strongly preferred due to their
+inherent security properties and operational simplicity.
+
+## 16. Open Questions
 
 The following items are intentionally left for upcoming drafts:
 
