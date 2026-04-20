@@ -1,4 +1,9 @@
-import { Controller, type GroveApp, type IContext, type IState } from "@justinmchase/grove";
+import {
+  Controller,
+  type GroveApp,
+  type IContext,
+  type IState,
+} from "@justinmchase/grove";
 import type { KvService } from "../../services/kv/mod.ts";
 
 export class SubmitController extends Controller {
@@ -7,7 +12,9 @@ export class SubmitController extends Controller {
   }
 
   // deno-lint-ignore require-await
-  async use<TContext extends IContext, TState extends IState<TContext>>(app: GroveApp<TContext, TState>): Promise<void> {
+  async use<TContext extends IContext, TState extends IState<TContext>>(
+    app: GroveApp<TContext, TState>,
+  ): Promise<void> {
     const kv = this.kv;
 
     app.post("/rpp/v1/messages", async (ctx) => {

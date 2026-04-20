@@ -20,7 +20,7 @@ Deno.test({
 
 async function checkHealth(controller: AbortController): Promise<boolean> {
   let healthy = false;
-  try{
+  try {
     for (let i = 0; i < 30; i++) {
       try {
         const res = await fetch("http://localhost:8000/health");

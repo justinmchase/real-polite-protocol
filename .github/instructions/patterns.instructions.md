@@ -6,8 +6,8 @@ applyTo: "src/**"
 # Grove API Patterns
 
 This project is a Grove-based API built on `@justinmchase/grove` (which uses
-`@hono/hono` internally). Follow these patterns for consistency with the framework
-and with established Grove applications.
+`@hono/hono` internally). Follow these patterns for consistency with the
+framework and with established Grove applications.
 
 ## Entry Point
 
