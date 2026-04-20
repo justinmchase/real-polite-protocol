@@ -31,6 +31,25 @@ const VerificationKeyOutputSchema = {
   }).describe("Current public verification key metadata"),
 };
 
+const HistoricalVerificationKeySchema = {
+  key_id: z.string().describe("Identifier for an archived verification key"),
+  public_key: z.object({
+    algorithm: z.literal("Ed25519").describe("Public key algorithm"),
+    key: z.string().describe(
+      "Base64-encoded public key in SPKI format",
+    ),
+  }).describe("Archived public verification key metadata"),
+  archived_at: z.string().datetime().describe(
+    "ISO 8601 timestamp when the key was archived",
+  ),
+};
+
+const HistoricalKeysOutputSchema = {
+  keys: z.array(z.object(HistoricalVerificationKeySchema)).describe(
+    "Archived verification keys",
+  ),
+};
+
 const UpdateDomainIdentityInputSchema = {
   display_name: z.string().optional().describe(
     "Human-readable display name for the domain",
@@ -118,6 +137,20 @@ export class DomainAdminTool {
       async () => {
         const key = await this.domainIdentityManager.rotateVerificationKey();
         return toolResult(key);
+      },
+    );
+
+    server.registerTool(
+      "list_historical_keys",
+      {
+        description:
+          "List archived verification keys with key_id and archived_at metadata.",
+        outputSchema: HistoricalKeysOutputSchema,
+      },
+      async () => {
+        const keys = await this.domainIdentityManager
+          .listHistoricalVerificationKeys();
+        return toolResult({ keys });
       },
     );
   }

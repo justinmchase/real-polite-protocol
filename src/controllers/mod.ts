@@ -8,7 +8,7 @@ import {
 } from "@justinmchase/grove";
 import type { Context, State } from "../context.ts";
 import { AuthDiscoveryController } from "./auth-discovery/mod.ts";
-import { AuthMiddleware } from "./auth/auth.middleware.ts";
+import { AuthMiddleware } from "./middleware/auth.middleware.ts";
 import { McpController } from "./mcp/mod.ts";
 import { SubmitController } from "./submit/mod.ts";
 

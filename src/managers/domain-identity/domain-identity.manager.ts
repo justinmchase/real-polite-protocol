@@ -75,6 +75,11 @@ export class DomainIdentityManager {
     };
   }
 
+  async listHistoricalVerificationKeys(): Promise<HistoricalVerificationKey[]> {
+    const keys = await this.domainIdentity.listHistoricalVerificationKeys();
+    return keys.sort((a, b) => b.archived_at.localeCompare(a.archived_at));
+  }
+
   private async generateVerificationKey(): Promise<
     StoredDomainVerificationKey
   > {
