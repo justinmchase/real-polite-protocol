@@ -1,12 +1,18 @@
 export * from "./account/mod.ts";
 export * from "./domain-admin/mod.ts";
+export * from "./receptive-policy/mod.ts";
 export * from "./tool-result.ts";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AuthInfo } from "../context.ts";
-import type { AccountManager, DomainIdentityManager } from "../managers/mod.ts";
+import type {
+  AccountManager,
+  DomainIdentityManager,
+  ReceptivePolicyManager,
+} from "../managers/mod.ts";
 import { AccountTool } from "./account/account.tool.ts";
 import { DomainAdminTool } from "./domain-admin/domain-admin.tool.ts";
+import { ReceptivePolicyTool } from "./receptive-policy/receptive-policy.tool.ts";
 
 export interface Tool {
   register(server: McpServer, auth: AuthInfo): void;
@@ -15,9 +21,11 @@ export interface Tool {
 export function initTools(managers: {
   accounts: AccountManager;
   domainIdentity: DomainIdentityManager;
+  receptivePolicy: ReceptivePolicyManager;
 }): Tool[] {
   return [
     new AccountTool(managers.accounts),
     new DomainAdminTool(managers.accounts, managers.domainIdentity),
+    new ReceptivePolicyTool(managers.receptivePolicy),
   ];
 }
