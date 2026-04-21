@@ -22,10 +22,15 @@ Deno.test({
                 "oid-verifiable-1",
               ], {
                 oid: "oid-verifiable-1",
-                verified_fields: {
-                  display_name: "Dr. Alice Smith",
+                user_verified_fields: {
+                  display_name: "Alice Token",
                   description: "Computer Science Department",
                 },
+                admin_verified_fields: {
+                  display_name: "Dr. Alice Smith",
+                },
+                user_updated_at: "2026-04-20T00:00:00.000Z",
+                admin_updated_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
               await kv.set([
@@ -34,9 +39,11 @@ Deno.test({
                 "oid-verifiable-2",
               ], {
                 oid: "oid-verifiable-2",
-                verified_fields: {
+                user_verified_fields: {
                   display_name: "Bob Jones",
                 },
+                admin_verified_fields: {},
+                user_updated_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
             } finally {
@@ -97,9 +104,11 @@ Deno.test({
                 "oid-verifiable-3",
               ], {
                 oid: "oid-verifiable-3",
-                verified_fields: {
+                user_verified_fields: {
                   display_name: "Carol White",
                 },
+                admin_verified_fields: {},
+                user_updated_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
             } finally {

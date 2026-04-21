@@ -18,8 +18,20 @@ const PermissionsOutputSchema = {
 
 const VerifiedMetadataOutputSchema = {
   oid: z.string().describe("User object identifier"),
+  user_verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields derived from the user's token",
+  ),
+  admin_verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields supplied by domain administrators",
+  ),
   verified_fields: z.record(z.string(), z.string()).describe(
-    "Verified metadata fields from the token",
+    "Effective verified metadata fields after applying admin precedence",
+  ),
+  user_updated_at: z.string().optional().describe(
+    "ISO 8601 timestamp of the last user metadata refresh",
+  ),
+  admin_updated_at: z.string().optional().describe(
+    "ISO 8601 timestamp of the last admin metadata update",
   ),
   updated_at: z.string().describe("ISO 8601 timestamp of last update"),
 };
@@ -40,20 +52,33 @@ export class AccountTool {
       }),
     );
 
+    const setUserVerifiedMetadata = withToolErrorHandling(async () => {
+      const record = await this.accountManager.setVerifiedMetadataFromToken(
+        auth,
+      );
+      return toolResult(record);
+    });
+
+    server.registerTool(
+      "set_user_verified_metadata",
+      {
+        description:
+          "Refresh your user-sourced verified metadata record from your current token claims (name, email, preferred_username, ctry). No arguments required — the token is the source of truth.",
+        inputSchema: {},
+        outputSchema: VerifiedMetadataOutputSchema,
+      },
+      setUserVerifiedMetadata,
+    );
+
     server.registerTool(
       "set_verified_metadata",
       {
         description:
-          "Refresh your verified metadata record from your current token claims (name, email, preferred_username). No arguments required — the token is the source of truth.",
+          "Deprecated compatibility alias for set_user_verified_metadata.",
         inputSchema: {},
         outputSchema: VerifiedMetadataOutputSchema,
       },
-      withToolErrorHandling(async () => {
-        const record = await this.accountManager.setVerifiedMetadataFromToken(
-          auth,
-        );
-        return toolResult(record);
-      }),
+      setUserVerifiedMetadata,
     );
   }
 }

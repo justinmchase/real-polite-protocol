@@ -45,6 +45,24 @@ export class DomainIdentityManager {
     return updated;
   }
 
+  async getContactPolicyUrl(): Promise<{ contact_policy_url?: string }> {
+    const identity = await this.getDomainIdentity();
+    return {
+      contact_policy_url: identity.contact_policy_url,
+    };
+  }
+
+  async setContactPolicyUrl(
+    contactPolicyUrl: string,
+  ): Promise<{ contact_policy_url?: string }> {
+    const identity = await this.updateDomainIdentity({
+      contact_policy_url: contactPolicyUrl,
+    });
+    return {
+      contact_policy_url: identity.contact_policy_url,
+    };
+  }
+
   async getVerificationKey(): Promise<DomainVerificationKey> {
     const existing = await this.domainIdentity.getActiveVerificationKey();
     if (existing) {

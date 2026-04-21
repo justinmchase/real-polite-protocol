@@ -1,7 +1,12 @@
 import type { AuthInfo } from "../../context.ts";
-import type { Account, UserVerifiedMetadataRecord, VerifiableUser } from "../../models/mod.ts";
+import type {
+  Account,
+  UserVerifiedMetadataRecord,
+  VerifiableUser,
+} from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
 import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
+import { VerifiedMetadataValueTooLongError } from "../../tools/domain-admin/domain-admin.error.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
 
@@ -16,8 +21,47 @@ export interface PermissionLevels {
 export class AccountManager {
   constructor(private readonly accounts: AccountRepository) {}
 
-  async ensureAccount(auth: Pick<AuthInfo, "oid">): Promise<Account> {
-    return await this.accounts.ensureByOid(auth.oid);
+  private extractUserVerifiedFields(
+    auth: Pick<
+      AuthInfo,
+      "name" | "email" | "preferred_username" | "ctry"
+    >,
+  ): Record<string, string> {
+    const updates: Record<string, string> = {};
+    if (auth.name) updates.name = auth.name;
+    if (auth.email) updates.email = auth.email;
+    if (auth.preferred_username) {
+      updates.preferred_username = auth.preferred_username;
+    }
+    if (auth.ctry) updates.ctry = auth.ctry;
+    return updates;
+  }
+
+  private assertAdminFieldValueLengths(
+    verifiedFields: Record<string, string>,
+  ): void {
+    for (const [field, value] of Object.entries(verifiedFields)) {
+      if (value.length > 512) {
+        throw new VerifiedMetadataValueTooLongError(field, 512);
+      }
+    }
+  }
+
+  async ensureAccount(
+    auth: Pick<
+      AuthInfo,
+      "oid" | "name" | "email" | "preferred_username" | "ctry"
+    >,
+  ): Promise<Account> {
+    const account = await this.accounts.ensureByOid(auth.oid);
+    const existingMetadata = await this.accounts.getVerifiedMetadata(auth.oid);
+    if (!existingMetadata) {
+      await this.accounts.setUserVerifiedMetadata(
+        auth.oid,
+        this.extractUserVerifiedFields(auth),
+      );
+    }
+    return account;
   }
 
   async getPermissions(auth: AuthInfo): Promise<PermissionLevels> {
@@ -44,19 +88,10 @@ export class AccountManager {
       "oid" | "name" | "email" | "preferred_username" | "ctry"
     >,
   ): Promise<UserVerifiedMetadataRecord> {
-    const existing = await this.accounts.getVerifiedMetadata(auth.oid);
-    const currentFields = existing?.verified_fields ?? {};
-    const updates: Record<string, string> = {};
-    if (auth.name) updates.name = auth.name;
-    if (auth.email) updates.email = auth.email;
-    if (auth.preferred_username) {
-      updates.preferred_username = auth.preferred_username;
-    }
-    if (auth.ctry) updates.ctry = auth.ctry;
-    return await this.accounts.setVerifiedMetadata(auth.oid, {
-      ...currentFields,
-      ...updates,
-    });
+    return await this.accounts.setUserVerifiedMetadata(
+      auth.oid,
+      this.extractUserVerifiedFields(auth),
+    );
   }
 
   async getUserVerifiedMetadata(
@@ -73,7 +108,28 @@ export class AccountManager {
     if (!account) {
       return undefined;
     }
-    return await this.accounts.setVerifiedMetadata(oid, verifiedFields);
+    this.assertAdminFieldValueLengths(verifiedFields);
+    const existing = await this.accounts.getVerifiedMetadata(oid);
+    return await this.accounts.setAdminVerifiedMetadata(oid, {
+      ...(existing?.admin_verified_fields ?? {}),
+      ...verifiedFields,
+    });
+  }
+
+  async removeAdminVerifiedMetadata(
+    oid: string,
+    field: string,
+  ): Promise<UserVerifiedMetadataRecord | undefined> {
+    const account = await this.accounts.findByOid(oid);
+    if (!account) {
+      return undefined;
+    }
+
+    const existing = await this.accounts.getVerifiedMetadata(oid);
+    const adminVerifiedFields = { ...(existing?.admin_verified_fields ?? {}) };
+    delete adminVerifiedFields[field];
+
+    return await this.accounts.setAdminVerifiedMetadata(oid, adminVerifiedFields);
   }
 
   async listVerifiableUsers(

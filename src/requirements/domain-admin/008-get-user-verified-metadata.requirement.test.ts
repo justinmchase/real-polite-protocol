@@ -22,10 +22,15 @@ Deno.test({
                 "oid-target-user",
               ], {
                 oid: "oid-target-user",
-                verified_fields: {
+                user_verified_fields: {
                   display_name: "Alice Example",
                   email: "alice@example.test",
                 },
+                admin_verified_fields: {
+                  display_name: "Dr. Alice Example",
+                },
+                user_updated_at: "2026-04-20T00:00:00.000Z",
+                admin_updated_at: "2026-04-20T01:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
             } finally {
@@ -52,16 +57,30 @@ Deno.test({
 
             const payload = JSON.parse(text) as {
               oid?: string;
+              user_verified_fields?: Record<string, string>;
+              admin_verified_fields?: Record<string, string>;
               verified_fields?: Record<string, string>;
+              user_updated_at?: string;
+              admin_updated_at?: string;
               updated_at?: string;
             };
 
             assertEquals(payload.oid, "oid-target-user");
             assertEquals(
-              payload.verified_fields?.display_name,
+              payload.user_verified_fields?.display_name,
               "Alice Example",
             );
+            assertEquals(
+              payload.admin_verified_fields?.display_name,
+              "Dr. Alice Example",
+            );
+            assertEquals(
+              payload.verified_fields?.display_name,
+              "Dr. Alice Example",
+            );
             assertEquals(payload.verified_fields?.email, "alice@example.test");
+            assertEquals(payload.user_updated_at, "2026-04-20T00:00:00.000Z");
+            assertEquals(payload.admin_updated_at, "2026-04-20T01:00:00.000Z");
             assertEquals(payload.updated_at, "2026-04-20T00:00:00.000Z");
           },
         );

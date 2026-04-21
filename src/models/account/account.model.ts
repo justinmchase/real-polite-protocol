@@ -18,7 +18,11 @@ export function newAccount(oid: string, now = new Date()): Account {
 
 export interface UserVerifiedMetadataRecord {
   oid: string;
+  user_verified_fields: Record<string, string>;
+  admin_verified_fields: Record<string, string>;
   verified_fields: Record<string, string>;
+  user_updated_at?: string;
+  admin_updated_at?: string;
   updated_at: string;
 }
 

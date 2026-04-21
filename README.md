@@ -16,3 +16,10 @@ Early design phase. Spec and implementation are both under active development.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Local Data
+
+When you run the server locally with `deno task start`, the default Deno KV
+database is stored at `.data/kv.sqlite3`.
+
+Set `RPP_KV_PATH` to override that path when needed.

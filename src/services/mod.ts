@@ -20,7 +20,7 @@ export async function initServices(
   options: ServiceInitOptions = {},
 ): Promise<Services> {
   const config = await ConfigService.create();
-  const kv = await KvService.create(logger, options.kvPath);
+  const kv = await KvService.create(logger, options.kvPath ?? config.kvPath);
   const mcp = McpService.create();
   const auth = AuthService.create(logger, config);
   return { config, kv, mcp, auth };

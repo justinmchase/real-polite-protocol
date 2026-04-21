@@ -6,13 +6,12 @@ import {
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name:
-    "req:domain-admin-009 - Domain administrators can set user verified metadata",
+  name: "req:domain-admin-010 - Domain administrators can remove admin verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath }) => {
         await t.step(
-          "domain admin can set arbitrary metadata for a registered user",
+          "domain admin can remove one admin verified metadata field",
           async () => {
             const kv = await Deno.openKv(kvPath);
             try {
@@ -21,6 +20,21 @@ Deno.test({
                 oid: "oid-target-user",
                 created_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
+              });
+              await kv.set(["accounts", "verified_metadata", "oid-target-user"], {
+                oid: "oid-target-user",
+                user_verified_fields: {
+                  display_name: "Alice Token",
+                  email: "alice@example.test",
+                },
+                admin_verified_fields: {
+                  display_name: "Dr. Alice Smith",
+                  title: "Professor",
+                  office: "CS-402",
+                },
+                user_updated_at: "2026-04-20T00:00:00.000Z",
+                admin_updated_at: "2026-04-20T01:00:00.000Z",
+                updated_at: "2026-04-20T01:00:00.000Z",
               });
             } finally {
               kv.close();
@@ -34,14 +48,10 @@ Deno.test({
 
             const { status, body } = await callTool(
               token,
-              "set_user_verified_metadata",
+              "remove_admin_verified_metadata",
               {
                 oid: "oid-target-user",
-                verified_fields: {
-                  display_name: "Dr. Alice Smith",
-                  title: "Professor",
-                  office: "CS-402",
-                },
+                field: "display_name",
               },
             );
             assertEquals(status, 200);
@@ -51,19 +61,19 @@ Deno.test({
               .content?.[0]?.text;
             assertExists(text);
             const payload = JSON.parse(text) as {
-              oid?: string;
+              user_verified_fields?: Record<string, string>;
+              admin_verified_fields?: Record<string, string>;
               verified_fields?: Record<string, string>;
-              updated_at?: string;
             };
 
-            assertEquals(payload.oid, "oid-target-user");
             assertEquals(
-              payload.verified_fields?.display_name,
-              "Dr. Alice Smith",
+              payload.user_verified_fields?.display_name,
+              "Alice Token",
             );
+            assertEquals(payload.admin_verified_fields?.display_name, undefined);
+            assertEquals(payload.admin_verified_fields?.title, "Professor");
+            assertEquals(payload.verified_fields?.display_name, "Alice Token");
             assertEquals(payload.verified_fields?.title, "Professor");
-            assertEquals(payload.verified_fields?.office, "CS-402");
-            assertExists(payload.updated_at);
 
             const getResult = await callTool(
               token,
@@ -76,33 +86,16 @@ Deno.test({
             }).content?.[0]?.text;
             assertExists(getText);
             const getPayload = JSON.parse(getText) as {
+              admin_verified_fields?: Record<string, string>;
               verified_fields?: Record<string, string>;
             };
-            assertEquals(
-              getPayload.verified_fields?.display_name,
-              "Dr. Alice Smith",
-            );
-
-            const listResult = await callTool(token, "list_verifiable_users");
-            assertEquals(listResult.status, 200);
-            const listText = (listResult.body.result as {
-              content?: Array<{ text?: string }>;
-            }).content?.[0]?.text;
-            assertExists(listText);
-            const listPayload = JSON.parse(listText) as {
-              users?: Array<{
-                oid?: string;
-                verified_fields?: Record<string, string>;
-              }>;
-            };
-            const user = listPayload.users?.find((u) => u.oid === "oid-target-user");
-            assertExists(user);
-            assertEquals(user.verified_fields?.title, "Professor");
+            assertEquals(getPayload.admin_verified_fields?.display_name, undefined);
+            assertEquals(getPayload.verified_fields?.display_name, "Alice Token");
           },
         );
 
         await t.step(
-          "missing account returns a stable error contract",
+          "missing admin field returns a stable error contract",
           async () => {
             const token = await issueToken({
               oid: "oid-domain-admin",
@@ -112,10 +105,10 @@ Deno.test({
 
             const { status, body } = await callTool(
               token,
-              "set_user_verified_metadata",
+              "remove_admin_verified_metadata",
               {
-                oid: "oid-missing-user",
-                verified_fields: { display_name: "Ghost" },
+                oid: "oid-target-user",
+                field: "unknown_field",
               },
             );
             assertEquals(status, 200);
@@ -135,16 +128,19 @@ Deno.test({
             };
 
             assertEquals(payload.ok, false);
-            assertEquals(payload.error?.code, "E_ACCOUNT_NOT_FOUND");
+            assertEquals(
+              payload.error?.code,
+              "E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND",
+            );
             assertEquals(
               payload.error?.message,
-              "No registered account found for oid oid-missing-user",
+              "No admin verified metadata field unknown_field found for oid oid-target-user",
             );
           },
         );
 
         await t.step(
-          "non-admin user cannot call set_user_verified_metadata",
+          "non-admin user cannot call remove_admin_verified_metadata",
           async () => {
             const token = await issueToken({
               oid: "oid-listener",
@@ -154,10 +150,10 @@ Deno.test({
 
             const { status, body } = await callTool(
               token,
-              "set_user_verified_metadata",
+              "remove_admin_verified_metadata",
               {
                 oid: "oid-target-user",
-                verified_fields: { display_name: "Injected" },
+                field: "display_name",
               },
             );
             assertEquals(status, 200);

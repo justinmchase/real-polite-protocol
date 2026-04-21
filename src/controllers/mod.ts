@@ -25,6 +25,7 @@ export async function initControllers(
   await new AuthMiddleware(context.services.auth).use(app);
   await new McpController(
     context.services.mcp,
+    context.managers.accounts,
     context.tools,
   ).use(app);
   await new NotFoundController().use(app);

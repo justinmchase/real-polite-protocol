@@ -21,8 +21,12 @@ principal MUST resolve to the same existing Account without creating duplicates.
   same whether the account was just created or already existed.
 - Account creation MUST NOT fail a valid authenticated request.
 - When an Account is first created, the server MUST automatically seed the
-  user's verified metadata record from the identity claims present in the
+  user's `user_verified_fields` from the identity claims present in the
   validated bearer token (e.g. `name`, `email`, `preferred_username`). Only
-  non-empty claims are stored; absent claims are omitted.
-- Seeding is a one-time operation at Account creation; subsequent requests do
-  not overwrite the verified metadata record.
+  non-empty claims are stored; absent claims are omitted from the user-sourced
+  map.
+- Provisioning also initializes an empty `admin_verified_fields` map for the
+  account when no verified metadata record exists yet.
+- Provisioning seeds the verified metadata record only when that record does
+  not already exist; subsequent authenticated requests do not overwrite either
+  source automatically.

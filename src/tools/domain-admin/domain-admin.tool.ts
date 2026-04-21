@@ -4,6 +4,7 @@ import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
 import type { DomainIdentityManager } from "../../managers/mod.ts";
 import {
+  AdminVerifiedMetadataFieldNotFoundError,
   AccountNotFoundError,
   UserVerifiedMetadataNotFoundError,
 } from "./domain-admin.error.ts";
@@ -79,7 +80,7 @@ const VerifiableUsersOutputSchema = {
   users: z.array(z.object({
     oid: z.string().describe("User object identifier"),
     verified_fields: z.record(z.string(), z.string()).describe(
-      "Verified metadata fields keyed by field name",
+      "Effective verified metadata fields keyed by field name",
     ),
   })).describe("Users with verifiable metadata"),
   next_resume_token: z.string().optional().describe(
@@ -101,8 +102,20 @@ const GetUserVerifiedMetadataInputSchema = {
 
 const UserVerifiedMetadataOutputSchema = {
   oid: z.string().describe("User object identifier"),
+  user_verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields derived from the user's token",
+  ),
+  admin_verified_fields: z.record(z.string(), z.string()).describe(
+    "Verified metadata fields supplied by domain administrators",
+  ),
   verified_fields: z.record(z.string(), z.string()).describe(
-    "Verified metadata fields keyed by field name",
+    "Effective verified metadata fields keyed by field name",
+  ),
+  user_updated_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp of the last user metadata refresh",
+  ),
+  admin_updated_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp of the last admin metadata update",
   ),
   updated_at: z.iso.datetime().describe(
     "ISO 8601 timestamp of the latest verification update",
@@ -112,7 +125,24 @@ const UserVerifiedMetadataOutputSchema = {
 const SetUserVerifiedMetadataInputSchema = {
   oid: z.string().describe("Target user object identifier"),
   verified_fields: z.record(z.string(), z.string()).describe(
-    "Verified metadata fields keyed by field name",
+    "Admin-supplied verified metadata fields keyed by field name; each value must be 512 characters or fewer",
+  ),
+};
+
+const RemoveAdminVerifiedMetadataInputSchema = {
+  oid: z.string().describe("Target user object identifier"),
+  field: z.string().describe("Admin verified metadata field to remove"),
+};
+
+const ContactPolicyUrlOutputSchema = {
+  contact_policy_url: z.url().optional().describe(
+    "Configured domain contact policy URL",
+  ),
+};
+
+const SetContactPolicyUrlInputSchema = {
+  contact_policy_url: z.url().describe(
+    "Updated domain contact policy URL",
   ),
 };
 
@@ -159,6 +189,14 @@ type GetUserVerifiedMetadataArgs = z.infer<
 
 type SetUserVerifiedMetadataArgs = z.infer<
   z.ZodObject<typeof SetUserVerifiedMetadataInputSchema>
+>;
+
+type RemoveAdminVerifiedMetadataArgs = z.infer<
+  z.ZodObject<typeof RemoveAdminVerifiedMetadataInputSchema>
+>;
+
+type SetContactPolicyUrlArgs = z.infer<
+  z.ZodObject<typeof SetContactPolicyUrlInputSchema>
 >;
 
 export class DomainAdminTool {
@@ -302,10 +340,10 @@ export class DomainAdminTool {
     );
 
     server.registerTool(
-      "set_user_verified_metadata",
+      "set_admin_verified_metadata",
       {
         description:
-          "Create or update verified metadata fields for a specific registered user.",
+          "Create or update admin-supplied verified metadata fields for a specific registered user.",
         inputSchema: SetUserVerifiedMetadataInputSchema,
         outputSchema: UserVerifiedMetadataOutputSchema,
       },
@@ -316,6 +354,68 @@ export class DomainAdminTool {
           throw new AccountNotFoundError(params.oid);
         }
         return toolResult(metadata);
+      }),
+    );
+
+    server.registerTool(
+      "remove_admin_verified_metadata",
+      {
+        description:
+          "Remove one admin-verified metadata field for a specific registered user.",
+        inputSchema: RemoveAdminVerifiedMetadataInputSchema,
+        outputSchema: UserVerifiedMetadataOutputSchema,
+      },
+      withToolErrorHandling(async (params: RemoveAdminVerifiedMetadataArgs) => {
+        const existing = await this.accountManager.getUserVerifiedMetadata(
+          params.oid,
+        );
+        if (!existing) {
+          throw new UserVerifiedMetadataNotFoundError(params.oid);
+        }
+        if (!(params.field in existing.admin_verified_fields)) {
+          throw new AdminVerifiedMetadataFieldNotFoundError(
+            params.oid,
+            params.field,
+          );
+        }
+
+        const metadata = await this.accountManager.removeAdminVerifiedMetadata(
+          params.oid,
+          params.field,
+        );
+        if (!metadata) {
+          throw new AccountNotFoundError(params.oid);
+        }
+        return toolResult(metadata);
+      }),
+    );
+
+    server.registerTool(
+      "get_contact_policy_url",
+      {
+        description:
+          "Retrieve the current contact_policy_url from domain identity.",
+        outputSchema: ContactPolicyUrlOutputSchema,
+      },
+      withToolErrorHandling(async () => {
+        const result = await this.domainIdentityManager.getContactPolicyUrl();
+        return toolResult(result);
+      }),
+    );
+
+    server.registerTool(
+      "set_contact_policy_url",
+      {
+        description:
+          "Set or update the contact_policy_url.",
+        inputSchema: SetContactPolicyUrlInputSchema,
+        outputSchema: ContactPolicyUrlOutputSchema,
+      },
+      withToolErrorHandling(async (params: SetContactPolicyUrlArgs) => {
+        const result = await this.domainIdentityManager.setContactPolicyUrl(
+          params.contact_policy_url,
+        );
+        return toolResult(result);
       }),
     );
   }

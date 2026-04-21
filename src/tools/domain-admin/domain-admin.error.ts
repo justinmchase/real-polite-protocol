@@ -19,3 +19,23 @@ export class AccountNotFoundError extends ApplicationError {
     );
   }
 }
+
+export class VerifiedMetadataValueTooLongError extends ApplicationError {
+  constructor(field: string, maxLength: number) {
+    super(
+      400,
+      "E_VERIFIED_METADATA_VALUE_TOO_LONG",
+      `Verified metadata value for field ${field} exceeds maximum length ${maxLength}`,
+    );
+  }
+}
+
+export class AdminVerifiedMetadataFieldNotFoundError extends ApplicationError {
+  constructor(oid: string, field: string) {
+    super(
+      404,
+      "E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND",
+      `No admin verified metadata field ${field} found for oid ${oid}`,
+    );
+  }
+}

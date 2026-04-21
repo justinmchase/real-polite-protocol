@@ -1366,10 +1366,15 @@ These tools manage the listener's receptive policy for incoming invitations
 
 These tools manage the listener's display name and identity presentation.
 
-| Tool               | Description                                                      |
-| ------------------ | ---------------------------------------------------------------- |
-| `get_display_name` | Retrieve the listener's current default display name.            |
-| `set_display_name` | Set or clear the listener's default display name (Section 3A.2). |
+| Tool                         | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `get_display_name`           | Retrieve the listener's current default display name.      |
+| `set_display_name`           | Set or clear the listener's default display name (Section  |
+|                              | 3A.2).                                                     |
+| `set_user_verified_metadata` | Refresh the caller's `user_verified_fields` from the       |
+|                              | authenticated token claims. The tool MUST replace the      |
+|                              | prior user-sourced map with the current token-derived      |
+|                              | values and MUST NOT modify `admin_verified_fields`.        |
 
 ### 10B.7 Domain Management — Identity and Configuration
 
@@ -1402,20 +1407,32 @@ compares the invitation's metadata against these records and automatically
 produces (or strips) the `verification` object — no manual attestation step is
 required.
 
+Verified metadata has two distinct sources:
+
+- `user_verified_fields`: values derived from the user's authenticated identity
+  token.
+- `admin_verified_fields`: values supplied by a domain administrator.
+
+When the same field exists in both sources, the admin value is authoritative in
+the merged `verified_fields` view used by the server for verification and MCP
+tool responses that expose the effective record.
+
 | Tool                         | Description                                                        |
 | ---------------------------- | ------------------------------------------------------------------ |
 | `list_verifiable_users`      | List users whose metadata the server can verify, along with the    |
 |                              | verifiable fields (e.g., display_name) and their current values.   |
 |                              | This tool MUST support resume-token pagination (Section 10B.10).   |
-| `get_user_verified_metadata` | Retrieve the verified metadata record for a specific user: which   |
-|                              | fields are on file, their verified values, and last-verified       |
-|                              | timestamps.                                                        |
-| `set_user_verified_metadata` | Set or update the verified metadata for a user. These values are   |
-|                              | the server's authoritative record against which invitation fields  |
-|                              | are compared during automatic attestation (Section 9.5.3).         |
-| `remove_user_verified_field` | Remove a specific field from a user's verified metadata. The       |
-|                              | server MUST automatically re-sign or strip the `verification`      |
-|                              | object on any active invitation that referenced the removed field. |
+| `get_user_verified_metadata` | Retrieve the verified metadata record for a specific user,         |
+|                              | including `user_verified_fields`, `admin_verified_fields`, the     |
+|                              | effective merged `verified_fields`, and update timestamps.         |
+| `set_admin_verified_metadata` | Set or update admin-supplied verified metadata for a user. These  |
+|                               | values populate `admin_verified_fields` and override conflicting  |
+|                               | user-sourced values in the effective merged record used during    |
+|                               | automatic attestation (Section 9.5.3).                            |
+| `remove_admin_verified_metadata` | Remove a specific field from a user's admin verified metadata. |
+|                                  | The server MUST automatically re-sign or strip the            |
+|                                  | `verification` object on any active invitation that          |
+|                                  | referenced the removed field.                                |
 
 ### 10B.9 Domain Management — Contact Information
 
