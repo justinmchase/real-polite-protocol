@@ -18,16 +18,21 @@ export async function start(options?: StartOptions): Promise<void> {
 
   async function initContext(): Promise<Context> {
     const logger = new ConsoleLogger();
-    services = await initServices(logger, { kvPath: options?.kvPath });
+    services = await initServices(logger, {
+      kvPath: options?.kvPath,
+      port: options?.port,
+    });
     const repositories = await initRepositories(services);
     const managers = await initManagers(repositories, services);
-    const tools = initTools(managers);
+    const tools = initTools(managers, services.config);
     return { logger, services, repositories, managers, tools };
   }
 
   const grove = new Grove({
     initContext,
-    modes: [new WebMode<Context, State>({ initControllers, port: options?.port })],
+    modes: [
+      new WebMode<Context, State>({ initControllers, port: options?.port }),
+    ],
     signal: options?.signal,
   });
 

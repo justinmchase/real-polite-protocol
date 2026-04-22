@@ -5,8 +5,25 @@ import {
 } from "@justinmchase/grove";
 
 export class ConfigService {
+  /**
+   * The computed domain authority (host or host:port) used in outbound
+   * envelopes and domain identity.
+   *   - localhost always includes the port (e.g. `localhost:8000`)
+   *   - Non-localhost on port 443 omits the port (e.g. `example.com`)
+   *   - Non-localhost on any other port includes it (e.g. `example.com:8080`)
+   */
+  public readonly domain: string;
+
+  /**
+   * Protocol derived from hostname per the RPP transport security rule:
+   * - `localhost` → `http` (development exception)
+   * - anything else → `https`
+   */
+  public readonly protocol: "http" | "https";
+
   constructor(
-    public readonly domain: string,
+    public readonly hostname: string,
+    public readonly port: number,
     public readonly kvPath: string,
     public readonly azureTenantId: string,
     public readonly azureApiAppClientId: string,
@@ -15,12 +32,23 @@ export class ConfigService {
     public readonly audience: string | undefined,
     public readonly authDebugLogTokenPayload: boolean,
     public readonly authDebugLogRawAccessToken: boolean,
-  ) {}
+  ) {
+    const isLocalhost = hostname === "localhost";
+    this.protocol = isLocalhost ? "http" : "https";
+    const isStandardHttps = !isLocalhost && port === 443;
+    this.domain = isStandardHttps ? hostname : `${hostname}:${port}`;
+  }
 
-  static async create(): Promise<ConfigService> {
+  static async create(serverPort?: number): Promise<ConfigService> {
     const env = await getEnv();
+    const hostname = readOptionalString(env, "RPP_DOMAIN") ?? "localhost";
+    const isLocalhost = hostname === "localhost";
+    const defaultPort = isLocalhost ? 8000 : 443;
+    const port = serverPort ??
+      parseInt(readOptionalString(env, "RPP_PORT") ?? String(defaultPort), 10);
     return new ConfigService(
-      readOptionalString(env, "RPP_DOMAIN") ?? "localhost",
+      hostname,
+      port,
       readOptionalString(env, "RPP_KV_PATH") ?? ".data/kv.sqlite3",
       readOptionalString(env, "AZURE_TENANT_ID") ??
         "22dddbf3-6a10-486d-94dc-b3eca6a4d13e",

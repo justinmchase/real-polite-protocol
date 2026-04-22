@@ -107,7 +107,16 @@ authentication.
 
 ## 4. Transport Model
 
-### 4.1 Required Endpoints
+### 4.1 Transport Security
+
+All RPP traffic between servers MUST be carried over HTTPS (TLS). Servers MUST
+NOT accept or deliver messages over plain HTTP in production.
+
+**Exception:** `localhost` deployments (where the domain is `localhost` or
+`localhost:port`) MAY use plain HTTP. This exception exists solely to support
+local development and testing.
+
+### 4.2 Required Endpoints
 
 An RPP server MUST expose two HTTP endpoints:
 
@@ -594,8 +603,8 @@ Invitations are category=invitation messages that offer receipt grants.
 There are two forms of invitation:
 
 1. **Direct invitations** sent when one party has obtained another's
-   `receptive_policy_id` and `receiver_domain` out-of-band (e.g., via QR code
-   or NFC). The sender provides these to the server, which resolves the receiver
+   `receptive_policy_id` and `receiver_domain` out-of-band (e.g., via QR code or
+   NFC). The sender provides these to the server, which resolves the receiver
    and creates the invitation record.
 2. **Public invitations** created by a user and discoverable by invitation ID
    (Section 9.4). Public invitations are the primary mechanism for first contact
@@ -1063,17 +1072,17 @@ of the envelope:
 
 Four claim namespaces are defined:
 
-| Namespace   | Trust level     | Source                                                                                                                                          |
-| ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `immutable` | Highest — domain-assigned | Server-assigned values (e.g. `domain_id`) injected automatically from the sender's `immutable_fields`. The caller MUST NOT supply this namespace. The server MUST always include it. |
-| `user`      | Server-attested | Values from the sender's authenticated identity token, stored as `user_verified_fields` and resolved by the sending server. The caller MUST NOT supply values — only the server may populate this namespace. |
-| `admin`     | Admin-attested  | Values set by the sending domain's administrator, stored as `admin_verified_fields` and resolved by the sending server. The caller MUST NOT supply values directly. |
-| `custom`    | Unverified      | Caller-supplied free-form data. The receiver MUST treat these as self-declared with no independent verification.                                |
+| Namespace   | Trust level               | Source                                                                                                                                                                                                       |
+| ----------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `immutable` | Highest — domain-assigned | Server-assigned values (e.g. `domain_id`) injected automatically from the sender's `immutable_fields`. The caller MUST NOT supply this namespace. The server MUST always include it.                         |
+| `user`      | Server-attested           | Values from the sender's authenticated identity token, stored as `user_verified_fields` and resolved by the sending server. The caller MUST NOT supply values — only the server may populate this namespace. |
+| `admin`     | Admin-attested            | Values set by the sending domain's administrator, stored as `admin_verified_fields` and resolved by the sending server. The caller MUST NOT supply values directly.                                          |
+| `custom`    | Unverified                | Caller-supplied free-form data. The receiver MUST treat these as self-declared with no independent verification.                                                                                             |
 
 The `immutable` namespace MUST be present on every direct invitation envelope.
-The server MUST populate it from the sender's `immutable_fields` record
-(Section 10B.8). The `user`, `admin`, and `custom` namespaces are optional;
-only those with at least one entry are included.
+The server MUST populate it from the sender's `immutable_fields` record (Section
+10B.8). The `user`, `admin`, and `custom` namespaces are optional; only those
+with at least one entry are included.
 
 #### 9.6.1 Claim Value Constraints
 
@@ -1081,23 +1090,24 @@ To keep the total envelope size bounded and values reliably serializable, all
 values within the `claims` object MUST conform to the following unified
 constraints. These constraints apply equally to all four namespaces:
 
-| Constraint             | Limit                                                              |
-| ---------------------- | ------------------------------------------------------------------ |
+| Constraint             | Limit                                                             |
+| ---------------------- | ----------------------------------------------------------------- |
 | Allowed value types    | `string`, `number`, `boolean`, `null`, or a flat array of those   |
-| String max length      | 512 characters per string value (including strings inside arrays)  |
-| Array max items        | 20 items per array value                                           |
-| Nested objects         | NOT allowed — only scalars and flat arrays of scalars              |
-| Max keys per namespace | 20 keys                                                            |
-| Key max length         | 64 characters per key name                                         |
+| String max length      | 512 characters per string value (including strings inside arrays) |
+| Array max items        | 20 items per array value                                          |
+| Nested objects         | NOT allowed — only scalars and flat arrays of scalars             |
+| Max keys per namespace | 20 keys                                                           |
+| Key max length         | 64 characters per key name                                        |
 
-Servers MUST validate these constraints on inbound envelopes and MUST reject
-any `send_invitation` call whose `custom` claims violates them with
+Servers MUST validate these constraints on inbound envelopes and MUST reject any
+`send_invitation` call whose `custom` claims violates them with
 `INVALID_MESSAGE_ENVELOPE` (HTTP 400). Servers MUST also enforce these
 constraints on server-resolved values before writing them into the envelope.
 
 #### 9.6.2 Receiver Obligations
 
-- The receiver MUST NOT treat `custom` claim values as verified or authoritative.
+- The receiver MUST NOT treat `custom` claim values as verified or
+  authoritative.
 - The receiver SHOULD surface the trust level of each namespace to the user
   (e.g., "verified by sender's server" vs. "self-declared").
 - The receiver MAY use claim values to inform their accept/reject decision but
@@ -1107,15 +1117,15 @@ constraints on server-resolved values before writing them into the envelope.
 #### 9.6.3 Relationship to Domain-Verified Invitations (Section 9.5)
 
 The `claims` mechanism is a complementary, lighter-weight companion to the
-cryptographic `verification` attestation defined for public invitations
-(Section 9.5).
+cryptographic `verification` attestation defined for public invitations (Section
+9.5).
 
-| Aspect           | `claims` (Section 9.6)                | `verification` (Section 9.5)                          |
-| ---------------- | ------------------------------------- | ----------------------------------------------------- |
-| Applies to       | Direct invitations                    | Public invitations                                    |
-| Authenticity     | Server-resolved but unsigned          | Ed25519 signature by hosting domain                   |
-| Receiver action  | Informational; no verification step   | Receiver verifies signature against domain public key |
-| Scope            | Any metadata key stored in the record | Fields the domain is willing to attest                |
+| Aspect          | `claims` (Section 9.6)                | `verification` (Section 9.5)                          |
+| --------------- | ------------------------------------- | ----------------------------------------------------- |
+| Applies to      | Direct invitations                    | Public invitations                                    |
+| Authenticity    | Server-resolved but unsigned          | Ed25519 signature by hosting domain                   |
+| Receiver action | Informational; no verification step   | Receiver verifies signature against domain public key |
+| Scope           | Any metadata key stored in the record | Fields the domain is willing to attest                |
 
 Senders who create public invitations SHOULD use the `verification` mechanism
 (Section 9.5) rather than `claims`, as it provides cryptographic authenticity.
@@ -1482,13 +1492,13 @@ invitations.
 These tools manage the listener's receptive policy for incoming invitations
 (Section 9.1).
 
-| Tool                    | Description                                                        |
-| ----------------------- | ------------------------------------------------------------------ |
-| `get_receptive_policies` | List the listener's receptive policies (paged). Returns an empty   |
+| Tool                     | Description                                                         |
+| ------------------------ | ------------------------------------------------------------------- |
+| `get_receptive_policies` | List the listener's receptive policies (paged). Returns an empty    |
 |                          | list if no policies exist (implies closed/not receptive).           |
-| `add_receptive_policy`   | Add a new receptive policy. Supports modes: receptive to all,      |
-|                          | by domain filter (Section 9.1.4), or closed. Policies stack.       |
-| `open_receptive_window`  | Create a time-bounded receptive policy (Section 9.1.1) with a      |
+| `add_receptive_policy`   | Add a new receptive policy. Supports modes: receptive to all,       |
+|                          | by domain filter (Section 9.1.4), or closed. Policies stack.        |
+| `open_receptive_window`  | Create a time-bounded receptive policy (Section 9.1.1) with a       |
 |                          | specified duration and scope. Returns the new policy's `policy_id`. |
 |                          | RECOMMENDED for proximity pairing.                                  |
 
@@ -1496,15 +1506,15 @@ These tools manage the listener's receptive policy for incoming invitations
 
 These tools manage the listener's display name and identity presentation.
 
-| Tool                         | Description                                                |
-| ---------------------------- | ---------------------------------------------------------- |
-| `get_display_name`           | Retrieve the listener's current default display name.      |
-| `set_display_name`           | Set or clear the listener's default display name (Section  |
-|                              | 3A.2).                                                     |
-| `set_user_verified_metadata` | Refresh the caller's `user_verified_fields` from the       |
-|                              | authenticated token claims. The tool MUST replace the      |
-|                              | prior user-sourced map with the current token-derived      |
-|                              | values and MUST NOT modify `admin_verified_fields`.        |
+| Tool                         | Description                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| `get_display_name`           | Retrieve the listener's current default display name.     |
+| `set_display_name`           | Set or clear the listener's default display name (Section |
+|                              | 3A.2).                                                    |
+| `set_user_verified_metadata` | Refresh the caller's `user_verified_fields` from the      |
+|                              | authenticated token claims. The tool MUST replace the     |
+|                              | prior user-sourced map with the current token-derived     |
+|                              | values and MUST NOT modify `admin_verified_fields`.       |
 
 ### 10B.7 Domain Management — Identity and Configuration
 
@@ -1551,27 +1561,27 @@ Merge precedence in the effective `verified_fields` view is:
 `immutable_fields` always wins; a user or administrator cannot shadow or
 override an immutable value.
 
-| Tool                         | Description                                                        |
-| ---------------------------- | ------------------------------------------------------------------ |
-| `list_verifiable_users`      | List users whose metadata the server can verify, along with the    |
-|                              | verifiable fields (e.g., display_name) and their current values.   |
-|                              | This tool MUST support resume-token pagination (Section 10B.10).   |
-| `get_user_verified_metadata` | Retrieve the verified metadata record for a specific user,         |
-|                              | including `immutable_fields`, `user_verified_fields`,              |
-|                              | `admin_verified_fields`, the effective merged `verified_fields`,   |
-|                              | and update timestamps.                                             |
-| `set_admin_verified_metadata` | Set or update admin-supplied verified metadata for a user. These  |
-|                               | values populate `admin_verified_fields` and override conflicting  |
-|                               | user-sourced values in the effective merged record used during    |
-|                               | automatic attestation (Section 9.5.3). Fields present in          |
-|                               | `immutable_fields` MUST NOT be settable via this tool — the       |
-|                               | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`.|
-| `remove_admin_verified_metadata` | Remove a specific field from a user's admin verified metadata. |
-|                                  | The server MUST automatically re-sign or strip the            |
-|                                  | `verification` object on any active invitation that          |
-|                                  | referenced the removed field. Fields present in              |
-|                                  | `immutable_fields` MUST NOT be removable via this tool — the |
-|                                  | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`.|
+| Tool                             | Description                                                         |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `list_verifiable_users`          | List users whose metadata the server can verify, along with the     |
+|                                  | verifiable fields (e.g., display_name) and their current values.    |
+|                                  | This tool MUST support resume-token pagination (Section 10B.10).    |
+| `get_user_verified_metadata`     | Retrieve the verified metadata record for a specific user,          |
+|                                  | including `immutable_fields`, `user_verified_fields`,               |
+|                                  | `admin_verified_fields`, the effective merged `verified_fields`,    |
+|                                  | and update timestamps.                                              |
+| `set_admin_verified_metadata`    | Set or update admin-supplied verified metadata for a user. These    |
+|                                  | values populate `admin_verified_fields` and override conflicting    |
+|                                  | user-sourced values in the effective merged record used during      |
+|                                  | automatic attestation (Section 9.5.3). Fields present in            |
+|                                  | `immutable_fields` MUST NOT be settable via this tool — the         |
+|                                  | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`. |
+| `remove_admin_verified_metadata` | Remove a specific field from a user's admin verified metadata.      |
+|                                  | The server MUST automatically re-sign or strip the                  |
+|                                  | `verification` object on any active invitation that                 |
+|                                  | referenced the removed field. Fields present in                     |
+|                                  | `immutable_fields` MUST NOT be removable via this tool — the        |
+|                                  | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`. |
 
 ### 10B.9 Domain Management — Contact Information
 
@@ -1587,8 +1597,8 @@ domain identity endpoint (Section 12).
 ### 10B.10 Pagination for List Tools
 
 All MCP tools that return potentially unbounded lists MUST use
-resume-token-based pagination. Offset-based pagination (e.g., `offset`,
-`page`) MUST NOT be used.
+resume-token-based pagination. Offset-based pagination (e.g., `offset`, `page`)
+MUST NOT be used.
 
 The following conventions apply to list-style tools (including but not limited
 to `list_historical_keys` and `list_verifiable_users`):
@@ -1598,8 +1608,8 @@ to `list_historical_keys` and `list_verifiable_users`):
   - `resume_token` (optional string): opaque token returned by a prior call.
 - Response shape:
   - `<items_field>`: tool-specific array payload (e.g., `keys`, `users`).
-  - `next_resume_token` (optional string): opaque token for the next page.
-    If absent, there are no more results.
+  - `next_resume_token` (optional string): opaque token for the next page. If
+    absent, there are no more results.
 
 Example request:
 
@@ -1629,8 +1639,8 @@ Example response:
 Rules:
 
 - Resume tokens MUST be treated as opaque by clients.
-- Servers MAY encode implementation details in tokens, but clients MUST NOT
-  rely on token structure.
+- Servers MAY encode implementation details in tokens, but clients MUST NOT rely
+  on token structure.
 - Servers SHOULD provide a stable traversal order per tool.
 - Servers MUST reject malformed or expired tokens with a stable MCP error code
   (Section 11.3).
@@ -1754,40 +1764,40 @@ JSON-RPC numeric error codes.
 
 #### 11.3.1 MCP Authentication and Request Codes
 
-| MCP Code                      | Typical HTTP | Description                                  |
-| ----------------------------- | ------------ | -------------------------------------------- |
-| E_MISSING_HEADER              | 401          | Authorization header is missing              |
-| E_INVALID_FORMAT              | 401          | Authorization header format is invalid       |
-| E_NOT_CONFIGURED              | 500          | Auth system is not configured                |
-| E_INVALID_ORIGIN              | 400          | Origin header is invalid or mismatched       |
-| E_MISSING_OID                 | 401          | Required `oid` claim is absent               |
-| E_INVALID_TOKEN_FORMAT        | 401          | JWT structure is invalid                     |
-| E_EXPIRED                     | 401          | Token is expired                             |
-| E_NOT_YET_VALID               | 401          | Token `nbf` is in the future                |
-| E_INVALID_ISSUER              | 401          | Token issuer does not match expected issuer  |
-| E_INVALID_AUDIENCE            | 401          | Token audience does not match expected       |
-| E_KEY_NOT_FOUND               | 401          | Signing key could not be resolved            |
-| E_JWKS_FETCH_FAILED           | 500          | JWKS retrieval failed                        |
-| E_INSUFFICIENT_SCOPE          | 403          | Required MCP scopes are missing              |
-| E_UNSUPPORTED_ALGORITHM       | 400          | JWT algorithm is not supported               |
-| E_INVALID_KEY_FORMAT          | 400          | JWKS key payload is malformed                |
-| E_INVALID_SIGNATURE           | 401          | JWT signature validation failed              |
-| E_SIGNATURE_VERIFICATION_FAILED | 401        | Signature verification process failed        |
+| MCP Code                        | Typical HTTP | Description                                 |
+| ------------------------------- | ------------ | ------------------------------------------- |
+| E_MISSING_HEADER                | 401          | Authorization header is missing             |
+| E_INVALID_FORMAT                | 401          | Authorization header format is invalid      |
+| E_NOT_CONFIGURED                | 500          | Auth system is not configured               |
+| E_INVALID_ORIGIN                | 400          | Origin header is invalid or mismatched      |
+| E_MISSING_OID                   | 401          | Required `oid` claim is absent              |
+| E_INVALID_TOKEN_FORMAT          | 401          | JWT structure is invalid                    |
+| E_EXPIRED                       | 401          | Token is expired                            |
+| E_NOT_YET_VALID                 | 401          | Token `nbf` is in the future                |
+| E_INVALID_ISSUER                | 401          | Token issuer does not match expected issuer |
+| E_INVALID_AUDIENCE              | 401          | Token audience does not match expected      |
+| E_KEY_NOT_FOUND                 | 401          | Signing key could not be resolved           |
+| E_JWKS_FETCH_FAILED             | 500          | JWKS retrieval failed                       |
+| E_INSUFFICIENT_SCOPE            | 403          | Required MCP scopes are missing             |
+| E_UNSUPPORTED_ALGORITHM         | 400          | JWT algorithm is not supported              |
+| E_INVALID_KEY_FORMAT            | 400          | JWKS key payload is malformed               |
+| E_INVALID_SIGNATURE             | 401          | JWT signature validation failed             |
+| E_SIGNATURE_VERIFICATION_FAILED | 401          | Signature verification process failed       |
 
 #### 11.3.2 MCP Tool/Application Error Codes
 
-| MCP Tool Code                        | Typical HTTP | Description                                              |
-| ------------------------------------ | ------------ | -------------------------------------------------------- |
-| E_INTERNAL                           | 500          | Unexpected tool failure                                  |
-| E_ACCOUNT_NOT_FOUND                  | 404          | Target account does not exist                            |
-| E_ACCOUNT_CREATE_CONFLICT            | 500          | Account creation failed due to a concurrent write conflict |
-| E_DOMAIN_ID_ASSIGN_CONFLICT          | 500          | domain_id assignment failed due to a concurrent write conflict |
-| E_USER_VERIFIED_METADATA_NOT_FOUND   | 404          | No verified metadata exists for the requested user       |
-| E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND | 404     | The specified admin verified metadata field does not exist |
-| E_VERIFIED_METADATA_VALUE_TOO_LONG   | 400          | A verified metadata value exceeds the maximum allowed length |
-| E_IMMUTABLE_FIELD_CONFLICT           | 400          | Attempted to set or remove a field in the immutable namespace |
-| E_INVALID_RESUME_TOKEN               | 400          | Pagination resume token is malformed or expired          |
-| E_INVALID_PAGE_SIZE                  | 400          | Pagination page_size is invalid                          |
+| MCP Tool Code                             | Typical HTTP | Description                                                    |
+| ----------------------------------------- | ------------ | -------------------------------------------------------------- |
+| E_INTERNAL                                | 500          | Unexpected tool failure                                        |
+| E_ACCOUNT_NOT_FOUND                       | 404          | Target account does not exist                                  |
+| E_ACCOUNT_CREATE_CONFLICT                 | 500          | Account creation failed due to a concurrent write conflict     |
+| E_DOMAIN_ID_ASSIGN_CONFLICT               | 500          | domain_id assignment failed due to a concurrent write conflict |
+| E_USER_VERIFIED_METADATA_NOT_FOUND        | 404          | No verified metadata exists for the requested user             |
+| E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND | 404          | The specified admin verified metadata field does not exist     |
+| E_VERIFIED_METADATA_VALUE_TOO_LONG        | 400          | A verified metadata value exceeds the maximum allowed length   |
+| E_IMMUTABLE_FIELD_CONFLICT                | 400          | Attempted to set or remove a field in the immutable namespace  |
+| E_INVALID_RESUME_TOKEN                    | 400          | Pagination resume token is malformed or expired                |
+| E_INVALID_PAGE_SIZE                       | 400          | Pagination page_size is invalid                                |
 
 ## 12. Domain Identity
 

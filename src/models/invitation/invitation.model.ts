@@ -2,7 +2,12 @@ import type { ContentRating } from "../content-rating.ts";
 import type { MessageCategory } from "../message-category.ts";
 import type { UsagePolicy } from "../receipt/receipt.model.ts";
 
-export type InvitationStatus = "pending" | "accepted" | "rejected" | "cancelled" | "expired";
+export type InvitationStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "cancelled"
+  | "expired";
 
 export type ClaimValue =
   | string
@@ -45,7 +50,7 @@ export interface Invitation {
   receiver_oid: string;
   sender_domain: string;
   status: InvitationStatus;
-  proposed_terms: Record<string, unknown>;
+  proposed_terms: ReceiptTerms;
   claims?: InvitationClaims;
   expires_at?: string; // ISO 8601 timestamp, absent means indefinite
   created_at: string; // ISO 8601 timestamp

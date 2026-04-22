@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:domain-admin-011 - Domain administrators can retrieve contact policy URL",
+  name:
+    "req:domain-admin-011 - Domain administrators can retrieve contact policy URL",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {

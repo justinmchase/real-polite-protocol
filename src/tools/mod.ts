@@ -11,9 +11,10 @@ import type {
   AccountManager,
   DomainIdentityManager,
   InvitationManager,
-  ReceptivePolicyManager,
   ReceiptManager,
+  ReceptivePolicyManager,
 } from "../managers/mod.ts";
+import type { ConfigService } from "../services/config/config.service.ts";
 import { AccountTool } from "./account/account.tool.ts";
 import { DomainAdminTool } from "./domain-admin/domain-admin.tool.ts";
 import { ReceptivePolicyTool } from "./receptive-policy/receptive-policy.tool.ts";
@@ -24,18 +25,26 @@ export interface Tool {
   register(server: McpServer, auth: AuthInfo): void;
 }
 
-export function initTools(managers: {
-  accounts: AccountManager;
-  domainIdentity: DomainIdentityManager;
-  receptivePolicy: ReceptivePolicyManager;
-  invitations: InvitationManager;
-  receipts: ReceiptManager;
-}): Tool[] {
+export function initTools(
+  managers: {
+    accounts: AccountManager;
+    domainIdentity: DomainIdentityManager;
+    receptivePolicy: ReceptivePolicyManager;
+    invitations: InvitationManager;
+    receipts: ReceiptManager;
+  },
+  config: ConfigService,
+): Tool[] {
   return [
     new AccountTool(managers.accounts),
     new DomainAdminTool(managers.accounts, managers.domainIdentity),
     new ReceptivePolicyTool(managers.receptivePolicy),
-    new InvitationTool(managers.invitations, managers.accounts, managers.domainIdentity),
+    new InvitationTool(
+      managers.invitations,
+      managers.accounts,
+      managers.domainIdentity,
+      config,
+    ),
     new ReceiptTool(managers.receipts),
   ];
 }

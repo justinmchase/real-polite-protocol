@@ -14,6 +14,6 @@ by the RPP spec.
 - HTTP 403 is returned for valid tokens with insufficient scope or permissions.
 - HTTP 400 is returned for malformed authorization requests or bad session
   requests.
-- Authentication and authorization error codes are machine-readable and MUST
-  use the `E_` prefix defined in the RFC MCP code registry.
+- Authentication and authorization error codes are machine-readable and MUST use
+  the `E_` prefix defined in the RFC MCP code registry.
 - Error responses are stable and machine-readable for MCP clients.

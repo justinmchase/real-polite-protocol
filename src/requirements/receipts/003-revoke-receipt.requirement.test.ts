@@ -1,10 +1,10 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
-import { computeHmac, submitMessage } from "../submit/test-helpers.ts";
+import { submitMessage } from "../submit/test-helpers.ts";
 
 Deno.test({
   name: "req:receipts-003 - Listeners can revoke an issued receipt",
@@ -59,68 +59,88 @@ Deno.test({
             assertEquals(result.revocation_reason, "SENDER_REQUEST");
           });
 
-          await t.step("revoked receipt appears as revoked in list_issued_receipts", async () => {
-            const { result } = await callTool<{
-              receipts: Array<{ id: string; status: string }>;
-            }>(token, "list_issued_receipts", { status: "revoked" });
+          await t.step(
+            "revoked receipt appears as revoked in list_issued_receipts",
+            async () => {
+              const { result } = await callTool<{
+                receipts: Array<{ id: string; status: string }>;
+              }>(token, "list_issued_receipts", { status: "revoked" });
 
-            assertExists(result);
-            const found = result.receipts.find((r) => r.id === receiptId);
-            assertExists(found);
-            assertEquals(found.status, "revoked");
-          });
+              assertExists(result);
+              const found = result.receipts.find((r) => r.id === receiptId);
+              assertExists(found);
+              assertEquals(found.status, "revoked");
+            },
+          );
 
-          await t.step("submit with revoked receipt returns E_RECEIPT_REVOKED", async () => {
-            const response = await submitMessage({ receiptId, receiptSecret, baseUrl });
-            assertEquals(response.status, 403);
-            const body = await response.json() as { code?: string };
-            assertEquals(body.code, "E_RECEIPT_REVOKED");
-          });
+          await t.step(
+            "submit with revoked receipt returns E_RECEIPT_REVOKED",
+            async () => {
+              const response = await submitMessage({
+                receiptId,
+                receiptSecret,
+                baseUrl,
+              });
+              assertEquals(response.status, 403);
+              const body = await response.json() as { code?: string };
+              assertEquals(body.code, "E_RECEIPT_REVOKED");
+            },
+          );
 
-          await t.step("revoking an already-revoked receipt returns E_RECEIPT_ALREADY_REVOKED", async () => {
-            const { result } = await callTool<{ ok?: boolean; error?: { code?: string } }>(
-              token,
-              "revoke_receipt",
-              { receipt_id: receiptId, reason: "SPAM" },
-            );
-            assertExists(result);
-            // isError: true tool result — error code in result.error
-            assertEquals((result as { ok?: boolean })?.ok, false);
-          });
+          await t.step(
+            "revoking an already-revoked receipt returns E_RECEIPT_ALREADY_REVOKED",
+            async () => {
+              const { result } = await callTool<
+                { ok?: boolean; error?: { code?: string } }
+              >(
+                token,
+                "revoke_receipt",
+                { receipt_id: receiptId, reason: "SPAM" },
+              );
+              assertExists(result);
+              // isError: true tool result — error code in result.error
+              assertEquals((result as { ok?: boolean })?.ok, false);
+            },
+          );
 
-          await t.step("revoking another account's receipt returns E_RECEIPT_NOT_OWNED", async () => {
-            const otherOid = crypto.randomUUID();
-            const otherToken = await issueToken({
-              oid: otherOid,
-              scope: requiredScopes.join(" "),
-              name: "Other User",
-            });
-            await callTool(otherToken, "set_user_verified_metadata");
+          await t.step(
+            "revoking another account's receipt returns E_RECEIPT_NOT_OWNED",
+            async () => {
+              const otherOid = crypto.randomUUID();
+              const otherToken = await issueToken({
+                oid: otherOid,
+                scope: requiredScopes.join(" "),
+                name: "Other User",
+              });
+              await callTool(otherToken, "set_user_verified_metadata");
 
-            // Seed a fresh active receipt owned by original account
-            const freshInvitationId = crypto.randomUUID();
-            await kv.set(["invitations", freshInvitationId], {
-              invitation_id: freshInvitationId,
-              receiver_oid: accountOid,
-              sender_domain: "sender2.example",
-              status: "pending",
-              proposed_terms: { category: "billing" },
-              created_at: new Date().toISOString(),
-            });
-            const { result: freshAccept } = await callTool<{
-              receipt?: { id: string };
-            }>(token, "accept_invitation", { invitation_id: freshInvitationId });
-            const freshReceiptId = freshAccept?.receipt?.id;
-            assertExists(freshReceiptId);
+              // Seed a fresh active receipt owned by original account
+              const freshInvitationId = crypto.randomUUID();
+              await kv.set(["invitations", freshInvitationId], {
+                invitation_id: freshInvitationId,
+                receiver_oid: accountOid,
+                sender_domain: "sender2.example",
+                status: "pending",
+                proposed_terms: { category: "billing" },
+                created_at: new Date().toISOString(),
+              });
+              const { result: freshAccept } = await callTool<{
+                receipt?: { id: string };
+              }>(token, "accept_invitation", {
+                invitation_id: freshInvitationId,
+              });
+              const freshReceiptId = freshAccept?.receipt?.id;
+              assertExists(freshReceiptId);
 
-            const { result } = await callTool<{ ok?: boolean }>(
-              otherToken,
-              "revoke_receipt",
-              { receipt_id: freshReceiptId, reason: "SPAM" },
-            );
-            assertExists(result);
-            assertEquals(result?.ok, false);
-          });
+              const { result } = await callTool<{ ok?: boolean }>(
+                otherToken,
+                "revoke_receipt",
+                { receipt_id: freshReceiptId, reason: "SPAM" },
+              );
+              assertExists(result);
+              assertEquals(result?.ok, false);
+            },
+          );
         } finally {
           kv.close();
         }

@@ -18,5 +18,5 @@ Section 9.2).
 - The tool supports filtering by sender domain.
 - The tool supports filtering by invitation status.
 - Each returned invitation includes sufficient summary fields for follow-up
-  actions such as review, accept, or reject (for example invitation id,
-  sender domain, status, and expiry information).
+  actions such as review, accept, or reject (for example invitation id, sender
+  domain, status, and expiry information).

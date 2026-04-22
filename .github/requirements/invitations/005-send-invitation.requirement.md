@@ -24,13 +24,13 @@ Receptive Policy → Invitation → Receipt → Message
 - The tool is available to any authenticated account.
 - The tool requires `receiver_domain`, `receptive_policy_id`, and
   `proposed_terms` inputs.
-- The sender does **not** validate the receptive policy — the sender cannot
-  know whether the receiver's policy will accept the invitation. The sender
-  simply attaches the `receptive_policy_id` to the invitation envelope and
-  delivers it to the receiver's submit endpoint. It is the **receiver's**
-  server (the submit endpoint / `InvitationMessageHandler`) that looks up the
-  policy, validates its state (expired, closed, domain filter), resolves the
-  `receiver_oid`, and stores the invitation locally.
+- The sender does **not** validate the receptive policy — the sender cannot know
+  whether the receiver's policy will accept the invitation. The sender simply
+  attaches the `receptive_policy_id` to the invitation envelope and delivers it
+  to the receiver's submit endpoint. It is the **receiver's** server (the submit
+  endpoint / `InvitationMessageHandler`) that looks up the policy, validates its
+  state (expired, closed, domain filter), resolves the `receiver_oid`, and
+  stores the invitation locally.
 - The tool returns the new `invitation_id` and `created_at` upon successful
   delivery to the receiver's domain.
 - If the receiver's server rejects the submission (non-2xx), the tool MUST

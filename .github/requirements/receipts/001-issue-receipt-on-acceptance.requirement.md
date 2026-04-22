@@ -5,9 +5,9 @@ title: Accepting an invitation issues and records a receipt
 
 # Issue Receipt on Invitation Acceptance
 
-When a listener accepts an invitation via the `accept_invitation` MCP tool,
-the server MUST issue a receipt to the inviting domain and persist it
-(Section 9.3, Section 6.1).
+When a listener accepts an invitation via the `accept_invitation` MCP tool, the
+server MUST issue a receipt to the inviting domain and persist it (Section 9.3,
+Section 6.1).
 
 ## Expected behavior
 

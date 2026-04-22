@@ -7,6 +7,7 @@ import type {
   InvitationManager,
 } from "../../managers/mod.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
+import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 
 const CategorySchema = z.enum(MESSAGE_CATEGORIES);
@@ -17,7 +18,8 @@ const ClaimValueSchema = z.union([
   z.number(),
   z.boolean(),
   z.null(),
-  z.array(z.union([z.string().max(512), z.number(), z.boolean(), z.null()])).max(20),
+  z.array(z.union([z.string().max(512), z.number(), z.boolean(), z.null()]))
+    .max(20),
 ]);
 
 const ClaimMapSchema = z.record(z.string().max(64), ClaimValueSchema)
@@ -36,20 +38,30 @@ const InvitationOutputSchema = {
   invitation_id: z.string().describe("Unique invitation identifier"),
   receiver_oid: z.uuid().describe("OID of the receiving user on this server"),
   sender_domain: z.string().describe("Domain of the invitation sender"),
-  status: z.enum(["pending", "accepted", "rejected", "cancelled", "expired"]).describe(
-    "Current lifecycle state",
+  status: z.enum(["pending", "accepted", "rejected", "cancelled", "expired"])
+    .describe(
+      "Current lifecycle state",
+    ),
+  proposed_terms: z.record(z.string(), z.unknown()).describe(
+    "Proposed receipt terms",
   ),
-  proposed_terms: z.record(z.string(), z.unknown()).describe("Proposed receipt terms"),
-  claims: InvitationClaimsSchema.optional().describe("Contextual claims attached by the sender"),
-  expires_at: z.iso.datetime().optional().describe("ISO 8601 timestamp when invitation expires, absent means indefinite"),
+  claims: InvitationClaimsSchema.optional().describe(
+    "Contextual claims attached by the sender",
+  ),
+  expires_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp when invitation expires, absent means indefinite",
+  ),
   created_at: z.iso.datetime().describe("ISO 8601 timestamp of creation"),
-  accepted_at: z.iso.datetime().optional().describe("ISO 8601 timestamp of acceptance"),
+  accepted_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp of acceptance",
+  ),
 };
 
 const ListInvitationsInputSchema = {
-  status: z.enum(["pending", "accepted", "rejected", "cancelled", "expired"]).optional().describe(
-    "Filter by invitation status",
-  ),
+  status: z.enum(["pending", "accepted", "rejected", "cancelled", "expired"])
+    .optional().describe(
+      "Filter by invitation status",
+    ),
   sender_domain: z.string().optional().describe("Filter by sender domain"),
   page_size: z.number().int().min(1).max(100).optional().describe(
     "Maximum number of results to return (default 50)",
@@ -65,13 +77,17 @@ const AcceptInvitationOutputSchema = {
     ),
     category: CategorySchema.describe("Permitted message category"),
     max_content_rating: ContentRatingSchema.describe("Maximum content rating"),
-    usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe("Usage policy"),
+    usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe(
+      "Usage policy",
+    ),
     issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
   }).describe("Issued receipt credentials — share with the sender"),
 };
 
 const ListInvitationsOutputSchema = {
-  invitations: z.array(z.object(InvitationOutputSchema)).describe("List of invitations"),
+  invitations: z.array(z.object(InvitationOutputSchema)).describe(
+    "List of invitations",
+  ),
   page_size: z.number().int().describe("Number of results returned"),
 };
 
@@ -99,7 +115,9 @@ const SendInvitationInputSchema = {
   receptive_policy_id: z.uuid().describe(
     "Policy ID obtained from the receiver (e.g. via QR code). Identifies both the receiver and confirms they are receptive.",
   ),
-  proposed_terms: z.record(z.string(), z.unknown()).describe("Receipt terms proposed to receiver"),
+  proposed_terms: z.record(z.string(), z.unknown()).describe(
+    "Receipt terms proposed to receiver",
+  ),
   include_user_claims: z.array(z.string()).optional().describe(
     "Keys of user-verified claims (from the sender's verified profile) to attach to the invitation.",
   ),
@@ -109,7 +127,9 @@ const SendInvitationInputSchema = {
   custom_claims: ClaimMapSchema.optional().describe(
     "Unverified free-form claims provided by the sender. Values must be strings (≤512 chars), numbers, booleans, null, or flat arrays of those. Maximum 20 keys.",
   ),
-  expires_at: z.iso.datetime().optional().describe("ISO 8601 timestamp when invitation expires; absent means indefinite"),
+  expires_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp when invitation expires; absent means indefinite",
+  ),
 };
 
 const SendInvitationOutputSchema = {
@@ -117,11 +137,21 @@ const SendInvitationOutputSchema = {
   created_at: z.iso.datetime().describe("ISO 8601 timestamp of creation"),
 };
 
-type ListInvitationsArgs = z.infer<z.ZodObject<typeof ListInvitationsInputSchema>>;
-type ReviewInvitationArgs = z.infer<z.ZodObject<typeof ReviewInvitationInputSchema>>;
-type AcceptInvitationArgs = z.infer<z.ZodObject<typeof AcceptInvitationInputSchema>>;
-type RejectInvitationArgs = z.infer<z.ZodObject<typeof RejectInvitationInputSchema>>;
-type SendInvitationArgs = z.infer<z.ZodObject<typeof SendInvitationInputSchema>>;
+type ListInvitationsArgs = z.infer<
+  z.ZodObject<typeof ListInvitationsInputSchema>
+>;
+type ReviewInvitationArgs = z.infer<
+  z.ZodObject<typeof ReviewInvitationInputSchema>
+>;
+type AcceptInvitationArgs = z.infer<
+  z.ZodObject<typeof AcceptInvitationInputSchema>
+>;
+type RejectInvitationArgs = z.infer<
+  z.ZodObject<typeof RejectInvitationInputSchema>
+>;
+type SendInvitationArgs = z.infer<
+  z.ZodObject<typeof SendInvitationInputSchema>
+>;
 
 type InvitationClaims = {
   immutable?: Record<string, string>;
@@ -135,6 +165,7 @@ export class InvitationTool {
     private readonly invitationManager: InvitationManager,
     private readonly accountManager: AccountManager,
     private readonly domainIdentityManager: DomainIdentityManager,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -198,11 +229,15 @@ export class InvitationTool {
         let invitations = await this.invitationManager.listByReceiver(auth.oid);
 
         if (params.status) {
-          invitations = invitations.filter((inv) => inv.status === params.status);
+          invitations = invitations.filter((inv) =>
+            inv.status === params.status
+          );
         }
 
         if (params.sender_domain) {
-          invitations = invitations.filter((inv) => inv.sender_domain === params.sender_domain);
+          invitations = invitations.filter((inv) =>
+            inv.sender_domain === params.sender_domain
+          );
         }
 
         const pageSize = params.page_size ?? 50;
@@ -224,7 +259,9 @@ export class InvitationTool {
         outputSchema: InvitationOutputSchema,
       },
       withToolErrorHandling(async (params: ReviewInvitationArgs) => {
-        const invitation = await this.invitationManager.getInvitation(params.invitation_id);
+        const invitation = await this.invitationManager.getInvitation(
+          params.invitation_id,
+        );
         if (!invitation) {
           throw new Error(`Invitation ${params.invitation_id} not found`);
         }
@@ -268,7 +305,9 @@ export class InvitationTool {
         outputSchema: InvitationOutputSchema,
       },
       withToolErrorHandling(async (params: RejectInvitationArgs) => {
-        const invitation = await this.invitationManager.reject(params.invitation_id);
+        const invitation = await this.invitationManager.reject(
+          params.invitation_id,
+        );
         return toolResult(invitation);
       }),
     );
@@ -310,10 +349,10 @@ export class InvitationTool {
         };
 
         // Deliver the invitation envelope to the receiver's submit endpoint.
-        // Policy validation happens on the receiver's server.
-        const scheme = params.receiver_domain.startsWith("localhost")
-          ? "http"
-          : "https";
+        // Per spec Section 4.1: localhost uses http, all other domains use https.
+        const receiverIsLocalhost = params.receiver_domain === "localhost" ||
+          params.receiver_domain.startsWith("localhost:");
+        const scheme = receiverIsLocalhost ? "http" : "https";
         const url = `${scheme}://${params.receiver_domain}/rpp/v1/messages`;
         const response = await fetch(url, {
           method: "POST",

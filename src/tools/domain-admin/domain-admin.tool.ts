@@ -4,8 +4,8 @@ import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
 import type { DomainIdentityManager } from "../../managers/mod.ts";
 import {
-  AdminVerifiedMetadataFieldNotFoundError,
   AccountNotFoundError,
+  AdminVerifiedMetadataFieldNotFoundError,
   UserVerifiedMetadataNotFoundError,
 } from "./domain-admin.error.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
@@ -326,8 +326,7 @@ export class DomainAdminTool {
     server.registerTool(
       "get_user_verified_metadata",
       {
-        description:
-          "Retrieve verified metadata for a specific user by oid.",
+        description: "Retrieve verified metadata for a specific user by oid.",
         inputSchema: GetUserVerifiedMetadataInputSchema,
         outputSchema: UserVerifiedMetadataOutputSchema,
       },
@@ -409,8 +408,7 @@ export class DomainAdminTool {
     server.registerTool(
       "set_contact_policy_url",
       {
-        description:
-          "Set or update the contact_policy_url.",
+        description: "Set or update the contact_policy_url.",
         inputSchema: SetContactPolicyUrlInputSchema,
         outputSchema: ContactPolicyUrlOutputSchema,
       },

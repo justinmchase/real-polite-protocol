@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -71,7 +71,9 @@ Deno.test({
 
             const { status, result } = await callTool<{
               mode: string;
-              domain_filter?: { rules?: Array<{ action: string; pattern: string }> };
+              domain_filter?: {
+                rules?: Array<{ action: string; pattern: string }>;
+              };
             }>(token, "add_receptive_policy", {
               mode: "domain_filter",
               domain_filter: {

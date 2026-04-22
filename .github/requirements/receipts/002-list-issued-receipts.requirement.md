@@ -6,8 +6,8 @@ title: Listeners can list receipts they have issued
 # List Issued Receipts
 
 The MCP server MUST expose `list_issued_receipts` so an authenticated listener
-can enumerate the receipts they have issued to other domains
-(Section 10B.3, Section 10A.1).
+can enumerate the receipts they have issued to other domains (Section 10B.3,
+Section 10A.1).
 
 ## Expected behavior
 

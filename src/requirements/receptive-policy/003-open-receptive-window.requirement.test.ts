@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:receptive-policy-003 - Listeners can open a time-bounded receptive window",
+  name:
+    "req:receptive-policy-003 - Listeners can open a time-bounded receptive window",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ callTool }) => {
@@ -54,9 +55,13 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { status, result } = await callTool<{ mode: string }>(token, "open_receptive_window", {
-              duration_seconds: 30,
-            });
+            const { status, result } = await callTool<{ mode: string }>(
+              token,
+              "open_receptive_window",
+              {
+                duration_seconds: 30,
+              },
+            );
             assertEquals(status, 200);
             assertExists(result);
             assertEquals(result.mode, "all");
@@ -99,12 +104,20 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { result: w1 } = await callTool<{ policy_id: string }>(token, "open_receptive_window", {
-              duration_seconds: 3600,
-            });
-            const { result: w2 } = await callTool<{ policy_id: string }>(token, "open_receptive_window", {
-              duration_seconds: 120,
-            });
+            const { result: w1 } = await callTool<{ policy_id: string }>(
+              token,
+              "open_receptive_window",
+              {
+                duration_seconds: 3600,
+              },
+            );
+            const { result: w2 } = await callTool<{ policy_id: string }>(
+              token,
+              "open_receptive_window",
+              {
+                duration_seconds: 120,
+              },
+            );
 
             assertExists(w1);
             assertExists(w2);

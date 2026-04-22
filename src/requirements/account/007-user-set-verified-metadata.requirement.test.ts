@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -30,9 +30,8 @@ Deno.test({
             assertEquals(status, 200);
             assertExists(body.result);
 
-            const text =
-              (body.result as { content?: Array<{ text?: string }> })
-                .content?.[0]?.text;
+            const text = (body.result as { content?: Array<{ text?: string }> })
+              .content?.[0]?.text;
             assertExists(text);
 
             const record = JSON.parse(text) as {
@@ -97,9 +96,8 @@ Deno.test({
             );
             assertEquals(status, 200);
 
-            const text =
-              (body.result as { content?: Array<{ text?: string }> })
-                .content?.[0]?.text;
+            const text = (body.result as { content?: Array<{ text?: string }> })
+              .content?.[0]?.text;
             assertExists(text);
 
             const record = JSON.parse(text) as {
@@ -134,9 +132,8 @@ Deno.test({
             );
             assertEquals(status, 200);
 
-            const text =
-              (body.result as { content?: Array<{ text?: string }> })
-                .content?.[0]?.text;
+            const text = (body.result as { content?: Array<{ text?: string }> })
+              .content?.[0]?.text;
             assertExists(text);
 
             const record = JSON.parse(text) as {

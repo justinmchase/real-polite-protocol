@@ -5,7 +5,10 @@ import {
   type IState,
 } from "@justinmchase/grove";
 import type { KvService } from "../../services/kv/kv.service.ts";
-import type { InvitationManager, ReceptivePolicyManager } from "../../managers/mod.ts";
+import type {
+  InvitationManager,
+  ReceptivePolicyManager,
+} from "../../managers/mod.ts";
 import {
   DuplicateMessageError,
   InvalidMessageEnvelopeError,
@@ -14,10 +17,10 @@ import {
 } from "./submit.error.ts";
 import {
   type HandlerContext,
-  type MessageHandler,
-  type SubmitMessageEnvelope,
   InvitationMessageHandler,
+  type MessageHandler,
   ReceiptMessageHandler,
+  type SubmitMessageEnvelope,
   SubmitMessageEnvelopeSchema,
 } from "./message-handler.ts";
 

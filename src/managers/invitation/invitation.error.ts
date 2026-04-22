@@ -2,7 +2,11 @@ import { ApplicationError } from "@justinmchase/grove";
 
 export class InvitationNotFoundError extends ApplicationError {
   constructor(invitationId: string) {
-    super(404, "E_INVITATION_NOT_FOUND", `Invitation ${invitationId} not found`);
+    super(
+      404,
+      "E_INVITATION_NOT_FOUND",
+      `Invitation ${invitationId} not found`,
+    );
   }
 }
 

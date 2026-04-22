@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:domain-admin-010 - Domain administrators can remove admin verified metadata",
+  name:
+    "req:domain-admin-010 - Domain administrators can remove admin verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
@@ -21,21 +22,24 @@ Deno.test({
                 created_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
-              await kv.set(["accounts", "verified_metadata", "oid-target-user"], {
-                oid: "oid-target-user",
-                user_verified_fields: {
-                  display_name: "Alice Token",
-                  email: "alice@example.test",
+              await kv.set(
+                ["accounts", "verified_metadata", "oid-target-user"],
+                {
+                  oid: "oid-target-user",
+                  user_verified_fields: {
+                    display_name: "Alice Token",
+                    email: "alice@example.test",
+                  },
+                  admin_verified_fields: {
+                    display_name: "Dr. Alice Smith",
+                    title: "Professor",
+                    office: "CS-402",
+                  },
+                  user_updated_at: "2026-04-20T00:00:00.000Z",
+                  admin_updated_at: "2026-04-20T01:00:00.000Z",
+                  updated_at: "2026-04-20T01:00:00.000Z",
                 },
-                admin_verified_fields: {
-                  display_name: "Dr. Alice Smith",
-                  title: "Professor",
-                  office: "CS-402",
-                },
-                user_updated_at: "2026-04-20T00:00:00.000Z",
-                admin_updated_at: "2026-04-20T01:00:00.000Z",
-                updated_at: "2026-04-20T01:00:00.000Z",
-              });
+              );
             } finally {
               kv.close();
             }
@@ -70,7 +74,10 @@ Deno.test({
               payload.user_verified_fields?.display_name,
               "Alice Token",
             );
-            assertEquals(payload.admin_verified_fields?.display_name, undefined);
+            assertEquals(
+              payload.admin_verified_fields?.display_name,
+              undefined,
+            );
             assertEquals(payload.admin_verified_fields?.title, "Professor");
             assertEquals(payload.verified_fields?.display_name, "Alice Token");
             assertEquals(payload.verified_fields?.title, "Professor");
@@ -89,8 +96,14 @@ Deno.test({
               admin_verified_fields?: Record<string, string>;
               verified_fields?: Record<string, string>;
             };
-            assertEquals(getPayload.admin_verified_fields?.display_name, undefined);
-            assertEquals(getPayload.verified_fields?.display_name, "Alice Token");
+            assertEquals(
+              getPayload.admin_verified_fields?.display_name,
+              undefined,
+            );
+            assertEquals(
+              getPayload.verified_fields?.display_name,
+              "Alice Token",
+            );
           },
         );
 

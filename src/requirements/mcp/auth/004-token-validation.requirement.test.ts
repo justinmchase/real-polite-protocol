@@ -51,7 +51,12 @@ Deno.test({
           const token = await issueToken({ scope: requiredScopes[0] });
           const tampered = tamperPayloadWithoutResigning(token);
 
-          await assertAuthFailure(tampered, 401, "E_INVALID_SIGNATURE", baseUrl);
+          await assertAuthFailure(
+            tampered,
+            401,
+            "E_INVALID_SIGNATURE",
+            baseUrl,
+          );
         });
 
         await t.step(
@@ -61,7 +66,12 @@ Deno.test({
               scope: `${testAudience}/custom.scope`,
             });
 
-            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE", baseUrl);
+            await assertAuthFailure(
+              token,
+              403,
+              "E_INSUFFICIENT_SCOPE",
+              baseUrl,
+            );
           },
         );
 

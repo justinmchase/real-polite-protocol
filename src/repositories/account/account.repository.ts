@@ -7,12 +7,12 @@ import {
   DomainIdAssignConflictError,
 } from "../../tools/domain-admin/domain-admin.error.ts";
 import {
-  type PaginatedResult,
-  type PaginationInput,
   InvalidResumeTokenError,
   nextResumeToken,
   normalizePageSize,
   normalizeResumeToken,
+  type PaginatedResult,
+  type PaginationInput,
 } from "../../utils/mod.ts";
 
 const VERIFIED_METADATA_PREFIX: Deno.KvKey = ["accounts", "verified_metadata"];
@@ -112,7 +112,10 @@ export class AccountRepository {
     if (existing.value.domain_id) {
       return existing.value;
     }
-    const updated: Account = { ...existing.value, domain_id: crypto.randomUUID() };
+    const updated: Account = {
+      ...existing.value,
+      domain_id: crypto.randomUUID(),
+    };
     const result = await this.kv.store.atomic()
       .check(existing)
       .set(key, updated)

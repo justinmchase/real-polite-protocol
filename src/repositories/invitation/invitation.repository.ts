@@ -22,14 +22,16 @@ export class InvitationRepository {
     // List all invitations for a receiver by scanning with a prefix
     // This is not efficient for large datasets but works for demonstration
     const results: Invitation[] = [];
-    
-    for await (const entry of this.kv.store.list({ prefix: INVITATION_PREFIX })) {
+
+    for await (
+      const entry of this.kv.store.list({ prefix: INVITATION_PREFIX })
+    ) {
       const invitation = entry.value as Invitation;
       if (invitation.receiver_oid === oid) {
         results.push(invitation);
       }
     }
-    
+
     return results;
   }
 }

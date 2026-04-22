@@ -22,7 +22,8 @@ claim.
 
 - When a new account is created (on first authenticated request, per
   `account-002`), the server assigns a new UUID as the account's `domain_id`.
-- The `domain_id` is stored on the `Account` record alongside the `oid` and `id`.
+- The `domain_id` is stored on the `Account` record alongside the `oid` and
+  `id`.
 - The `domain_id` is NOT derived from, and NOT the same as, the token `oid`.
 - The `domain_id` MUST be stable: once assigned at creation, it MUST NOT change
   for the lifetime of the account.

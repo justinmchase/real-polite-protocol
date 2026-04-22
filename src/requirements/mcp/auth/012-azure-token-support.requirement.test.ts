@@ -115,7 +115,12 @@ Deno.test({
               scp: "some.other.scope",
             });
 
-            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE", baseUrl);
+            await assertAuthFailure(
+              token,
+              403,
+              "E_INSUFFICIENT_SCOPE",
+              baseUrl,
+            );
           },
         );
       });

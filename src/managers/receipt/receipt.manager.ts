@@ -1,6 +1,13 @@
-import type { Receipt, ReceiptTerms, RevocationReason } from "../../models/mod.ts";
+import type {
+  Receipt,
+  ReceiptTerms,
+  RevocationReason,
+} from "../../models/mod.ts";
 import type { ReceiptRepository } from "../../repositories/mod.ts";
-import type { ListReceiptsOptions, ListReceiptsResult } from "../../repositories/receipt/receipt.repository.ts";
+import type {
+  ListReceiptsOptions,
+  ListReceiptsResult,
+} from "../../repositories/receipt/receipt.repository.ts";
 import {
   ReceiptAlreadyRevokedError,
   ReceiptNotFoundError,
@@ -46,7 +53,10 @@ export class ReceiptManager {
     return await this.receipts.get(id);
   }
 
-  async listIssuedByOid(oid: string, opts?: ListReceiptsOptions): Promise<ListReceiptsResult> {
+  async listIssuedByOid(
+    oid: string,
+    opts?: ListReceiptsOptions,
+  ): Promise<ListReceiptsResult> {
     return await this.receipts.listByOid(oid, opts);
   }
 

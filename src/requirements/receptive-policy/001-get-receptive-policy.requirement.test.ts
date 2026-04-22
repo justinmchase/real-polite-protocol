@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:receptive-policy-001 - Listeners can list their receptive policies",
+  name:
+    "req:receptive-policy-001 - Listeners can list their receptive policies",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ callTool }) => {

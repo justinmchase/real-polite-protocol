@@ -15,13 +15,14 @@ const testMessage = {
 };
 
 Deno.test({
-  name: "req:submit-002 - Submit requests are authenticated with receipt-based HMAC signatures",
+  name:
+    "req:submit-002 - Submit requests are authenticated with receipt-based HMAC signatures",
   ignore: true,
   fn: async (t) => {
     // TODO: implement after invitations system exists to issue test receipts
-      await withStartedServer(async ({ kvPath, baseUrl }) => {
+    await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
-      
+
       try {
         // Create a test receipt
         const receiptId = crypto.randomUUID();
@@ -35,62 +36,83 @@ Deno.test({
         const bodyBytes = new TextEncoder().encode(bodyJson);
         const timestamp = new Date().toISOString();
 
-        await t.step("Rejects requests with missing x-rpp-receipt-id header", async () => {
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-          
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-          
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.error.code, "MISSING_RECEIPT_ID");
-        });
+        await t.step(
+          "Rejects requests with missing x-rpp-receipt-id header",
+          async () => {
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
 
-        await t.step("Rejects requests with missing x-rpp-signature header", async () => {
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-          
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.error.code, "MISSING_SIGNATURE");
-        });
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
 
-        await t.step("Rejects requests with missing x-rpp-timestamp header", async () => {
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-          
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-            },
-            body: bodyJson,
-          });
-          
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.error.code, "MISSING_TIMESTAMP");
-        });
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.error.code, "MISSING_RECEIPT_ID");
+          },
+        );
+
+        await t.step(
+          "Rejects requests with missing x-rpp-signature header",
+          async () => {
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.error.code, "MISSING_SIGNATURE");
+          },
+        );
+
+        await t.step(
+          "Rejects requests with missing x-rpp-timestamp header",
+          async () => {
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.error.code, "MISSING_TIMESTAMP");
+          },
+        );
 
         await t.step("Rejects requests with unknown receipt ID", async () => {
           const unknownReceiptId = crypto.randomUUID();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-          
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
+
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
@@ -101,7 +123,7 @@ Deno.test({
             },
             body: bodyJson,
           });
-          
+
           assertEquals(response.status, 403);
           const payload = await response.json();
           assertEquals(payload.error.code, "RECEIPT_NOT_FOUND");
@@ -109,7 +131,7 @@ Deno.test({
 
         await t.step("Rejects requests with invalid signature", async () => {
           const invalidSignature = "0".repeat(64);
-          
+
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
@@ -120,32 +142,39 @@ Deno.test({
             },
             body: bodyJson,
           });
-          
+
           assertEquals(response.status, 403);
           const payload = await response.json();
           assertEquals(payload.error.code, "RECEIPT_INVALID_SIGNATURE");
         });
 
-        await t.step("Accepts requests with valid receipt and signature", async () => {
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-          
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-          
-          assertEquals(response.status, 202);
-          const payload = await response.json();
-          assertEquals(payload.ok, true);
-          assertEquals(payload.accepted, true);
-          assertExists(payload.message_id);
-        });
+        await t.step(
+          "Accepts requests with valid receipt and signature",
+          async () => {
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 202);
+            const payload = await response.json();
+            assertEquals(payload.ok, true);
+            assertEquals(payload.accepted, true);
+            assertExists(payload.message_id);
+          },
+        );
       } finally {
         kv.close();
       }

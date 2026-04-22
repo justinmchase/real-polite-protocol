@@ -15,7 +15,8 @@ const validMessageEnvelope = {
 };
 
 Deno.test({
-  name: "req:submit-004 - Submit requests validate the base message envelope before acceptance",
+  name:
+    "req:submit-004 - Submit requests validate the base message envelope before acceptance",
   fn: async (t) => {
     await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
@@ -32,7 +33,11 @@ Deno.test({
         await t.step("Rejects requests with invalid JSON body", async () => {
           const timestamp = new Date().toISOString();
           const bodyBytes = new TextEncoder().encode("not valid json");
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
@@ -55,12 +60,20 @@ Deno.test({
             sender_domain: "sender.example",
             category: "message",
             sent_at: "2026-04-20T00:00:00Z",
-            message: { content_rating: "G", subject: "Test", body: { content_type: "text/markdown", content: "Hello" } },
+            message: {
+              content_rating: "G",
+              subject: "Test",
+              body: { content_type: "text/markdown", content: "Hello" },
+            },
           };
           const bodyJson = JSON.stringify(message);
           const bodyBytes = new TextEncoder().encode(bodyJson);
           const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
@@ -78,45 +91,64 @@ Deno.test({
           assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
         });
 
-        await t.step("Rejects requests with missing sender_domain", async () => {
-          const message = {
-            message_id: crypto.randomUUID(),
-            category: "message",
-            sent_at: "2026-04-20T00:00:00Z",
-            message: { content_rating: "G", subject: "Test", body: { content_type: "text/markdown", content: "Hello" } },
-          };
-          const bodyJson = JSON.stringify(message);
-          const bodyBytes = new TextEncoder().encode(bodyJson);
-          const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+        await t.step(
+          "Rejects requests with missing sender_domain",
+          async () => {
+            const message = {
+              message_id: crypto.randomUUID(),
+              category: "message",
+              sent_at: "2026-04-20T00:00:00Z",
+              message: {
+                content_rating: "G",
+                subject: "Test",
+                body: { content_type: "text/markdown", content: "Hello" },
+              },
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
 
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
-        });
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
 
         await t.step("Rejects requests with missing category", async () => {
           const message = {
             message_id: crypto.randomUUID(),
             sender_domain: "sender.example",
             sent_at: "2026-04-20T00:00:00Z",
-            message: { content_rating: "G", subject: "Test", body: { content_type: "text/markdown", content: "Hello" } },
+            message: {
+              content_rating: "G",
+              subject: "Test",
+              body: { content_type: "text/markdown", content: "Hello" },
+            },
           };
           const bodyJson = JSON.stringify(message);
           const bodyBytes = new TextEncoder().encode(bodyJson);
           const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
@@ -139,131 +171,20 @@ Deno.test({
             message_id: crypto.randomUUID(),
             sender_domain: "sender.example",
             category: "message",
-            message: { content_rating: "G", subject: "Test", body: { content_type: "text/markdown", content: "Hello" } },
-          };
-          const bodyJson = JSON.stringify(message);
-          const bodyBytes = new TextEncoder().encode(bodyJson);
-          const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
-        });
-
-        await t.step("Rejects invitation envelope missing the invitation block", async () => {
-          const message = {
-            message_id: crypto.randomUUID(),
-            sender_domain: "sender.example",
-            category: "invitation",
-            sent_at: "2026-04-20T00:00:00Z",
-            // invitation block intentionally omitted
-          };
-          const bodyJson = JSON.stringify(message);
-          const bodyBytes = new TextEncoder().encode(bodyJson);
-          const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
-        });
-
-        await t.step("Rejects invitation envelope missing receptive_policy_id", async () => {
-          const message = {
-            message_id: crypto.randomUUID(),
-            sender_domain: "sender.example",
-            category: "invitation",
-            sent_at: "2026-04-20T00:00:00Z",
-            invitation: {
-              // receptive_policy_id intentionally omitted
-              proposed_terms: {},
-            },
-          };
-          const bodyJson = JSON.stringify(message);
-          const bodyBytes = new TextEncoder().encode(bodyJson);
-          const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
-        });
-
-        await t.step("Rejects message envelope missing the message block", async () => {
-          const message = {
-            message_id: crypto.randomUUID(),
-            sender_domain: "sender.example",
-            category: "message",
-            sent_at: "2026-04-20T00:00:00Z",
-            // message block intentionally omitted
-          };
-          const bodyJson = JSON.stringify(message);
-          const bodyBytes = new TextEncoder().encode(bodyJson);
-          const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
-
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": signature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-
-          assertEquals(response.status, 400);
-          const payload = await response.json();
-          assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
-        });
-
-        await t.step("Rejects message envelope with invalid body content_type", async () => {
-          const message = {
-            ...validMessageEnvelope,
             message: {
-              ...validMessageEnvelope.message,
-              body: { content_type: "application/json", content: "Hello" },
+              content_rating: "G",
+              subject: "Test",
+              body: { content_type: "text/markdown", content: "Hello" },
             },
           };
           const bodyJson = JSON.stringify(message);
           const bodyBytes = new TextEncoder().encode(bodyJson);
           const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
@@ -280,6 +201,153 @@ Deno.test({
           const payload = await response.json();
           assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
         });
+
+        await t.step(
+          "Rejects invitation envelope missing the invitation block",
+          async () => {
+            const message = {
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "invitation",
+              sent_at: "2026-04-20T00:00:00Z",
+              // invitation block intentionally omitted
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        await t.step(
+          "Rejects invitation envelope missing receptive_policy_id",
+          async () => {
+            const message = {
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "invitation",
+              sent_at: "2026-04-20T00:00:00Z",
+              invitation: {
+                // receptive_policy_id intentionally omitted
+                proposed_terms: {},
+              },
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        await t.step(
+          "Rejects message envelope missing the message block",
+          async () => {
+            const message = {
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "message",
+              sent_at: "2026-04-20T00:00:00Z",
+              // message block intentionally omitted
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        await t.step(
+          "Rejects message envelope with invalid body content_type",
+          async () => {
+            const message = {
+              ...validMessageEnvelope,
+              message: {
+                ...validMessageEnvelope.message,
+                body: { content_type: "application/json", content: "Hello" },
+              },
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
 
         await t.step("Rejects requests exceeding 256 KB", async () => {
           // Create a message that when JSON-encoded exceeds 256 KB
@@ -288,13 +356,20 @@ Deno.test({
             ...validMessageEnvelope,
             message: {
               ...validMessageEnvelope.message,
-              body: { content_type: "text/markdown" as const, content: largeContent },
+              body: {
+                content_type: "text/markdown" as const,
+                content: largeContent,
+              },
             },
           };
           const bodyJson = JSON.stringify(message);
           const bodyBytes = new TextEncoder().encode(bodyJson);
           const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
@@ -317,7 +392,11 @@ Deno.test({
           const bodyJson = JSON.stringify(validMessageEnvelope);
           const bodyBytes = new TextEncoder().encode(bodyJson);
           const timestamp = new Date().toISOString();
-          const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
+          const signature = await computeHmac(
+            receiptSecret,
+            timestamp,
+            bodyBytes,
+          );
 
           const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",

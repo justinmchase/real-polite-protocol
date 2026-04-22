@@ -154,7 +154,11 @@ export class AuthService {
   private async verifyJwt(token: string): Promise<JwtPayload> {
     const parts = token.split(".");
     if (parts.length !== 3) {
-      throw new AuthError("Invalid token format", 401, "E_INVALID_TOKEN_FORMAT");
+      throw new AuthError(
+        "Invalid token format",
+        401,
+        "E_INVALID_TOKEN_FORMAT",
+      );
     }
 
     const header = JSON.parse(this.decodeBase64Url(parts[0])) as JwtHeader;

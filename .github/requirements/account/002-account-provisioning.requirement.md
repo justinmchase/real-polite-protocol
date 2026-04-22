@@ -27,6 +27,6 @@ principal MUST resolve to the same existing Account without creating duplicates.
   map.
 - Provisioning also initializes an empty `admin_verified_fields` map for the
   account when no verified metadata record exists yet.
-- Provisioning seeds the verified metadata record only when that record does
-  not already exist; subsequent authenticated requests do not overwrite either
+- Provisioning seeds the verified metadata record only when that record does not
+  already exist; subsequent authenticated requests do not overwrite either
   source automatically.

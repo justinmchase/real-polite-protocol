@@ -20,7 +20,11 @@ export async function initControllers(
   await new HealthController().use(app);
   await new IsHtmlController().use(app);
   await new LogController().use(app);
-  await new SubmitController(context.services.kv, context.managers.invitations, context.managers.receptivePolicy).use(app);
+  await new SubmitController(
+    context.services.kv,
+    context.managers.invitations,
+    context.managers.receptivePolicy,
+  ).use(app);
   await new AuthDiscoveryController(context.services.config).use(app);
   await new AuthMiddleware(context.services.auth).use(app);
   await new McpController(

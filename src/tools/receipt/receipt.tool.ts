@@ -23,13 +23,23 @@ const ReceiptOutputSchema = {
   sender_domain: z.string().describe("Domain this receipt was issued to"),
   category: CategorySchema.describe("Permitted message category"),
   max_content_rating: ContentRatingSchema.describe("Maximum content rating"),
-  usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe("Usage policy"),
-  status: z.enum(["active", "revoked", "expired"]).describe("Current lifecycle state"),
+  usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe(
+    "Usage policy",
+  ),
+  status: z.enum(["active", "revoked", "expired"]).describe(
+    "Current lifecycle state",
+  ),
   invitation_id: z.string().optional().describe("Source invitation ID"),
   issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
-  revoked_at: z.iso.datetime().optional().describe("ISO 8601 timestamp of revocation"),
-  revocation_reason: RevocationReasonSchema.optional().describe("Structured revocation reason"),
-  revocation_detail: z.string().optional().describe("Human-readable revocation context"),
+  revoked_at: z.iso.datetime().optional().describe(
+    "ISO 8601 timestamp of revocation",
+  ),
+  revocation_reason: RevocationReasonSchema.optional().describe(
+    "Structured revocation reason",
+  ),
+  revocation_detail: z.string().optional().describe(
+    "Human-readable revocation context",
+  ),
 };
 
 const ListIssuedReceiptsInputSchema = {
@@ -63,7 +73,9 @@ const RevokeReceiptInputSchema = {
   ),
 };
 
-type ListIssuedReceiptsArgs = z.infer<z.ZodObject<typeof ListIssuedReceiptsInputSchema>>;
+type ListIssuedReceiptsArgs = z.infer<
+  z.ZodObject<typeof ListIssuedReceiptsInputSchema>
+>;
 type RevokeReceiptArgs = z.infer<z.ZodObject<typeof RevokeReceiptInputSchema>>;
 
 export class ReceiptTool {
@@ -79,12 +91,13 @@ export class ReceiptTool {
         outputSchema: ListIssuedReceiptsOutputSchema,
       },
       withToolErrorHandling(async (params: ListIssuedReceiptsArgs) => {
-        const { receipts, nextCursor } = await this.receiptManager.listIssuedByOid(auth.oid, {
-          status: params.status,
-          senderDomain: params.sender_domain,
-          pageSize: params.page_size,
-          cursor: params.resume_token,
-        });
+        const { receipts, nextCursor } = await this.receiptManager
+          .listIssuedByOid(auth.oid, {
+            status: params.status,
+            senderDomain: params.sender_domain,
+            pageSize: params.page_size,
+            cursor: params.resume_token,
+          });
 
         return toolResult({
           receipts,

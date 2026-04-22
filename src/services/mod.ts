@@ -13,13 +13,14 @@ export interface Services {
 
 export interface ServiceInitOptions {
   kvPath?: string;
+  port?: number;
 }
 
 export async function initServices(
   logger: Logger,
   options: ServiceInitOptions = {},
 ): Promise<Services> {
-  const config = await ConfigService.create();
+  const config = await ConfigService.create(options.port);
   const kv = await KvService.create(logger, options.kvPath ?? config.kvPath);
   const mcp = McpService.create();
   const auth = AuthService.create(logger, config);

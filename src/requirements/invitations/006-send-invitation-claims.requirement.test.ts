@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:invitations-006 - Senders can attach verified and custom claims to outgoing invitations",
+  name:
+    "req:invitations-006 - Senders can attach verified and custom claims to outgoing invitations",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ baseUrl, callTool }) => {
@@ -31,87 +32,112 @@ Deno.test({
         const policyId = windowPolicy.policy_id;
         const receiverDomain = new URL(baseUrl).host;
 
-        await t.step("send_invitation with no claim inputs succeeds and omits claims", async () => {
-          const { status, result } = await callTool<{ invitation_id?: string }>(
-            token,
-            "send_invitation",
-            {
-              receiver_domain: receiverDomain,
-              receptive_policy_id: policyId,
-              proposed_terms: { category: "correspondence" },
-              // no include_user_claims, include_admin_claims, or custom_claims
-            },
-          );
+        await t.step(
+          "send_invitation with no claim inputs succeeds and omits claims",
+          async () => {
+            const { status, result } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                // no include_user_claims, include_admin_claims, or custom_claims
+              },
+            );
 
-          assertEquals(status, 200);
-          assertExists(result?.invitation_id);
-        });
+            assertEquals(status, 200);
+            assertExists(result?.invitation_id);
+          },
+        );
 
-        await t.step("include_user_claims resolves values from stored user_verified_fields", async () => {
-          const { status, result } = await callTool<{ invitation_id?: string }>(
-            token,
-            "send_invitation",
-            {
-              receiver_domain: receiverDomain,
-              receptive_policy_id: policyId,
-              proposed_terms: { category: "correspondence" },
-              include_user_claims: ["name", "email"],
-            },
-          );
+        await t.step(
+          "include_user_claims resolves values from stored user_verified_fields",
+          async () => {
+            const { status, result } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                include_user_claims: ["name", "email"],
+              },
+            );
 
-          assertEquals(status, 200);
-          assertExists(result?.invitation_id);
-        });
+            assertEquals(status, 200);
+            assertExists(result?.invitation_id);
+          },
+        );
 
-        await t.step("missing keys in include_user_claims are silently dropped", async () => {
-          // "nonexistent_key" does not exist in stored metadata — tool must not error.
-          const { status, result } = await callTool<{ invitation_id?: string }>(
-            token,
-            "send_invitation",
-            {
-              receiver_domain: receiverDomain,
-              receptive_policy_id: policyId,
-              proposed_terms: { category: "correspondence" },
-              include_user_claims: ["name", "nonexistent_key"],
-            },
-          );
+        await t.step(
+          "missing keys in include_user_claims are silently dropped",
+          async () => {
+            // "nonexistent_key" does not exist in stored metadata — tool must not error.
+            const { status, result } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                include_user_claims: ["name", "nonexistent_key"],
+              },
+            );
 
-          assertEquals(status, 200);
-          assertExists(result?.invitation_id);
-        });
+            assertEquals(status, 200);
+            assertExists(result?.invitation_id);
+          },
+        );
 
-        await t.step("custom_claims are included verbatim in the envelope", async () => {
-          const { status, result } = await callTool<{ invitation_id?: string }>(
-            token,
-            "send_invitation",
-            {
-              receiver_domain: receiverDomain,
-              receptive_policy_id: policyId,
-              proposed_terms: { category: "correspondence" },
-              custom_claims: { note: "We met at the conference", year: 2026 },
-            },
-          );
+        await t.step(
+          "custom_claims are included verbatim in the envelope",
+          async () => {
+            const { status, result } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                custom_claims: { note: "We met at the conference", year: 2026 },
+              },
+            );
 
-          assertEquals(status, 200);
-          assertExists(result?.invitation_id);
-        });
+            assertEquals(status, 200);
+            assertExists(result?.invitation_id);
+          },
+        );
 
-        await t.step("all three claim types can be combined in one invitation", async () => {
-          const { status, result } = await callTool<{ invitation_id?: string }>(
-            token,
-            "send_invitation",
-            {
-              receiver_domain: receiverDomain,
-              receptive_policy_id: policyId,
-              proposed_terms: { category: "correspondence" },
-              include_user_claims: ["name"],
-              custom_claims: { reason: "Follow-up from summit" },
-            },
-          );
+        await t.step(
+          "all three claim types can be combined in one invitation",
+          async () => {
+            const { status, result } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                include_user_claims: ["name"],
+                custom_claims: { reason: "Follow-up from summit" },
+              },
+            );
 
-          assertEquals(status, 200);
-          assertExists(result?.invitation_id);
-        });
+            assertEquals(status, 200);
+            assertExists(result?.invitation_id);
+          },
+        );
       });
     });
   },

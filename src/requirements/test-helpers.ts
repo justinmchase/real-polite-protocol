@@ -16,7 +16,9 @@ export interface StartedServerContext {
     toolName: string,
     args?: Record<string, unknown>,
   ) => Promise<ToolCallResult<T>>;
-  submitMessage: (opts: Omit<SubmitMessageOptions, "baseUrl">) => Promise<Response>;
+  submitMessage: (
+    opts: Omit<SubmitMessageOptions, "baseUrl">,
+  ) => Promise<Response>;
   callGetPermissions: (
     token: string,
     args?: Record<string, unknown>,
@@ -44,7 +46,9 @@ export async function callTool<T = unknown>(
     }),
   });
   const body = await response.json() as Record<string, unknown>;
-  const rawResult = body.result as { content?: Array<{ text?: string }> } | undefined;
+  const rawResult = body.result as
+    | { content?: Array<{ text?: string }> }
+    | undefined;
   const text = rawResult?.content?.[0]?.text;
   let result: T | undefined;
   if (text !== undefined) {
@@ -92,7 +96,9 @@ export interface SubmitMessageOptions {
   baseUrl?: string;
 }
 
-export async function submitMessage(opts: SubmitMessageOptions): Promise<Response> {
+export async function submitMessage(
+  opts: SubmitMessageOptions,
+): Promise<Response> {
   const {
     receiptId,
     receiptSecret,
@@ -173,7 +179,7 @@ export async function callGetPermissions(
 
 // ---------- Free-port helper ----------
 
-async function getFreePort(): Promise<number> {
+function getFreePort(): number {
   const listener = Deno.listen({ port: 0 });
   const port = (listener.addr as Deno.NetAddr).port;
   listener.close();
@@ -183,7 +189,7 @@ async function getFreePort(): Promise<number> {
 export async function withStartedServer(
   run: (context: StartedServerContext) => Promise<void>,
 ): Promise<void> {
-  const port = await getFreePort();
+  const port = getFreePort();
   const baseUrl = `http://localhost:${port}`;
   const kvDir = await Deno.makeTempDir({ prefix: "rpp-test-kv-" });
   const kvPath = `${kvDir}/kv.sqlite3`;

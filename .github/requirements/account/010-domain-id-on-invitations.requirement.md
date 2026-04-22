@@ -12,9 +12,9 @@ selection.
 
 ## Motivation
 
-Without a stable sender identifier, the receiver has no reliable basis for
-abuse reporting. Display names and email addresses are user-controlled and can
-be changed. The OAuth `oid` is not transmitted across domain boundaries (Section
+Without a stable sender identifier, the receiver has no reliable basis for abuse
+reporting. Display names and email addresses are user-controlled and can be
+changed. The OAuth `oid` is not transmitted across domain boundaries (Section
 3A). The `domain_id` is the only stable, server-controlled, per-account
 identifier that safely crosses the invitation boundary without exposing internal
 system identifiers.
@@ -22,8 +22,8 @@ system identifiers.
 ## Expected Behavior
 
 - When `send_invitation` builds the invitation envelope, the server MUST always
-  inject `admin_verified["domain_id"] = <sender's domain_id>` into the
-  `claims` object, regardless of what the caller passes in `include_admin_claims`.
+  inject `admin_verified["domain_id"] = <sender's domain_id>` into the `claims`
+  object, regardless of what the caller passes in `include_admin_claims`.
 - If the caller also requests other admin-verified claims via
   `include_admin_claims`, those are resolved and merged; `domain_id` is always
   present in addition to any caller-requested keys.
@@ -33,5 +33,5 @@ system identifiers.
 - The injected `domain_id` value is always taken from `admin_verified_fields`
   (the server-assigned value), never from `user_verified_fields`.
 - The receiver stores the full `claims` object on the invitation record,
-  including the `admin_verified.domain_id` field, making it available for
-  future abuse reporting workflows.
+  including the `admin_verified.domain_id` field, making it available for future
+  abuse reporting workflows.

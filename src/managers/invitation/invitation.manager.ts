@@ -1,4 +1,9 @@
-import type { Invitation, Receipt, ReceiptTerms } from "../../models/mod.ts";
+import type {
+  Invitation,
+  InvitationClaims,
+  Receipt,
+  ReceiptTerms,
+} from "../../models/mod.ts";
 import type { InvitationRepository } from "../../repositories/mod.ts";
 import type { ReceiptManager } from "../receipt/receipt.manager.ts";
 import {
@@ -16,8 +21,8 @@ export class InvitationManager {
     invitationId: string,
     receiverOid: string,
     senderDomain: string,
-    proposedTerms: Record<string, unknown>,
-    claims: { user_verified?: Record<string, unknown>; admin_verified?: Record<string, unknown>; custom?: Record<string, unknown> } | undefined,
+    proposedTerms: ReceiptTerms,
+    claims: InvitationClaims | undefined,
     expiresAt: string | undefined,
     messageId?: string,
   ): Promise<Invitation> {
@@ -26,7 +31,7 @@ export class InvitationManager {
       receiver_oid: receiverOid,
       sender_domain: senderDomain,
       status: "pending",
-      proposed_terms: proposedTerms as Record<string, unknown>,
+      proposed_terms: proposedTerms,
       ...(claims !== undefined && { claims }),
       ...(expiresAt !== undefined && { expires_at: expiresAt }),
       created_at: new Date().toISOString(),
@@ -106,4 +111,3 @@ export class InvitationManager {
     return await this.invitations.set(updated);
   }
 }
-

@@ -32,7 +32,10 @@ Deno.test({
             const config = await ConfigService.create();
 
             assertEquals(config.kvPath, kvPath);
-            assertEquals(await Deno.stat(kvPath).then(() => true).catch(() => false), true);
+            assertEquals(
+              await Deno.stat(kvPath).then(() => true).catch(() => false),
+              true,
+            );
           } finally {
             services.kv.close();
             await Deno.remove(kvDir, { recursive: true });

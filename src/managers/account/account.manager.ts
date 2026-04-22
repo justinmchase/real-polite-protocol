@@ -6,7 +6,10 @@ import type {
 } from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
 import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
-import { ImmutableFieldConflictError, VerifiedMetadataValueTooLongError } from "../../tools/domain-admin/domain-admin.error.ts";
+import {
+  ImmutableFieldConflictError,
+  VerifiedMetadataValueTooLongError,
+} from "../../tools/domain-admin/domain-admin.error.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
 
@@ -152,7 +155,10 @@ export class AccountManager {
     const adminVerifiedFields = { ...(existing?.admin_verified_fields ?? {}) };
     delete adminVerifiedFields[field];
 
-    return await this.accounts.setAdminVerifiedMetadata(oid, adminVerifiedFields);
+    return await this.accounts.setAdminVerifiedMetadata(
+      oid,
+      adminVerifiedFields,
+    );
   }
 
   async listVerifiableUsers(

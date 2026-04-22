@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { KvService } from "../../services/kv/kv.service.ts";
-import type { InvitationManager, ReceptivePolicyManager } from "../../managers/mod.ts";
+import type {
+  InvitationManager,
+  ReceptivePolicyManager,
+} from "../../managers/mod.ts";
+import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
+import { CONTENT_RATINGS } from "../../models/content-rating.ts";
 import {
   MissingReceiptIdError,
   MissingSignatureError,
@@ -20,11 +25,20 @@ const ClaimValueSchema = z.union([
   z.number(),
   z.boolean(),
   z.null(),
-  z.array(z.union([z.string().max(512), z.number(), z.boolean(), z.null()])).max(20),
+  z.array(z.union([z.string().max(512), z.number(), z.boolean(), z.null()]))
+    .max(20),
 ]);
 
 const ClaimMapSchema = z.record(z.string().max(64), ClaimValueSchema)
   .refine((v) => Object.keys(v).length <= 20);
+
+const ReceiptTermsSchema = z.object({
+  category: z.enum(MESSAGE_CATEGORIES),
+  max_content_rating: z.enum(CONTENT_RATINGS).optional(),
+  usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).optional(),
+  validity_constraints: z.record(z.string(), z.unknown()).optional(),
+  interval_budget: z.number().int().positive().optional(),
+}).catchall(z.unknown());
 
 export const InvitationEnvelopeSchema = z.object({
   message_id: z.string(),
@@ -33,7 +47,7 @@ export const InvitationEnvelopeSchema = z.object({
   sent_at: z.string().datetime(),
   invitation: z.object({
     receptive_policy_id: z.string().uuid(),
-    proposed_terms: z.record(z.string(), z.unknown()),
+    proposed_terms: ReceiptTermsSchema,
     claims: z.object({
       immutable: ClaimMapSchema,
       user: ClaimMapSchema.optional(),
@@ -98,11 +112,15 @@ export class InvitationMessageHandler implements MessageHandler {
   ): Promise<{ messageId: string }> {
     const { invitation } = body as InvitationEnvelope;
 
-    const policy = await this.receptivePolicyManager.getById(invitation.receptive_policy_id);
+    const policy = await this.receptivePolicyManager.getById(
+      invitation.receptive_policy_id,
+    );
     if (!policy) {
       throw new ReceptivePolicyNotFoundError(invitation.receptive_policy_id);
     }
-    if (policy.receptive_until && new Date(policy.receptive_until) < new Date()) {
+    if (
+      policy.receptive_until && new Date(policy.receptive_until) < new Date()
+    ) {
       throw new ReceptivePolicyExpiredError(invitation.receptive_policy_id);
     }
     if (policy.mode === "closed") {
@@ -215,7 +233,11 @@ export class ReceiptMessageHandler implements MessageHandler {
     combined.set(data, 0);
     combined.set(bodyBytes, data.length);
 
-    const computedSignature = await crypto.subtle.sign("HMAC", cryptoKey, combined);
+    const computedSignature = await crypto.subtle.sign(
+      "HMAC",
+      cryptoKey,
+      combined,
+    );
 
     const computedHex = Array.from(new Uint8Array(computedSignature))
       .map((b) => b.toString(16).padStart(2, "0"))

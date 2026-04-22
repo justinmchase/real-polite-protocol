@@ -5,12 +5,12 @@ import type {
 } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import {
-  type PaginatedResult,
-  type PaginationInput,
   InvalidResumeTokenError,
   nextResumeToken,
   normalizePageSize,
   normalizeResumeToken,
+  type PaginatedResult,
+  type PaginationInput,
 } from "../../utils/mod.ts";
 
 const DOMAIN_IDENTITY_KEY: Deno.KvKey = ["domain_identity"];

@@ -5,10 +5,9 @@ title: Submit requests are authenticated with receipt-based HMAC signatures
 
 # Submit HMAC Authentication
 
-The submit endpoint MUST use receipt-based, request-bound authentication
-instead of bearer tokens (Section 5.1). Each request is authorized by a
-previously issued receipt and authenticated by an HMAC over the raw request
-body.
+The submit endpoint MUST use receipt-based, request-bound authentication instead
+of bearer tokens (Section 5.1). Each request is authorized by a previously
+issued receipt and authenticated by an HMAC over the raw request body.
 
 ## Expected behavior
 

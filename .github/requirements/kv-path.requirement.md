@@ -5,8 +5,8 @@ title: Default local KV path is configurable
 
 # Configurable Local KV Path
 
-The reference implementation MUST use a configurable local Deno KV database
-path for non-test runtime storage.
+The reference implementation MUST use a configurable local Deno KV database path
+for non-test runtime storage.
 
 ## Expected behavior
 

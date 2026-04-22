@@ -13,8 +13,8 @@ their current bearer token.
 
 - The tool is available to any authenticated account (no `domain.admin` role
   required).
-- The tool reads identity claims from the caller's validated bearer token
-  (e.g. `name`, `email`, `preferred_username`) and stores them as the caller's
+- The tool reads identity claims from the caller's validated bearer token (e.g.
+  `name`, `email`, `preferred_username`) and stores them as the caller's
   `user_verified_fields`.
 - Each call replaces the caller's entire prior `user_verified_fields` map with
   the non-empty claims present in the current token. Claims absent from the
@@ -24,6 +24,6 @@ their current bearer token.
   source of truth for this operation.
 - In the effective merged `verified_fields` view, admin-supplied values remain
   authoritative for any field also present in `admin_verified_fields`.
-- After the call, the updated metadata is visible through `get_user_verified_metadata`
-  and `list_verifiable_users`.
+- After the call, the updated metadata is visible through
+  `get_user_verified_metadata` and `list_verifiable_users`.
 - The tool returns the resulting verified metadata record.

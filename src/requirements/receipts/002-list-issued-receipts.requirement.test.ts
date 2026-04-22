@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -56,29 +56,48 @@ Deno.test({
           assertExists(receiptIdA);
           assertExists(receiptIdB);
 
-          await t.step("list_issued_receipts returns all issued receipts for caller", async () => {
-            const { status, result } = await callTool<{
-              receipts: Array<{ id: string }>;
-              page_size: number;
-            }>(token, "list_issued_receipts", {});
+          await t.step(
+            "list_issued_receipts returns all issued receipts for caller",
+            async () => {
+              const { status, result } = await callTool<{
+                receipts: Array<{ id: string }>;
+                page_size: number;
+              }>(token, "list_issued_receipts", {});
 
-            assertEquals(status, 200);
-            assertExists(result);
-            const ids = result.receipts.map((r) => r.id);
-            assertEquals(ids.includes(receiptIdA), true);
-            assertEquals(ids.includes(receiptIdB), true);
-          });
+              assertEquals(status, 200);
+              assertExists(result);
+              const ids = result.receipts.map((r) => r.id);
+              assertEquals(ids.includes(receiptIdA), true);
+              assertEquals(ids.includes(receiptIdB), true);
+            },
+          );
 
-          await t.step("list_issued_receipts filters by sender_domain", async () => {
-            const { result } = await callTool<{
-              receipts: Array<{ id: string; sender_domain: string }>;
-            }>(token, "list_issued_receipts", { sender_domain: "alpha.example" });
+          await t.step(
+            "list_issued_receipts filters by sender_domain",
+            async () => {
+              const { result } = await callTool<{
+                receipts: Array<{ id: string; sender_domain: string }>;
+              }>(token, "list_issued_receipts", {
+                sender_domain: "alpha.example",
+              });
 
-            assertExists(result);
-            assertEquals(result.receipts.every((r) => r.sender_domain === "alpha.example"), true);
-            assertEquals(result.receipts.some((r) => r.id === receiptIdA), true);
-            assertEquals(result.receipts.some((r) => r.id === receiptIdB), false);
-          });
+              assertExists(result);
+              assertEquals(
+                result.receipts.every((r) =>
+                  r.sender_domain === "alpha.example"
+                ),
+                true,
+              );
+              assertEquals(
+                result.receipts.some((r) => r.id === receiptIdA),
+                true,
+              );
+              assertEquals(
+                result.receipts.some((r) => r.id === receiptIdB),
+                false,
+              );
+            },
+          );
 
           await t.step("list_issued_receipts filters by status", async () => {
             const { result } = await callTool<{
@@ -86,28 +105,37 @@ Deno.test({
             }>(token, "list_issued_receipts", { status: "active" });
 
             assertExists(result);
-            assertEquals(result.receipts.every((r) => r.status === "active"), true);
-            assertEquals(result.receipts.some((r) => r.id === receiptIdA), true);
+            assertEquals(
+              result.receipts.every((r) => r.status === "active"),
+              true,
+            );
+            assertEquals(
+              result.receipts.some((r) => r.id === receiptIdA),
+              true,
+            );
           });
 
-          await t.step("receipts from other accounts are not visible", async () => {
-            const otherOid = crypto.randomUUID();
-            const otherToken = await issueToken({
-              oid: otherOid,
-              scope: requiredScopes.join(" "),
-              name: "Other User",
-            });
-            await callTool(otherToken, "set_user_verified_metadata");
+          await t.step(
+            "receipts from other accounts are not visible",
+            async () => {
+              const otherOid = crypto.randomUUID();
+              const otherToken = await issueToken({
+                oid: otherOid,
+                scope: requiredScopes.join(" "),
+                name: "Other User",
+              });
+              await callTool(otherToken, "set_user_verified_metadata");
 
-            const { result } = await callTool<{
-              receipts: Array<{ id: string }>;
-            }>(otherToken, "list_issued_receipts", {});
+              const { result } = await callTool<{
+                receipts: Array<{ id: string }>;
+              }>(otherToken, "list_issued_receipts", {});
 
-            assertExists(result);
-            const ids = result.receipts.map((r) => r.id);
-            assertEquals(ids.includes(receiptIdA), false);
-            assertEquals(ids.includes(receiptIdB), false);
-          });
+              assertExists(result);
+              const ids = result.receipts.map((r) => r.id);
+              assertEquals(ids.includes(receiptIdA), false);
+              assertEquals(ids.includes(receiptIdB), false);
+            },
+          );
         } finally {
           kv.close();
         }

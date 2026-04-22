@@ -20,10 +20,10 @@ import {
   RequestStaleError,
 } from "./submit.error.ts";
 import {
-  type MessageHandler,
-  type SubmitMessageEnvelope,
   InvitationMessageHandler,
+  type MessageHandler,
   ReceiptMessageHandler,
+  type SubmitMessageEnvelope,
 } from "./message-handler.ts";
 
 // Discriminator enum for message categories
@@ -191,7 +191,11 @@ export class SubmitController extends Controller {
     combined.set(data, 0);
     combined.set(bodyBytes, data.length);
 
-    const computedSignature = await crypto.subtle.sign("HMAC", cryptoKey, combined);
+    const computedSignature = await crypto.subtle.sign(
+      "HMAC",
+      cryptoKey,
+      combined,
+    );
 
     const computedHex = Array.from(new Uint8Array(computedSignature))
       .map((b) => b.toString(16).padStart(2, "0"))

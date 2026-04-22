@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -31,50 +31,66 @@ Deno.test({
             sender_domain: "untrusted-partner.example",
             status: "pending",
             proposed_terms: { category: "billing" },
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+              .toISOString(),
             created_at: new Date().toISOString(),
           });
 
-          await t.step("reject_invitation transitions invitation to rejected", async () => {
-            const { status, result } = await callTool<{ status: string }>(token, "reject_invitation", {
-              invitation_id: invitationId,
-            });
+          await t.step(
+            "reject_invitation transitions invitation to rejected",
+            async () => {
+              const { status, result } = await callTool<{ status: string }>(
+                token,
+                "reject_invitation",
+                {
+                  invitation_id: invitationId,
+                },
+              );
 
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.status, "rejected");
-          });
+              assertEquals(status, 200);
+              assertExists(result);
+              assertEquals(result.status, "rejected");
+            },
+          );
 
-          await t.step("rejecting invitation prevents future interactions", async () => {
-            const invitationId2 = crypto.randomUUID();
+          await t.step(
+            "rejecting invitation prevents future interactions",
+            async () => {
+              const invitationId2 = crypto.randomUUID();
 
-            await kv.set(["invitations", invitationId2], {
-              invitation_id: invitationId2,
-              receiver_oid: accountOid,
-              sender_domain: "another-partner.example",
-              status: "pending",
-              proposed_terms: { category: "marketing" },
-              expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-              created_at: new Date().toISOString(),
-            });
+              await kv.set(["invitations", invitationId2], {
+                invitation_id: invitationId2,
+                receiver_oid: accountOid,
+                sender_domain: "another-partner.example",
+                status: "pending",
+                proposed_terms: { category: "marketing" },
+                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                  .toISOString(),
+                created_at: new Date().toISOString(),
+              });
 
-            // Reject the invitation
-            await callTool(token, "reject_invitation", {
-              invitation_id: invitationId2,
-            });
+              // Reject the invitation
+              await callTool(token, "reject_invitation", {
+                invitation_id: invitationId2,
+              });
 
-            // Try to accept the rejected invitation
-            await callTool(token, "accept_invitation", {
-              invitation_id: invitationId2,
-            });
+              // Try to accept the rejected invitation
+              await callTool(token, "accept_invitation", {
+                invitation_id: invitationId2,
+              });
 
-            // Should fail or the invitation should remain rejected
-            const reviewResult = await callTool<{ status: string }>(token, "review_invitation", {
-              invitation_id: invitationId2,
-            });
-            assertExists(reviewResult.result);
-            assertEquals(reviewResult.result.status, "rejected");
-          });
+              // Should fail or the invitation should remain rejected
+              const reviewResult = await callTool<{ status: string }>(
+                token,
+                "review_invitation",
+                {
+                  invitation_id: invitationId2,
+                },
+              );
+              assertExists(reviewResult.result);
+              assertEquals(reviewResult.result.status, "rejected");
+            },
+          );
         } finally {
           kv.close();
         }

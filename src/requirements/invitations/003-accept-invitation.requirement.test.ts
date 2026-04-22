@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -32,45 +32,62 @@ Deno.test({
             sender_domain: "partner.example",
             status: "pending",
             proposed_terms: proposedTerms,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+              .toISOString(),
             created_at: new Date().toISOString(),
           });
 
-          await t.step("accept_invitation transitions invitation to accepted", async () => {
-            const { status, result } = await callTool<{ status: string; accepted_at?: string }>(token, "accept_invitation", {
-              invitation_id: invitationId,
-            });
+          await t.step(
+            "accept_invitation transitions invitation to accepted",
+            async () => {
+              const { status, result } = await callTool<
+                { status: string; accepted_at?: string }
+              >(token, "accept_invitation", {
+                invitation_id: invitationId,
+              });
 
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.status, "accepted");
-            assertExists(result.accepted_at);
-          });
+              assertEquals(status, 200);
+              assertExists(result);
+              assertEquals(result.status, "accepted");
+              assertExists(result.accepted_at);
+            },
+          );
 
-          await t.step("accept_invitation can apply negotiated terms", async () => {
-            const invitationId2 = crypto.randomUUID();
-            const originalTerms = { category: "correspondence" };
-            const negotiatedTerms = { category: "correspondence", max_content_rating: "G" };
+          await t.step(
+            "accept_invitation can apply negotiated terms",
+            async () => {
+              const invitationId2 = crypto.randomUUID();
+              const originalTerms = { category: "correspondence" };
+              const negotiatedTerms = {
+                category: "correspondence",
+                max_content_rating: "G",
+              };
 
-            await kv.set(["invitations", invitationId2], {
-              invitation_id: invitationId2,
-              receiver_oid: accountOid,
-              sender_domain: "another-partner.example",
-              status: "pending",
-              proposed_terms: originalTerms,
-              expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-              created_at: new Date().toISOString(),
-            });
+              await kv.set(["invitations", invitationId2], {
+                invitation_id: invitationId2,
+                receiver_oid: accountOid,
+                sender_domain: "another-partner.example",
+                status: "pending",
+                proposed_terms: originalTerms,
+                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                  .toISOString(),
+                created_at: new Date().toISOString(),
+              });
 
-            const { status, result } = await callTool<{ status: string }>(token, "accept_invitation", {
-              invitation_id: invitationId2,
-              negotiated_terms: negotiatedTerms,
-            });
+              const { status, result } = await callTool<{ status: string }>(
+                token,
+                "accept_invitation",
+                {
+                  invitation_id: invitationId2,
+                  negotiated_terms: negotiatedTerms,
+                },
+              );
 
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.status, "accepted");
-          });
+              assertEquals(status, 200);
+              assertExists(result);
+              assertEquals(result.status, "accepted");
+            },
+          );
         } finally {
           kv.close();
         }

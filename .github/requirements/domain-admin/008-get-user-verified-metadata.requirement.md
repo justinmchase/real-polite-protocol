@@ -12,10 +12,10 @@ administrators to fetch verified metadata for one user.
 
 - The tool is available only to authenticated accounts with `domain.admin`.
 - The tool returns one record containing:
-	- `user_verified_fields`
-	- `admin_verified_fields`
-	- the effective merged `verified_fields`
-	- update timestamps for the record
+  - `user_verified_fields`
+  - `admin_verified_fields`
+  - the effective merged `verified_fields`
+  - update timestamps for the record
 - When the same field exists in both source maps, the effective merged value is
-	the admin-supplied value.
+  the admin-supplied value.
 - Missing users or metadata are reported using a stable error contract.

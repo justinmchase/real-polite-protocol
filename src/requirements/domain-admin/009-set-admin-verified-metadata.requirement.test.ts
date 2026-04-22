@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
@@ -22,16 +22,19 @@ Deno.test({
                 created_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });
-              await kv.set(["accounts", "verified_metadata", "oid-target-user"], {
-                oid: "oid-target-user",
-                user_verified_fields: {
-                  display_name: "Alice Token",
-                  email: "alice@example.test",
+              await kv.set(
+                ["accounts", "verified_metadata", "oid-target-user"],
+                {
+                  oid: "oid-target-user",
+                  user_verified_fields: {
+                    display_name: "Alice Token",
+                    email: "alice@example.test",
+                  },
+                  admin_verified_fields: {},
+                  user_updated_at: "2026-04-20T00:00:00.000Z",
+                  updated_at: "2026-04-20T00:00:00.000Z",
                 },
-                admin_verified_fields: {},
-                user_updated_at: "2026-04-20T00:00:00.000Z",
-                updated_at: "2026-04-20T00:00:00.000Z",
-              });
+              );
             } finally {
               kv.close();
             }
@@ -84,7 +87,10 @@ Deno.test({
             );
             assertEquals(payload.admin_verified_fields?.title, "Professor");
             assertEquals(payload.admin_verified_fields?.office, "CS-402");
-            assertEquals(payload.verified_fields?.display_name, "Dr. Alice Smith");
+            assertEquals(
+              payload.verified_fields?.display_name,
+              "Dr. Alice Smith",
+            );
             assertEquals(payload.verified_fields?.title, "Professor");
             assertEquals(payload.verified_fields?.office, "CS-402");
             assertEquals(payload.verified_fields?.email, "alice@example.test");
@@ -114,7 +120,10 @@ Deno.test({
               getPayload.admin_verified_fields?.display_name,
               "Dr. Alice Smith",
             );
-            assertEquals(getPayload.verified_fields?.display_name, "Dr. Alice Smith");
+            assertEquals(
+              getPayload.verified_fields?.display_name,
+              "Dr. Alice Smith",
+            );
 
             const listResult = await callTool(token, "list_verifiable_users");
             assertEquals(listResult.status, 200);
@@ -128,7 +137,9 @@ Deno.test({
                 verified_fields?: Record<string, string>;
               }>;
             };
-            const user = listPayload.users?.find((u) => u.oid === "oid-target-user");
+            const user = listPayload.users?.find((u) =>
+              u.oid === "oid-target-user"
+            );
             assertExists(user);
             assertEquals(user.verified_fields?.title, "Professor");
             assertEquals(user.verified_fields?.display_name, "Dr. Alice Smith");
@@ -170,7 +181,10 @@ Deno.test({
             };
 
             assertEquals(payload.ok, false);
-            assertEquals(payload.error?.code, "E_VERIFIED_METADATA_VALUE_TOO_LONG");
+            assertEquals(
+              payload.error?.code,
+              "E_VERIFIED_METADATA_VALUE_TOO_LONG",
+            );
             assertEquals(
               payload.error?.message,
               "Verified metadata value for field note exceeds maximum length 512",

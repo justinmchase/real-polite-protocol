@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import { requiredScopes, withAuthTestContext } from "./auth/test-helpers.ts";
 
 Deno.test({

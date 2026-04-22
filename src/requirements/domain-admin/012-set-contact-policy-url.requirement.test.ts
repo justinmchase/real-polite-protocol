@@ -1,12 +1,13 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { callTool, withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../test-helpers.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:domain-admin-012 - Domain administrators can set contact policy URL",
+  name:
+    "req:domain-admin-012 - Domain administrators can set contact policy URL",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ callTool }) => {
@@ -44,7 +45,9 @@ Deno.test({
               content?: Array<{ text?: string }>;
             }).content?.[0]?.text;
             assertExists(getText);
-            const getPayload = JSON.parse(getText) as { contact_policy_url?: string };
+            const getPayload = JSON.parse(getText) as {
+              contact_policy_url?: string;
+            };
             assertEquals(
               getPayload.contact_policy_url,
               "https://example.test/contact-policy",
@@ -85,7 +88,8 @@ Deno.test({
             assertEquals(status, 200);
 
             const hasError = body.error !== undefined ||
-              (body.result as { isError?: boolean } | undefined)?.isError === true;
+              (body.result as { isError?: boolean } | undefined)?.isError ===
+                true;
             assertEquals(
               hasError,
               true,

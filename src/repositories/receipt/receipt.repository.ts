@@ -39,17 +39,30 @@ export class ReceiptRepository {
    * @param previousStatus  If this is an update that changes status (e.g. revocation),
    *                        supply the old status so the stale index entries are removed.
    */
-  async set(receipt: Receipt, previousStatus?: ReceiptStatus): Promise<Receipt> {
+  async set(
+    receipt: Receipt,
+    previousStatus?: ReceiptStatus,
+  ): Promise<Receipt> {
     let op = this.kv.store
       .atomic()
       .set([...RECEIPT_PREFIX, receipt.id], receipt)
       .set([...RECEIPT_BY_OID_PREFIX, receipt.oid, receipt.id], receipt.id)
       .set(
-        [...RECEIPT_BY_OID_STATUS_PREFIX, receipt.oid, receipt.status, receipt.id],
+        [
+          ...RECEIPT_BY_OID_STATUS_PREFIX,
+          receipt.oid,
+          receipt.status,
+          receipt.id,
+        ],
         receipt.id,
       )
       .set(
-        [...RECEIPT_BY_OID_DOMAIN_PREFIX, receipt.oid, receipt.sender_domain, receipt.id],
+        [
+          ...RECEIPT_BY_OID_DOMAIN_PREFIX,
+          receipt.oid,
+          receipt.sender_domain,
+          receipt.id,
+        ],
         receipt.id,
       );
 
@@ -76,7 +89,10 @@ export class ReceiptRepository {
    *
    * Pagination is cursor-based via Deno KV's built-in `cursor` / `limit` support.
    */
-  async listByOid(oid: string, opts: ListReceiptsOptions = {}): Promise<ListReceiptsResult> {
+  async listByOid(
+    oid: string,
+    opts: ListReceiptsOptions = {},
+  ): Promise<ListReceiptsResult> {
     const { status, senderDomain, pageSize = 50, cursor } = opts;
 
     const prefix = status
