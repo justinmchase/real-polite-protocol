@@ -41,6 +41,10 @@ This repository targets Deno Deploy first.
   matching the primary file name (e.g., `mod.ts` → `mod.test.ts`).
 - Requirement tests live in `src/requirements/` and use the
   `.requirement.test.ts` suffix (see requirement-testing instructions).
+- **No helper duplication**: if a helper function (e.g. `computeHmac`,
+  `submitMessage`) appears in more than one test file, extract it immediately
+  into a shared `test-helpers.ts` module co-located with the tests that use it,
+  and import from there. Never maintain two copies of the same helper.
 
 ## Quality bar
 

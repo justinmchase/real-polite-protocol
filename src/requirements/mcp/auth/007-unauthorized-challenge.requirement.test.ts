@@ -5,8 +5,8 @@ Deno.test({
   name:
     "req:mcp-auth-007 - Unauthorized responses include OAuth challenge metadata",
   fn: async () => {
-    await withStartedServer(async () => {
-      const response = await fetch("http://localhost:8000/mcp", {
+    await withStartedServer(async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
@@ -17,13 +17,13 @@ Deno.test({
       assertExists(challenge);
       assertEquals(
         challenge.includes(
-          'resource_metadata="http://localhost:8000/.well-known/oauth-protected-resource"',
+          `resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
         ),
         true,
       );
       assertEquals(
         challenge.includes(
-          'authorization_uri="http://localhost:8000/authorize"',
+          `authorization_uri="${baseUrl}/authorize"`,
         ),
         true,
       );

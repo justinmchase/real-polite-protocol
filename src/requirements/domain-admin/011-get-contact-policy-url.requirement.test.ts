@@ -9,7 +9,7 @@ Deno.test({
   name: "req:domain-admin-011 - Domain administrators can retrieve contact policy URL",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         await t.step(
           "domain admin can retrieve the current contact policy URL",
           async () => {

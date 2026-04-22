@@ -1,3 +1,7 @@
+import type { ContentRating } from "../content-rating.ts";
+import type { MessageCategory } from "../message-category.ts";
+import type { UsagePolicy } from "../receipt/receipt.model.ts";
+
 export type InvitationStatus = "pending" | "accepted" | "rejected" | "cancelled" | "expired";
 
 export type ClaimValue =
@@ -7,12 +11,17 @@ export type ClaimValue =
   | null
   | (string | number | boolean | null)[];
 
+/**
+ * Terms proposed or negotiated for a receipt. The spec defines one category
+ * per receipt (Section 6.1); `category` is singular.
+ */
 export interface ReceiptTerms {
-  categories?: string[];
-  max_content_rating?: string;
-  usage_policy?: "one-time" | "multiple-time" | "any-time";
+  category: MessageCategory;
+  max_content_rating?: ContentRating;
+  usage_policy?: UsagePolicy;
   validity_constraints?: Record<string, unknown>;
-  interval_budget?: Record<string, unknown>;
+  /** Maximum uses within the defined interval (only meaningful for `multiple-time` usage_policy). */
+  interval_budget?: number;
   [key: string]: unknown;
 }
 

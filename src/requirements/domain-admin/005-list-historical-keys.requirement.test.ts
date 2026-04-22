@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-005 - Domain administrators can list archived verification keys",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "domain admin can list archived keys with metadata",
           async () => {

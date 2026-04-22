@@ -8,7 +8,7 @@ import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-005 - Domain role authorization derives from token roles claim", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "domain.admin in token roles grants domain-level permissions",
         async () => {
@@ -18,7 +18,7 @@ Deno.test("req:account-005 - Domain role authorization derives from token roles 
             scope: requiredScopes.join(" "),
           });
 
-          const permissions = await callGetPermissions(token);
+          const permissions = await callGetPermissions(token, {}, baseUrl);
 
           assertEquals(permissions.is_domain_admin, true);
           assertEquals(permissions.allowed_tool_groups, ["listener", "domain"]);
@@ -34,7 +34,7 @@ Deno.test("req:account-005 - Domain role authorization derives from token roles 
             scope: requiredScopes.join(" "),
           });
 
-          const permissions = await callGetPermissions(token);
+          const permissions = await callGetPermissions(token, {}, baseUrl);
 
           assertEquals(permissions.is_domain_admin, false);
           assertEquals(permissions.allowed_tool_groups, ["listener"]);
@@ -53,7 +53,7 @@ Deno.test("req:account-005 - Domain role authorization derives from token roles 
           const permissions = await callGetPermissions(token, {
             roles: ["domain.admin"],
             is_domain_admin: true,
-          });
+          }, baseUrl);
 
           assertEquals(permissions.is_domain_admin, false);
           assertEquals(permissions.roles, ["rpp.user"]);

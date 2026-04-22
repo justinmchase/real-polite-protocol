@@ -9,7 +9,7 @@ Deno.test({
   name: "req:domain-admin-010 - Domain administrators can remove admin verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         await t.step(
           "domain admin can remove one admin verified metadata field",
           async () => {

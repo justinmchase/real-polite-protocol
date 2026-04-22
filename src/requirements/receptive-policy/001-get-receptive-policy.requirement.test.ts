@@ -9,7 +9,7 @@ Deno.test({
   name: "req:receptive-policy-001 - Listeners can list their receptive policies",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "authenticated user gets empty list by default",
           async () => {

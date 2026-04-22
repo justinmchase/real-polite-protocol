@@ -10,9 +10,9 @@ Deno.test({
     "req:domain-admin-001 - Domain administrators can retrieve domain identity",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool, baseUrl }) => {
         await t.step("server starts and becomes healthy", async () => {
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           await res.body?.cancel();
           assertEquals(res.status, 200);
         });

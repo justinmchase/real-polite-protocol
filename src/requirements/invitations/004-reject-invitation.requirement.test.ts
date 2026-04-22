@@ -9,7 +9,7 @@ Deno.test({
   name: "req:invitations-004 - Listeners can reject a pending invitation",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
 
         try {
@@ -30,7 +30,7 @@ Deno.test({
             receiver_oid: accountOid,
             sender_domain: "untrusted-partner.example",
             status: "pending",
-            proposed_terms: { categories: ["billing"] },
+            proposed_terms: { category: "billing" },
             expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             created_at: new Date().toISOString(),
           });
@@ -53,7 +53,7 @@ Deno.test({
               receiver_oid: accountOid,
               sender_domain: "another-partner.example",
               status: "pending",
-              proposed_terms: { categories: ["marketing"] },
+              proposed_terms: { category: "marketing" },
               expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
               created_at: new Date().toISOString(),
             });

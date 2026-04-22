@@ -1,5 +1,6 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../test-helpers.ts";
+import { computeHmac } from "./test-helpers.ts";
 
 const testMessage = {
   message_id: crypto.randomUUID(),
@@ -13,39 +14,12 @@ const testMessage = {
   },
 };
 
-async function computeHmac(
-  receiptSecret: string,
-  timestamp: string,
-  bodyBytes: Uint8Array,
-): Promise<string> {
-  const key = new TextEncoder().encode(receiptSecret);
-  const data = new TextEncoder().encode(`${timestamp}.`);
-  
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    key,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  
-  const combined = new Uint8Array(data.length + bodyBytes.length);
-  combined.set(data, 0);
-  combined.set(bodyBytes, data.length);
-  
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, combined);
-  
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 Deno.test({
   name: "req:submit-002 - Submit requests are authenticated with receipt-based HMAC signatures",
   ignore: true,
   fn: async (t) => {
     // TODO: implement after invitations system exists to issue test receipts
-    await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
       
       try {
@@ -64,7 +38,7 @@ Deno.test({
         await t.step("Rejects requests with missing x-rpp-receipt-id header", async () => {
           const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
           
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -80,7 +54,7 @@ Deno.test({
         });
 
         await t.step("Rejects requests with missing x-rpp-signature header", async () => {
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -98,7 +72,7 @@ Deno.test({
         await t.step("Rejects requests with missing x-rpp-timestamp header", async () => {
           const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
           
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -117,7 +91,7 @@ Deno.test({
           const unknownReceiptId = crypto.randomUUID();
           const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
           
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -136,7 +110,7 @@ Deno.test({
         await t.step("Rejects requests with invalid signature", async () => {
           const invalidSignature = "0".repeat(64);
           
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -155,7 +129,7 @@ Deno.test({
         await t.step("Accepts requests with valid receipt and signature", async () => {
           const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
           
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",

@@ -8,7 +8,7 @@ import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-002 - Account is auto-provisioned on first authenticated MCP request", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl, callTool }) => {
       await t.step("first authenticated call provisions account and seeds user metadata", async () => {
         const token = await issueToken({
           oid: "account-provision-oid",
@@ -22,7 +22,7 @@ Deno.test("req:account-002 - Account is auto-provisioned on first authenticated 
           scope: requiredScopes.join(" "),
         });
 
-        const permissions = await callGetPermissions(token);
+        const permissions = await callGetPermissions(token, {}, baseUrl);
 
         assertEquals(permissions.oid, "account-provision-oid");
         assertExists(permissions.account_id);
@@ -68,8 +68,8 @@ Deno.test("req:account-002 - Account is auto-provisioned on first authenticated 
             scope: requiredScopes.join(" "),
           });
 
-          const first = await callGetPermissions(firstToken);
-          const second = await callGetPermissions(secondToken);
+          const first = await callGetPermissions(firstToken, {}, baseUrl);
+          const second = await callGetPermissions(secondToken, {}, baseUrl);
 
           assertEquals(first.account_id, second.account_id);
           assertEquals(first.oid, second.oid);

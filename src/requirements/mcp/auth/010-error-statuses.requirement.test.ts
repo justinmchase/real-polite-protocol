@@ -12,9 +12,9 @@ Deno.test({
     "req:mcp-auth-010 - MCP authentication failures use standardized HTTP status codes",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ baseUrl }) => {
         await t.step("returns 401 for missing tokens", async () => {
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({}),
@@ -31,7 +31,7 @@ Deno.test({
           const token = await issueToken({
             scope: `${testAudience}/custom.scope`,
           });
-          await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
+          await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE", baseUrl);
         });
 
         await t.step(
@@ -41,7 +41,7 @@ Deno.test({
               scope: requiredScopes[0],
               header: { alg: "HS256" },
             });
-            const response = await fetch("http://localhost:8000/mcp", {
+            const response = await fetch(`${baseUrl}/mcp`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",

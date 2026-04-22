@@ -9,7 +9,7 @@ Deno.test({
   name: "req:receptive-policy-003 - Listeners can open a time-bounded receptive window",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "opening a window returns a new policy with policy_id and receptive_until",
           async () => {

@@ -9,7 +9,7 @@ Deno.test({
   name: "req:receipts-002 - Listeners can list receipts they have issued",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
 
         try {
@@ -31,7 +31,7 @@ Deno.test({
             receiver_oid: accountOid,
             sender_domain: "alpha.example",
             status: "pending",
-            proposed_terms: { categories: ["billing"] },
+            proposed_terms: { category: "billing" },
             created_at: new Date().toISOString(),
           });
           await kv.set(["invitations", invitationIdB], {
@@ -39,7 +39,7 @@ Deno.test({
             receiver_oid: accountOid,
             sender_domain: "beta.example",
             status: "pending",
-            proposed_terms: { categories: ["general"] },
+            proposed_terms: { category: "correspondence" },
             created_at: new Date().toISOString(),
           });
 

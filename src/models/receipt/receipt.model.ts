@@ -1,3 +1,6 @@
+import type { ContentRating } from "../content-rating.ts";
+import type { MessageCategory } from "../message-category.ts";
+
 export type ReceiptStatus = "active" | "revoked" | "expired";
 
 export type RevocationReason =
@@ -8,21 +11,36 @@ export type RevocationReason =
   | "ABUSE"
   | "OTHER";
 
+/**
+ * Usage policy governs how many times a receipt may be used:
+ *
+ * - `one-time`:       Receipt expires after a single successful submit.
+ * - `multiple-time`:  Receipt expires after `interval_budget` uses (not yet enforced).
+ * - `any-time`:       Receipt may be used an unlimited number of times.
+ *
+ * TODO: enforce `one-time` expiry after first use and implement
+ *       `interval_budget` counting for `multiple-time` receipts.
+ */
+export type UsagePolicy = "one-time" | "multiple-time" | "any-time";
+
 export interface Receipt {
   /** Stable identifier — used in the x-rpp-receipt-id header. */
   id: string;
-  /** HMAC-SHA-256 shared secret used to verify submit requests. */
+  /**
+   * 64-character lowercase hex string representing 32 random bytes.
+   * Used as the HMAC-SHA-256 key for submit request signature verification.
+   */
   secret: string;
   /** OID of the receiver account that issued this receipt. */
   oid: string;
   /** Domain this receipt was issued to (the sender). */
   sender_domain: string;
-  /** Permitted message category (per Section 6.4). */
-  category: string;
-  /** Maximum content rating the receiver will accept (per Section 6.5). */
-  max_content_rating: string;
+  /** Permitted message category (per Section 6.4 / Section 7.2). */
+  category: MessageCategory;
+  /** Maximum content rating the receiver will accept (per Section 6.5 / Section 7.3). */
+  max_content_rating: ContentRating;
   /** How many times this receipt may be used. */
-  usage_policy: "one-time" | "multiple-time" | "any-time";
+  usage_policy: UsagePolicy;
   /** Current lifecycle state. Active → revoked or active → expired. */
   status: ReceiptStatus;
   /** Invitation that led to this receipt (for bulk revoke by invitation). */

@@ -14,7 +14,7 @@ interface AccountRecord {
 
 Deno.test("req:account-003 - Account display_name is optional and not required for MCP operations", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async ({ kvPath }) => {
+    await withStartedServer(async ({ kvPath, baseUrl }) => {
       await t.step(
         "authenticated request succeeds without any display name",
         async () => {
@@ -23,7 +23,7 @@ Deno.test("req:account-003 - Account display_name is optional and not required f
             scope: requiredScopes.join(" "),
           });
 
-          const permissions = await callGetPermissions(token);
+          const permissions = await callGetPermissions(token, {}, baseUrl);
 
           assertEquals(permissions.oid, "account-display-name-oid");
           assertExists(permissions.account_id);

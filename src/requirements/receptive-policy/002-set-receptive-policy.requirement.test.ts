@@ -9,7 +9,7 @@ Deno.test({
   name: "req:receptive-policy-002 - Listeners can add a receptive policy",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "add_receptive_policy with mode all returns new policy with policy_id",
           async () => {

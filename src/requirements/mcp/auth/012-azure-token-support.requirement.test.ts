@@ -11,9 +11,9 @@ Deno.test({
   name: "req:mcp-auth-012 - Azure AD/Entra ID v2.0 token compatibility",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ baseUrl }) => {
         await t.step("server starts and becomes healthy", async () => {
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           assertEquals(res.status, 200);
           const body = await res.json();
           assertEquals(body.ok, true);
@@ -27,7 +27,7 @@ Deno.test({
               scp: requiredScopes[0],
             });
 
-            const response = await fetch("http://localhost:8000/mcp", {
+            const response = await fetch(`${baseUrl}/mcp`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -52,7 +52,7 @@ Deno.test({
             scp: "rpp.tools.read rpp.messages.submit",
           });
 
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -77,7 +77,7 @@ Deno.test({
             roles: ["domain.admin"],
           });
 
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -103,7 +103,7 @@ Deno.test({
               scp: requiredScopes[0],
             });
 
-            await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE");
+            await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE", baseUrl);
           },
         );
 
@@ -115,7 +115,7 @@ Deno.test({
               scp: "some.other.scope",
             });
 
-            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
+            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE", baseUrl);
           },
         );
       });

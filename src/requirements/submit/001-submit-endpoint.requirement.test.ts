@@ -1,37 +1,11 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../test-helpers.ts";
-
-async function computeHmac(
-  receiptSecret: string,
-  timestamp: string,
-  bodyBytes: Uint8Array,
-): Promise<string> {
-  const key = new TextEncoder().encode(receiptSecret);
-  const data = new TextEncoder().encode(`${timestamp}.`);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    key,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-
-  const combined = new Uint8Array(data.length + bodyBytes.length);
-  combined.set(data, 0);
-  combined.set(bodyBytes, data.length);
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, combined);
-
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { computeHmac } from "./test-helpers.ts";
 
 Deno.test({
   name: "req:submit-001 - Servers expose a submit endpoint for one message envelope per request",
   fn: async (t) => {
-    await withStartedServer(async ({ kvPath }) => {
+    await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
 
       try {
@@ -63,7 +37,7 @@ Deno.test({
           const timestamp = new Date().toISOString();
           const signature = await computeHmac(receiptSecret, timestamp, bodyBytes);
 
-          const response = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -124,7 +98,7 @@ Deno.test({
           const firstSignature = await computeHmac(receiptSecret, timestamp, firstBytes);
           const secondSignature = await computeHmac(receiptSecret, timestamp, secondBytes);
 
-          const first = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const first = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -135,7 +109,7 @@ Deno.test({
             body: firstJson,
           });
 
-          const second = await fetch("http://localhost:8000/rpp/v1/messages", {
+          const second = await fetch(`${baseUrl}/rpp/v1/messages`, {
             method: "POST",
             headers: {
               "content-type": "application/json",

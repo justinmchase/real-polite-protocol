@@ -53,7 +53,7 @@ Deno.test({
       },
     );
 
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "database records do not include domain prefixing (isolation by deployment, not namespace)",
         async () => {
@@ -78,7 +78,7 @@ Deno.test({
 
           // For this implementation test, we just verify that the server
           // responds to a health check without domain routing errors.
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           assertEquals(res.status, 200);
           await res.body?.cancel();
         },

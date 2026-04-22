@@ -2,7 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { ReceiptManager } from "../../managers/mod.ts";
+import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+
+const CategorySchema = z.enum(MESSAGE_CATEGORIES);
+const ContentRatingSchema = z.enum(CONTENT_RATINGS);
 
 const RevocationReasonSchema = z.enum([
   "SENDER_REQUEST",
@@ -14,11 +18,11 @@ const RevocationReasonSchema = z.enum([
 ]);
 
 const ReceiptOutputSchema = {
-  id: z.string().describe("Receipt ID to present in x-rpp-receipt-id header"),
-  oid: z.string().uuid().describe("OID of the account that issued this receipt"),
+  id: z.uuid().describe("Receipt ID to present in x-rpp-receipt-id header"),
+  oid: z.uuid().describe("OID of the account that issued this receipt"),
   sender_domain: z.string().describe("Domain this receipt was issued to"),
-  category: z.string().describe("Permitted message category"),
-  max_content_rating: z.string().describe("Maximum content rating"),
+  category: CategorySchema.describe("Permitted message category"),
+  max_content_rating: ContentRatingSchema.describe("Maximum content rating"),
   usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe("Usage policy"),
   status: z.enum(["active", "revoked", "expired"]).describe("Current lifecycle state"),
   invitation_id: z.string().optional().describe("Source invitation ID"),
@@ -36,11 +40,17 @@ const ListIssuedReceiptsInputSchema = {
   page_size: z.number().int().min(1).max(100).optional().describe(
     "Maximum number of results (default 50)",
   ),
+  resume_token: z.string().optional().describe(
+    "Opaque token from a previous call to continue listing",
+  ),
 };
 
 const ListIssuedReceiptsOutputSchema = {
   receipts: z.array(z.object(ReceiptOutputSchema)).describe("Issued receipts"),
   page_size: z.number().int().describe("Number of results returned"),
+  next_resume_token: z.string().optional().describe(
+    "Pass this as resume_token to retrieve the next page; absent means no more results",
+  ),
 };
 
 const RevokeReceiptInputSchema = {
@@ -69,19 +79,18 @@ export class ReceiptTool {
         outputSchema: ListIssuedReceiptsOutputSchema,
       },
       withToolErrorHandling(async (params: ListIssuedReceiptsArgs) => {
-        let receipts = await this.receiptManager.listIssuedByOid(auth.oid);
+        const { receipts, nextCursor } = await this.receiptManager.listIssuedByOid(auth.oid, {
+          status: params.status,
+          senderDomain: params.sender_domain,
+          pageSize: params.page_size,
+          cursor: params.resume_token,
+        });
 
-        if (params.status) {
-          receipts = receipts.filter((r) => r.status === params.status);
-        }
-        if (params.sender_domain) {
-          receipts = receipts.filter((r) => r.sender_domain === params.sender_domain);
-        }
-
-        const pageSize = params.page_size ?? 50;
-        const paginated = receipts.slice(0, pageSize);
-
-        return toolResult({ receipts: paginated, page_size: paginated.length });
+        return toolResult({
+          receipts,
+          page_size: receipts.length,
+          ...(nextCursor !== undefined && { next_resume_token: nextCursor }),
+        });
       }),
     );
 

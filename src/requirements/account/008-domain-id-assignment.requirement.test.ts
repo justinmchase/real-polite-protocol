@@ -10,7 +10,7 @@ Deno.test({
   name: "req:account-008 - Accounts are assigned an immutable domain_id at creation",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool, baseUrl }) => {
         const oid = crypto.randomUUID();
         const adminOid = crypto.randomUUID();
         const token = await issueToken({
@@ -25,7 +25,7 @@ Deno.test({
         });
 
         await t.step("account has a domain_id in immutable_fields after provisioning", async () => {
-          await callGetPermissions(token);
+          await callGetPermissions(token, {}, baseUrl);
 
           const metadata = await callTool(adminToken, "get_user_verified_metadata", { oid });
           assertEquals(metadata.status, 200);

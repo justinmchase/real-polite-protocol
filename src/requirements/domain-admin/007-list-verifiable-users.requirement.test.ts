@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-007 - Domain administrators can list verifiable users",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         await t.step(
           "domain admin can list users with verified metadata fields",
           async () => {

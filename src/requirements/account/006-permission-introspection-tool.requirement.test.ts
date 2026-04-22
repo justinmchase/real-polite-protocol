@@ -8,7 +8,7 @@ import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-006 - MCP exposes get_permissions for current account", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "returns domain permissions when roles includes domain.admin",
         async () => {
@@ -18,7 +18,7 @@ Deno.test("req:account-006 - MCP exposes get_permissions for current account", a
             scope: requiredScopes.join(" "),
           });
 
-          const permissions = await callGetPermissions(token);
+          const permissions = await callGetPermissions(token, {}, baseUrl);
           assertEquals(permissions.oid, "oid-domain-admin");
           assertEquals(permissions.roles, ["domain.admin"]);
           assertEquals(permissions.is_domain_admin, true);
@@ -36,7 +36,7 @@ Deno.test("req:account-006 - MCP exposes get_permissions for current account", a
             scope: requiredScopes.join(" "),
           });
 
-          const permissions = await callGetPermissions(token);
+          const permissions = await callGetPermissions(token, {}, baseUrl);
           assertEquals(permissions.oid, "oid-listener");
           assertEquals(permissions.roles, ["rpp.user"]);
           assertEquals(permissions.is_domain_admin, false);

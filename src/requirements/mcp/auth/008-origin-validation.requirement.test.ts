@@ -4,9 +4,9 @@ import { withStartedServer } from "../../test-helpers.ts";
 Deno.test({
   name: "req:mcp-auth-008 - MCP endpoint validates Origin header",
   fn: async (t) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step("rejects malformed origin header", async () => {
-        const response = await fetch("http://localhost:8000/mcp", {
+        const response = await fetch(`${baseUrl}/mcp`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -21,7 +21,7 @@ Deno.test({
       });
 
       await t.step("rejects mismatched origin header", async () => {
-        const response = await fetch("http://localhost:8000/mcp", {
+        const response = await fetch(`${baseUrl}/mcp`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -38,11 +38,11 @@ Deno.test({
       await t.step(
         "accepts matching origin header and continues auth processing",
         async () => {
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
-              origin: "http://localhost:8000",
+              origin: baseUrl,
             },
             body: JSON.stringify({}),
           });

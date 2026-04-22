@@ -5,12 +5,12 @@ import { withStartedServer } from "../../test-helpers.ts";
 Deno.test({
   name: "req:mcp-auth-009 - MCP and OAuth endpoints are served over HTTPS",
   fn: async (t) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "uses localhost http endpoints only for local development metadata",
         async () => {
           const response = await fetch(
-            "http://localhost:8000/.well-known/oauth-authorization-server",
+            `${baseUrl}/.well-known/oauth-authorization-server`,
           );
           assertEquals(response.status, 200);
           const body = await response.json();
@@ -31,7 +31,7 @@ Deno.test({
         "redirects authorization requests to an https upstream endpoint",
         async () => {
           const response = await fetch(
-            "http://localhost:8000/authorize?client_id=test-client&response_type=code&scope=openid&redirect_uri=http://127.0.0.1/callback",
+            `${baseUrl}/authorize?client_id=test-client&response_type=code&scope=openid&redirect_uri=http://127.0.0.1/callback`,
             { redirect: "manual" },
           );
 
@@ -64,7 +64,7 @@ Deno.test({
 
           try {
             const response = await originalFetch(
-              "http://localhost:8000/token",
+              `${baseUrl}/token`,
               {
                 method: "POST",
                 headers: {

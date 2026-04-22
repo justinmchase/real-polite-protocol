@@ -6,9 +6,9 @@ Deno.test({
   name: "req:mcp-001 - Tools use structured output with outputSchema",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool, baseUrl }) => {
         await t.step("server starts and becomes healthy", async () => {
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           await res.body?.cancel();
           assertEquals(res.status, 200);
         });

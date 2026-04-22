@@ -10,7 +10,7 @@ Deno.test({
     "req:account-007 - Users can refresh their own verified metadata from their token",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "set_user_verified_metadata stores token identity claims for caller",
           async () => {

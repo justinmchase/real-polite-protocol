@@ -12,9 +12,9 @@ Deno.test({
     "req:mcp-auth-004 - Access token validation enforces audience and token validity",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ baseUrl }) => {
         await t.step("server starts and becomes healthy", async () => {
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           assertEquals(res.status, 200);
           const body = await res.json();
           assertEquals(body.ok, true);
@@ -26,7 +26,7 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "E_INVALID_ISSUER");
+          await assertAuthFailure(token, 401, "E_INVALID_ISSUER", baseUrl);
         });
 
         await t.step("rejects tokens with invalid audience", async () => {
@@ -35,7 +35,7 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE");
+          await assertAuthFailure(token, 401, "E_INVALID_AUDIENCE", baseUrl);
         });
 
         await t.step("rejects expired tokens", async () => {
@@ -44,14 +44,14 @@ Deno.test({
             scope: requiredScopes[0],
           });
 
-          await assertAuthFailure(token, 401, "E_EXPIRED");
+          await assertAuthFailure(token, 401, "E_EXPIRED", baseUrl);
         });
 
         await t.step("rejects tokens with invalid signatures", async () => {
           const token = await issueToken({ scope: requiredScopes[0] });
           const tampered = tamperPayloadWithoutResigning(token);
 
-          await assertAuthFailure(tampered, 401, "E_INVALID_SIGNATURE");
+          await assertAuthFailure(tampered, 401, "E_INVALID_SIGNATURE", baseUrl);
         });
 
         await t.step(
@@ -61,7 +61,7 @@ Deno.test({
               scope: `${testAudience}/custom.scope`,
             });
 
-            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE");
+            await assertAuthFailure(token, 403, "E_INSUFFICIENT_SCOPE", baseUrl);
           },
         );
 
@@ -72,7 +72,7 @@ Deno.test({
               scp: requiredScopes[0],
             });
 
-            const response = await fetch("http://localhost:8000/mcp", {
+            const response = await fetch(`${baseUrl}/mcp`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",

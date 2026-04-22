@@ -6,7 +6,11 @@ import type {
   DomainIdentityManager,
   InvitationManager,
 } from "../../managers/mod.ts";
+import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+
+const CategorySchema = z.enum(MESSAGE_CATEGORIES);
+const ContentRatingSchema = z.enum(CONTENT_RATINGS);
 
 const ClaimValueSchema = z.union([
   z.string().max(512),
@@ -55,10 +59,12 @@ const ListInvitationsInputSchema = {
 const AcceptInvitationOutputSchema = {
   ...InvitationOutputSchema,
   receipt: z.object({
-    id: z.string().describe("Receipt ID to present in x-rpp-receipt-id header"),
-    secret: z.string().describe("HMAC-SHA-256 secret for signing submit requests"),
-    category: z.string().describe("Permitted message category"),
-    max_content_rating: z.string().describe("Maximum content rating"),
+    id: z.uuid().describe("Receipt ID to present in x-rpp-receipt-id header"),
+    secret: z.string().regex(/^[0-9a-f]{64}$/).describe(
+      "64-char hex-encoded 32-byte HMAC-SHA-256 secret for signing submit requests",
+    ),
+    category: CategorySchema.describe("Permitted message category"),
+    max_content_rating: ContentRatingSchema.describe("Maximum content rating"),
     usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe("Usage policy"),
     issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
   }).describe("Issued receipt credentials — share with the sender"),
@@ -75,7 +81,11 @@ const ReviewInvitationInputSchema = {
 
 const AcceptInvitationInputSchema = {
   invitation_id: z.string().describe("Invitation ID to accept"),
-  negotiated_terms: z.record(z.string(), z.unknown()).optional().describe(
+  negotiated_terms: z.object({
+    category: CategorySchema,
+    max_content_rating: ContentRatingSchema.optional(),
+    usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).optional(),
+  }).passthrough().optional().describe(
     "Optional narrower terms to accept instead of proposed terms",
   ),
 };

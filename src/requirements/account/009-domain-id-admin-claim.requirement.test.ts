@@ -10,7 +10,7 @@ Deno.test({
   name: "req:account-009 - domain_id is an immutable admin-verified claim",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool, baseUrl }) => {
         const oid = crypto.randomUUID();
         const adminOid = crypto.randomUUID();
         const token = await issueToken({
@@ -25,7 +25,7 @@ Deno.test({
         });
 
         // Provision account.
-        await callGetPermissions(token);
+        await callGetPermissions(token, {}, baseUrl);
 
         let originalDomainId: string | undefined;
 

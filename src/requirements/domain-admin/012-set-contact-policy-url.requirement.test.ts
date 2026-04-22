@@ -9,7 +9,7 @@ Deno.test({
   name: "req:domain-admin-012 - Domain administrators can set contact policy URL",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "domain admin can set contact policy URL and read it back",
           async () => {

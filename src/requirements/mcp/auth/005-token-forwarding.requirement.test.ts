@@ -8,9 +8,9 @@ Deno.test({
     let forwardedAuthorization: string | null = null;
 
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ baseUrl }) => {
         await t.step("server starts and becomes healthy", async () => {
-          const res = await fetch("http://localhost:8000/health");
+          const res = await fetch(`${baseUrl}/health`);
           assertEquals(res.status, 200);
           await res.text();
         });
@@ -19,7 +19,7 @@ Deno.test({
           "does not forward client bearer token on outbound auth fetches",
           async () => {
             const token = await issueToken({ scope: requiredScopes[0] });
-            const response = await fetch("http://localhost:8000/mcp", {
+            const response = await fetch(`${baseUrl}/mcp`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",

@@ -5,16 +5,16 @@ Deno.test({
   name:
     "req:mcp-auth-011 - OAuth authorization flow uses canonical resource indicator",
   fn: async (t) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "publishes canonical resource URI in protected resource metadata",
         async () => {
           const response = await fetch(
-            "http://localhost:8000/.well-known/oauth-protected-resource",
+            `${baseUrl}/.well-known/oauth-protected-resource`,
           );
           assertEquals(response.status, 200);
           const body = await response.json();
-          assertEquals(body.resource, "http://localhost:8000/mcp");
+          assertEquals(body.resource, `${baseUrl}/mcp`);
         },
       );
 
@@ -22,18 +22,18 @@ Deno.test({
         "publishes matching canonical resource URI in authorization server metadata",
         async () => {
           const response = await fetch(
-            "http://localhost:8000/.well-known/oauth-authorization-server",
+            `${baseUrl}/.well-known/oauth-authorization-server`,
           );
           assertEquals(response.status, 200);
           const body = await response.json();
-          assertEquals(body.resource, "http://localhost:8000/mcp");
+          assertEquals(body.resource, `${baseUrl}/mcp`);
         },
       );
 
       await t.step(
         "includes canonical resource metadata pointer in unauthorized challenge flow",
         async () => {
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({}),
@@ -44,7 +44,7 @@ Deno.test({
           assertExists(challenge);
           assertEquals(
             challenge.includes(
-              'resource_metadata="http://localhost:8000/.well-known/oauth-protected-resource"',
+              `resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
             ),
             true,
           );
@@ -56,7 +56,7 @@ Deno.test({
         "accepts canonical resource parameter on authorization endpoint input",
         async () => {
           const response = await fetch(
-            "http://localhost:8000/authorize?client_id=test-client&response_type=code&scope=openid&resource=http://localhost:8000/mcp&redirect_uri=http://127.0.0.1/callback",
+            `${baseUrl}/authorize?client_id=test-client&response_type=code&scope=openid&resource=${baseUrl}/mcp&redirect_uri=http://127.0.0.1/callback`,
             { redirect: "manual" },
           );
 

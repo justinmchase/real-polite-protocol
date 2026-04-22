@@ -4,9 +4,9 @@ import { withStartedServer } from "../../test-helpers.ts";
 Deno.test({
   name: "req:mcp-auth-001 - Server exposes MCP endpoint for listener workflows",
   fn: async (t) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step("server starts and becomes healthy", async () => {
-        const res = await fetch("http://localhost:8000/health");
+        const res = await fetch(`${baseUrl}/health`);
         assertEquals(res.status, 200);
         const body = await res.json();
         assertEquals(body.ok, true);
@@ -15,7 +15,7 @@ Deno.test({
       await t.step(
         "mcp endpoint is exposed and challenges unauthenticated requests",
         async () => {
-          const response = await fetch("http://localhost:8000/mcp", {
+          const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: {
               "content-type": "application/json",

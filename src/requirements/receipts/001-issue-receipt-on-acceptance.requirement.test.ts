@@ -4,12 +4,13 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../mcp/auth/test-helpers.ts";
+import { submitMessage } from "../submit/test-helpers.ts";
 
 Deno.test({
   name: "req:receipts-001 - Accepting an invitation issues and records a receipt",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
 
         try {
@@ -28,7 +29,7 @@ Deno.test({
             receiver_oid: accountOid,
             sender_domain: "sender.example",
             status: "pending",
-            proposed_terms: { categories: ["billing"], max_content_rating: "G" },
+            proposed_terms: { category: "billing", max_content_rating: "G" },
             created_at: new Date().toISOString(),
           });
 
@@ -89,47 +90,7 @@ Deno.test({
             assertExists(receiptId);
             assertExists(receiptSecret);
 
-            const bodyJson = JSON.stringify({
-              message_id: crypto.randomUUID(),
-              sender_domain: "sender.example",
-              category: "message",
-              sent_at: new Date().toISOString(),
-              message: {
-                content_rating: "G",
-                subject: "Test",
-                body: { content_type: "text/markdown", content: "Hello." },
-              },
-            });
-            const bodyBytes = new TextEncoder().encode(bodyJson);
-            const timestamp = new Date().toISOString();
-
-            const key = new TextEncoder().encode(receiptSecret);
-            const prefix = new TextEncoder().encode(`${timestamp}.`);
-            const cryptoKey = await crypto.subtle.importKey(
-              "raw",
-              key,
-              { name: "HMAC", hash: "SHA-256" },
-              false,
-              ["sign"],
-            );
-            const combined = new Uint8Array(prefix.length + bodyBytes.length);
-            combined.set(prefix, 0);
-            combined.set(bodyBytes, prefix.length);
-            const sig = await crypto.subtle.sign("HMAC", cryptoKey, combined);
-            const signature = Array.from(new Uint8Array(sig))
-              .map((b) => b.toString(16).padStart(2, "0"))
-              .join("");
-
-            const response = await fetch("http://localhost:8000/rpp/v1/messages", {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "x-rpp-receipt-id": receiptId,
-                "x-rpp-signature": signature,
-                "x-rpp-timestamp": timestamp,
-              },
-              body: bodyJson,
-            });
+            const response = await submitMessage({ receiptId, receiptSecret, baseUrl });
             assertEquals(response.status, 202);
             await response.body?.cancel();
           });

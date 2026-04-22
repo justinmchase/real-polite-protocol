@@ -169,8 +169,9 @@ export async function assertAuthFailure(
   token: string,
   expectedStatus: number,
   expectedCode: string,
+  baseUrl = "http://localhost:8000",
 ): Promise<void> {
-  const response = await fetch("http://localhost:8000/mcp", {
+  const response = await fetch(`${baseUrl}/mcp`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

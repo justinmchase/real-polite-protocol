@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-003 - Domain administrators can retrieve the active verification key",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step("domain admin can call get_verification_key", async () => {
           const token = await issueToken({
             oid: "oid-domain-admin",

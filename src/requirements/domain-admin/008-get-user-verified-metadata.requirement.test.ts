@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-008 - Domain administrators can retrieve a user's verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         await t.step(
           "domain admin can retrieve verified metadata for a target user",
           async () => {

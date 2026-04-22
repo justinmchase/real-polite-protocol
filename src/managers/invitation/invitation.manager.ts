@@ -1,4 +1,4 @@
-import type { Invitation, Receipt } from "../../models/mod.ts";
+import type { Invitation, Receipt, ReceiptTerms } from "../../models/mod.ts";
 import type { InvitationRepository } from "../../repositories/mod.ts";
 import type { ReceiptManager } from "../receipt/receipt.manager.ts";
 import {
@@ -49,7 +49,7 @@ export class InvitationManager {
    */
   async accept(
     invitationId: string,
-    negotiatedTerms?: Record<string, unknown>,
+    negotiatedTerms?: ReceiptTerms,
   ): Promise<{ invitation: Invitation; receipt: Receipt }> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {

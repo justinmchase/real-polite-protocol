@@ -9,7 +9,7 @@ Deno.test({
   name: "req:invitations-003 - Listeners can accept a pending invitation",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
 
         try {
@@ -24,7 +24,7 @@ Deno.test({
           await callTool(token, "set_user_verified_metadata");
 
           const invitationId = crypto.randomUUID();
-          const proposedTerms = { categories: ["billing"] };
+          const proposedTerms = { category: "billing" };
 
           await kv.set(["invitations", invitationId], {
             invitation_id: invitationId,
@@ -49,8 +49,8 @@ Deno.test({
 
           await t.step("accept_invitation can apply negotiated terms", async () => {
             const invitationId2 = crypto.randomUUID();
-            const originalTerms = { categories: ["general"] };
-            const negotiatedTerms = { categories: ["general"], max_rate_limit: 500 };
+            const originalTerms = { category: "correspondence" };
+            const negotiatedTerms = { category: "correspondence", max_content_rating: "G" };
 
             await kv.set(["invitations", invitationId2], {
               invitation_id: invitationId2,

@@ -8,7 +8,7 @@ import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step("same oid resolves to same stable account id", async () => {
         const token1 = await issueToken({
           oid: "account-identity-oid-a",
@@ -19,8 +19,8 @@ Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", 
           scope: requiredScopes.join(" "),
         });
 
-        const first = await callGetPermissions(token1);
-        const second = await callGetPermissions(token2);
+        const first = await callGetPermissions(token1, {}, baseUrl);
+        const second = await callGetPermissions(token2, {}, baseUrl);
 
         assertEquals(first.oid, "account-identity-oid-a");
         assertEquals(second.oid, "account-identity-oid-a");
@@ -40,8 +40,8 @@ Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", 
             scope: requiredScopes.join(" "),
           });
 
-          const accountA = await callGetPermissions(tokenA);
-          const accountB = await callGetPermissions(tokenB);
+          const accountA = await callGetPermissions(tokenA, {}, baseUrl);
+          const accountB = await callGetPermissions(tokenB, {}, baseUrl);
 
           assertNotEquals(accountA.account_id, accountB.account_id);
           assertEquals(accountA.oid, "account-identity-oid-a");

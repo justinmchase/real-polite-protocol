@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-009 - Domain administrators can set admin verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         await t.step(
           "domain admin can set arbitrary admin metadata for a registered user",
           async () => {

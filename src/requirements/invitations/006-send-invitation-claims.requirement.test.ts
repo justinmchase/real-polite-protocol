@@ -9,7 +9,7 @@ Deno.test({
   name: "req:invitations-006 - Senders can attach verified and custom claims to outgoing invitations",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ baseUrl, callTool }) => {
         const accountOid = crypto.randomUUID();
         const token = await issueToken({
           oid: accountOid,
@@ -29,7 +29,7 @@ Deno.test({
         );
         assertExists(windowPolicy);
         const policyId = windowPolicy.policy_id;
-        const receiverDomain = "localhost:8000";
+        const receiverDomain = new URL(baseUrl).host;
 
         await t.step("send_invitation with no claim inputs succeeds and omits claims", async () => {
           const { status, result } = await callTool<{ invitation_id?: string }>(
@@ -38,7 +38,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               // no include_user_claims, include_admin_claims, or custom_claims
             },
           );
@@ -54,7 +54,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               include_user_claims: ["name", "email"],
             },
           );
@@ -71,7 +71,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               include_user_claims: ["name", "nonexistent_key"],
             },
           );
@@ -87,7 +87,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               custom_claims: { note: "We met at the conference", year: 2026 },
             },
           );
@@ -103,7 +103,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               include_user_claims: ["name"],
               custom_claims: { reason: "Follow-up from summit" },
             },

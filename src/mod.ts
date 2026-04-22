@@ -10,6 +10,7 @@ import { initTools } from "./tools/mod.ts";
 export interface StartOptions {
   signal?: AbortSignal;
   kvPath?: string;
+  port?: number;
 }
 
 export async function start(options?: StartOptions): Promise<void> {
@@ -26,7 +27,7 @@ export async function start(options?: StartOptions): Promise<void> {
 
   const grove = new Grove({
     initContext,
-    modes: [new WebMode<Context, State>({ initControllers })],
+    modes: [new WebMode<Context, State>({ initControllers, port: options?.port })],
     signal: options?.signal,
   });
 

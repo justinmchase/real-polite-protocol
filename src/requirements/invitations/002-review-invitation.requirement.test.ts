@@ -9,7 +9,7 @@ Deno.test({
   name: "req:invitations-002 - Listeners can review a pending invitation",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
 
         try {
@@ -25,7 +25,7 @@ Deno.test({
 
           const invitationId = crypto.randomUUID();
           const proposedTerms = {
-            categories: ["billing", "general"],
+            category: "billing",
             max_messages_per_day: 100,
           };
 
@@ -60,7 +60,7 @@ Deno.test({
               receiver_oid: accountOid,
               sender_domain: "another-partner.example",
               status: "accepted",
-              proposed_terms: { categories: ["marketing"] },
+              proposed_terms: { category: "marketing" },
               expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
               created_at: new Date().toISOString(),
               accepted_at: new Date().toISOString(),

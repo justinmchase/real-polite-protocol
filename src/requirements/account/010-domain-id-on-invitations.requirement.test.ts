@@ -10,7 +10,7 @@ Deno.test({
   name: "req:account-010 - Sender domain_id is always included as admin-verified claim on outgoing invitations",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool, baseUrl }) => {
         const senderOid = crypto.randomUUID();
         const adminOid = crypto.randomUUID();
         const token = await issueToken({
@@ -26,7 +26,7 @@ Deno.test({
         });
 
         // Provision account and obtain the assigned domain_id.
-        await callGetPermissions(token);
+        await callGetPermissions(token, {}, baseUrl);
 
         const metadataResult = await callTool(adminToken, "get_user_verified_metadata", {
           oid: senderOid,
@@ -49,7 +49,7 @@ Deno.test({
         );
         assertExists(windowPolicy);
         const policyId = windowPolicy.policy_id;
-        const receiverDomain = "localhost:8000";
+        const receiverDomain = new URL(baseUrl).host;
 
         await t.step("invitation without explicit claim inputs still includes domain_id as admin-verified claim", async () => {
           const { status, result } = await callTool<{ invitation_id?: string }>(
@@ -58,7 +58,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               // No include_admin_claims specified — domain_id injected unconditionally.
             },
           );
@@ -98,7 +98,7 @@ Deno.test({
             {
               receiver_domain: receiverDomain,
               receptive_policy_id: policyId,
-              proposed_terms: { categories: ["correspondence"] },
+              proposed_terms: { category: "correspondence" },
               include_admin_claims: ["nonexistent_key"], // should still get domain_id
             },
           );
@@ -132,7 +132,7 @@ Deno.test({
               {
                 receiver_domain: receiverDomain,
                 receptive_policy_id: policyId,
-                proposed_terms: { categories: ["correspondence"] },
+                proposed_terms: { category: "correspondence" },
               },
             )).result!.invitation_id },
           );

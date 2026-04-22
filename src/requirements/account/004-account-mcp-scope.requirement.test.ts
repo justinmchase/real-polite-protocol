@@ -8,7 +8,7 @@ import { callGetPermissions } from "./test-helpers.ts";
 
 Deno.test("req:account-004 - MCP tools are scoped to the authenticated account", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {
-    await withStartedServer(async () => {
+    await withStartedServer(async ({ baseUrl }) => {
       await t.step(
         "tool response is scoped to caller account identity",
         async () => {
@@ -21,8 +21,8 @@ Deno.test("req:account-004 - MCP tools are scoped to the authenticated account",
             scope: requiredScopes.join(" "),
           });
 
-          const permissionsA = await callGetPermissions(tokenA);
-          const permissionsB = await callGetPermissions(tokenB);
+          const permissionsA = await callGetPermissions(tokenA, {}, baseUrl);
+          const permissionsB = await callGetPermissions(tokenB, {}, baseUrl);
 
           assertEquals(permissionsA.oid, "account-scope-oid-a");
           assertEquals(permissionsB.oid, "account-scope-oid-b");
@@ -41,7 +41,7 @@ Deno.test("req:account-004 - MCP tools are scoped to the authenticated account",
           const permissions = await callGetPermissions(token, {
             account_id: "some-other-account",
             oid: "some-other-oid",
-          });
+          }, baseUrl);
 
           assertEquals(permissions.oid, "account-scope-oid-caller");
         },

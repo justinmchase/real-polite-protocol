@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-004 - Domain administrators can rotate the invitation verification key",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step(
           "domain admin can call rotate_verification_key",
           async () => {

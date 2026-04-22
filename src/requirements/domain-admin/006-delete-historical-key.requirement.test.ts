@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-006 - Domain administrators can delete archived verification keys",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async () => {
+      await withStartedServer(async ({ callTool }) => {
         await t.step("domain admin can delete a historical key", async () => {
           const token = await issueToken({
             oid: "oid-domain-admin",
