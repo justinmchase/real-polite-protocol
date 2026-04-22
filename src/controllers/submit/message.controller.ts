@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type { InvitationManager } from "../../managers/mod.ts";
 import {
+  DuplicateMessageError,
   InvalidMessageEnvelopeError,
   InvalidRequestBodyError,
   MessageTooLargeError,
@@ -16,6 +17,7 @@ import {
   MissingTimestampError,
   ReceiptInvalidSignatureError,
   ReceiptNotFoundError,
+  RequestStaleError,
 } from "./submit.error.ts";
 import {
   type MessageHandler,
@@ -113,6 +115,16 @@ export class SubmitController extends Controller {
           throw new MissingTimestampError();
         }
 
+        // Timestamp freshness check (RFC §5.1.1): must be within ±60 seconds.
+        const requestTime = new Date(timestamp).getTime();
+        if (isNaN(requestTime)) {
+          throw new MissingTimestampError();
+        }
+        const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
+        if (diffSeconds > 60) {
+          throw new RequestStaleError(Math.round(diffSeconds));
+        }
+
         // Verify HMAC signature
         const receiptEntry = await this.kv.store.get(["receipts", receiptId]);
         if (!receiptEntry.value) {
@@ -131,6 +143,15 @@ export class SubmitController extends Controller {
           throw new ReceiptInvalidSignatureError();
         }
       }
+
+      // Message ID deduplication (RFC §5.1.1): reject reuse within 60-second window.
+      const dedupKey = ["dedup", body.sender_domain, body.message_id];
+      const existing = await this.kv.store.get(dedupKey);
+      if (existing.value !== null) {
+        throw new DuplicateMessageError(body.message_id);
+      }
+      // Record with 65-second TTL (slightly longer than the freshness window).
+      await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
 
       // Dispatch to handler based on category
       const handler = this.handlers.get(body.category);

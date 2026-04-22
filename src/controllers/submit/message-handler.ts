@@ -10,6 +10,7 @@ import {
   ReceptivePolicyClosedError,
   ReceptivePolicyExpiredError,
   ReceptivePolicyNotFoundError,
+  RequestStaleError,
 } from "./submit.error.ts";
 
 const ClaimValueSchema = z.union([
@@ -148,6 +149,16 @@ export class ReceiptMessageHandler implements MessageHandler {
 
     if (!timestamp) {
       throw new MissingTimestampError();
+    }
+
+    // Timestamp freshness check (RFC §5.1.1): must be within ±60 seconds.
+    const requestTime = new Date(timestamp).getTime();
+    if (isNaN(requestTime)) {
+      throw new MissingTimestampError();
+    }
+    const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
+    if (diffSeconds > 60) {
+      throw new RequestStaleError(Math.round(diffSeconds));
     }
 
     // Verify HMAC signature

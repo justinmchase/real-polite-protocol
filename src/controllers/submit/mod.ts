@@ -7,6 +7,7 @@ import {
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type { InvitationManager, ReceptivePolicyManager } from "../../managers/mod.ts";
 import {
+  DuplicateMessageError,
   InvalidMessageEnvelopeError,
   InvalidRequestBodyError,
   MessageTooLargeError,
@@ -91,6 +92,14 @@ export class SubmitController extends Controller {
         signature: ctx.req.header("x-rpp-signature"),
         timestamp: ctx.req.header("x-rpp-timestamp"),
       };
+
+      // Message ID deduplication (RFC §5.1.1): reject replays within 65-second window.
+      const dedupKey = ["dedup", body.sender_domain, body.message_id];
+      const existing = await this.kv.store.get(dedupKey);
+      if (existing.value !== null) {
+        throw new DuplicateMessageError(body.message_id);
+      }
+      await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
 
       const result = await handler.handle(body, handlerContext);
 
