@@ -36,9 +36,9 @@ Deno.test({
         ).content?.[0]?.text;
         assertExists(metadataText);
         const metadata = JSON.parse(metadataText) as {
-          admin_verified_fields?: Record<string, string>;
+          immutable_fields?: Record<string, string>;
         };
-        const senderDomainId = metadata.admin_verified_fields?.domain_id;
+        const senderDomainId = metadata.immutable_fields?.domain_id;
         assertExists(senderDomainId, "sender must have a domain_id to proceed");
 
         // Open a receptive window for the self-send scenario.

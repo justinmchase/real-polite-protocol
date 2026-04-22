@@ -29,7 +29,7 @@ Deno.test({
 
         let originalDomainId: string | undefined;
 
-        await t.step("domain_id appears in admin_verified_fields and verified_fields", async () => {
+        await t.step("domain_id appears in immutable_fields and verified_fields", async () => {
           const metadata = await callTool(adminToken, "get_user_verified_metadata", { oid });
           assertEquals(metadata.status, 200);
           const text = (
@@ -37,12 +37,12 @@ Deno.test({
           ).content?.[0]?.text;
           assertExists(text);
           const payload = JSON.parse(text) as {
-            admin_verified_fields?: Record<string, string>;
+            immutable_fields?: Record<string, string>;
             verified_fields?: Record<string, string>;
           };
-          assertExists(payload.admin_verified_fields?.domain_id);
+          assertExists(payload.immutable_fields?.domain_id);
           assertExists(payload.verified_fields?.domain_id);
-          originalDomainId = payload.admin_verified_fields?.domain_id;
+          originalDomainId = payload.immutable_fields?.domain_id;
         });
 
         await t.step("set_admin_verified_metadata rejects attempts to overwrite domain_id", async () => {
@@ -63,10 +63,10 @@ Deno.test({
           ).content?.[0]?.text;
           assertExists(text);
           const payload = JSON.parse(text) as {
-            admin_verified_fields?: Record<string, string>;
+            immutable_fields?: Record<string, string>;
           };
           assertEquals(
-            payload.admin_verified_fields?.domain_id,
+            payload.immutable_fields?.domain_id,
             originalDomainId,
             "domain_id must be unchanged after rejected overwrite",
           );
@@ -89,10 +89,10 @@ Deno.test({
           ).content?.[0]?.text;
           assertExists(text);
           const payload = JSON.parse(text) as {
-            admin_verified_fields?: Record<string, string>;
+            immutable_fields?: Record<string, string>;
           };
           assertExists(
-            payload.admin_verified_fields?.domain_id,
+            payload.immutable_fields?.domain_id,
             "domain_id must still be present after rejected remove",
           );
         });

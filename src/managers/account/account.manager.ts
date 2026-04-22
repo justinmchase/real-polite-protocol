@@ -6,7 +6,7 @@ import type {
 } from "../../models/mod.ts";
 import type { AccountRepository } from "../../repositories/mod.ts";
 import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
-import { VerifiedMetadataValueTooLongError } from "../../tools/domain-admin/domain-admin.error.ts";
+import { ImmutableFieldConflictError, VerifiedMetadataValueTooLongError } from "../../tools/domain-admin/domain-admin.error.ts";
 
 const DOMAIN_ADMIN_ROLE = "domain.admin";
 
@@ -123,6 +123,12 @@ export class AccountManager {
     }
     this.assertAdminFieldValueLengths(verifiedFields);
     const existing = await this.accounts.getVerifiedMetadata(oid);
+    const immutableFields = existing?.immutable_fields ?? {};
+    for (const key of Object.keys(verifiedFields)) {
+      if (key in immutableFields) {
+        throw new ImmutableFieldConflictError(key);
+      }
+    }
     return await this.accounts.setAdminVerifiedMetadata(oid, {
       ...(existing?.admin_verified_fields ?? {}),
       ...verifiedFields,
@@ -139,6 +145,10 @@ export class AccountManager {
     }
 
     const existing = await this.accounts.getVerifiedMetadata(oid);
+    const immutableFields = existing?.immutable_fields ?? {};
+    if (field in immutableFields) {
+      throw new ImmutableFieldConflictError(field);
+    }
     const adminVerifiedFields = { ...(existing?.admin_verified_fields ?? {}) };
     delete adminVerifiedFields[field];
 

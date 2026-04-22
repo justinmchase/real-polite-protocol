@@ -33,7 +33,14 @@ export async function callTool<T = unknown>(
   const body = await response.json() as Record<string, unknown>;
   const rawResult = body.result as { content?: Array<{ text?: string }> } | undefined;
   const text = rawResult?.content?.[0]?.text;
-  const result = text !== undefined ? JSON.parse(text) as T : undefined;
+  let result: T | undefined;
+  if (text !== undefined) {
+    try {
+      result = JSON.parse(text) as T;
+    } catch {
+      result = undefined;
+    }
+  }
   return { status: response.status, result, body };
 }
 

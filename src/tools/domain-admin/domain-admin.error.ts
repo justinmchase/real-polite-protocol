@@ -59,3 +59,13 @@ export class DomainIdAssignConflictError extends ApplicationError {
     );
   }
 }
+
+export class ImmutableFieldConflictError extends ApplicationError {
+  constructor(field: string) {
+    super(
+      400,
+      "E_IMMUTABLE_FIELD_CONFLICT",
+      `Field "${field}" is immutable and cannot be modified or removed`,
+    );
+  }
+}
