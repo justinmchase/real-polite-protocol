@@ -139,3 +139,15 @@ export class DuplicateMessageError extends ApplicationError {
     );
   }
 }
+
+export class ReceiptRevokedError extends ApplicationError {
+  constructor(receiptId: string) {
+    super(403, "E_RECEIPT_REVOKED", `Receipt ${receiptId} has been revoked`);
+  }
+}
+
+export class ReceiptExpiredError extends ApplicationError {
+  constructor(receiptId: string) {
+    super(403, "E_RECEIPT_EXPIRED", `Receipt ${receiptId} has expired`);
+  }
+}

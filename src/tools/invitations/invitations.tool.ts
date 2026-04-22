@@ -52,6 +52,18 @@ const ListInvitationsInputSchema = {
   ),
 };
 
+const AcceptInvitationOutputSchema = {
+  ...InvitationOutputSchema,
+  receipt: z.object({
+    id: z.string().describe("Receipt ID to present in x-rpp-receipt-id header"),
+    secret: z.string().describe("HMAC-SHA-256 secret for signing submit requests"),
+    category: z.string().describe("Permitted message category"),
+    max_content_rating: z.string().describe("Maximum content rating"),
+    usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe("Usage policy"),
+    issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
+  }).describe("Issued receipt credentials — share with the sender"),
+};
+
 const ListInvitationsOutputSchema = {
   invitations: z.array(z.object(InvitationOutputSchema)).describe("List of invitations"),
   page_size: z.number().int().describe("Number of results returned"),
@@ -216,14 +228,24 @@ export class InvitationTool {
         description:
           "Accept an invitation and optionally negotiate narrower terms. Issues a receipt enabling future communication.",
         inputSchema: AcceptInvitationInputSchema,
-        outputSchema: InvitationOutputSchema,
+        outputSchema: AcceptInvitationOutputSchema,
       },
       withToolErrorHandling(async (params: AcceptInvitationArgs) => {
-        const invitation = await this.invitationManager.accept(
+        const { invitation, receipt } = await this.invitationManager.accept(
           params.invitation_id,
           params.negotiated_terms,
         );
-        return toolResult(invitation);
+        return toolResult({
+          ...invitation,
+          receipt: {
+            id: receipt.id,
+            secret: receipt.secret,
+            category: receipt.category,
+            max_content_rating: receipt.max_content_rating,
+            usage_policy: receipt.usage_policy,
+            issued_at: receipt.issued_at,
+          },
+        });
       }),
     );
 

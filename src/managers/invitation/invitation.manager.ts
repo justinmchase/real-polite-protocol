@@ -1,9 +1,15 @@
-import type { Invitation } from "../../models/mod.ts";
+import type { Invitation, Receipt } from "../../models/mod.ts";
 import type { InvitationRepository } from "../../repositories/mod.ts";
+import type { ReceiptManager } from "../receipt/receipt.manager.ts";
+import {
+  InvitationNotFoundError,
+  InvitationNotPendingError,
+} from "./invitation.error.ts";
 
 export class InvitationManager {
   constructor(
     private readonly invitations: InvitationRepository,
+    private readonly receiptManager: ReceiptManager,
   ) {}
 
   async createInvitation(
@@ -37,34 +43,47 @@ export class InvitationManager {
     return await this.invitations.listByReceiver(oid);
   }
 
+  /**
+   * Accept a pending invitation and issue a receipt to the sender domain.
+   * Returns both the updated invitation and the newly issued receipt.
+   */
   async accept(
     invitationId: string,
     negotiatedTerms?: Record<string, unknown>,
-  ): Promise<Invitation> {
+  ): Promise<{ invitation: Invitation; receipt: Receipt }> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
-      throw new Error(`Invitation ${invitationId} not found`);
+      throw new InvitationNotFoundError(invitationId);
     }
 
     if (invitation.status !== "pending") {
-      throw new Error(
-        `Invitation ${invitationId} cannot be accepted: current status is "${invitation.status}"`,
-      );
+      throw new InvitationNotPendingError(invitationId, invitation.status);
     }
+
+    const acceptedTerms = negotiatedTerms ?? invitation.proposed_terms;
 
     const updated: Invitation = {
       ...invitation,
       status: "accepted",
       accepted_at: new Date().toISOString(),
-      proposed_terms: negotiatedTerms ?? invitation.proposed_terms,
+      proposed_terms: acceptedTerms,
     };
-    return await this.invitations.set(updated);
+    const savedInvitation = await this.invitations.set(updated);
+
+    const receipt = await this.receiptManager.issue(
+      invitation.receiver_oid,
+      invitation.sender_domain,
+      acceptedTerms,
+      invitation.invitation_id,
+    );
+
+    return { invitation: savedInvitation, receipt };
   }
 
   async reject(invitationId: string): Promise<Invitation> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
-      throw new Error(`Invitation ${invitationId} not found`);
+      throw new InvitationNotFoundError(invitationId);
     }
 
     const updated: Invitation = {
@@ -77,7 +96,7 @@ export class InvitationManager {
   async cancel(invitationId: string): Promise<Invitation> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
-      throw new Error(`Invitation ${invitationId} not found`);
+      throw new InvitationNotFoundError(invitationId);
     }
 
     const updated: Invitation = {
@@ -87,3 +106,4 @@ export class InvitationManager {
     return await this.invitations.set(updated);
   }
 }
+

@@ -5,8 +5,10 @@ import {
   MissingReceiptIdError,
   MissingSignatureError,
   MissingTimestampError,
+  ReceiptExpiredError,
   ReceiptInvalidSignatureError,
   ReceiptNotFoundError,
+  ReceiptRevokedError,
   ReceptivePolicyClosedError,
   ReceptivePolicyExpiredError,
   ReceptivePolicyNotFoundError,
@@ -167,7 +169,14 @@ export class ReceiptMessageHandler implements MessageHandler {
       throw new ReceiptNotFoundError(receiptId);
     }
 
-    const receipt = receiptEntry.value as { secret: string };
+    const receipt = receiptEntry.value as { secret: string; status?: string };
+    if (receipt.status === "revoked") {
+      throw new ReceiptRevokedError(receiptId);
+    }
+    if (receipt.status === "expired") {
+      throw new ReceiptExpiredError(receiptId);
+    }
+
     const isValid = await this.verifyHmac(
       receipt.secret,
       timestamp,
