@@ -290,8 +290,9 @@ catches these and formats responses as:
 }
 ```
 
-RPP error codes (e.g., `RECEIPT_NOT_FOUND`) should be prefixed with `E_` per
-grove's `ErrorCode` convention (`WithPrefix<"E_">`).
+All error codes **MUST** start with `E_` (e.g. `E_RECEIPT_NOT_FOUND`). This is
+enforced by grove's `ErrorCode` type (`WithPrefix<"E_">`). Codes without the
+prefix are a compile-time type error and MUST be fixed immediately.
 
 Define one `ApplicationError` subclass per distinct error condition, placed in
 an `*.error.ts` file co-located with the module that throws it (e.g.

@@ -124,7 +124,7 @@ export class RequestStaleError extends ApplicationError {
   constructor(diffSeconds: number) {
     super(
       400,
-      "REQUEST_STALE",
+      "E_REQUEST_STALE",
       `Request timestamp is ${diffSeconds} seconds outside the 60-second freshness window`,
     );
   }
@@ -134,7 +134,7 @@ export class DuplicateMessageError extends ApplicationError {
   constructor(messageId: string) {
     super(
       400,
-      "DUPLICATE_MESSAGE",
+      "E_DUPLICATE_MESSAGE",
       `message_id ${messageId} has already been accepted from this sender domain`,
     );
   }

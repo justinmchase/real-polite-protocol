@@ -89,7 +89,7 @@ Deno.test({
           });
           assertEquals(response.status, 400);
           const body = await response.json() as { code?: string };
-          assertEquals(body.code, "REQUEST_STALE");
+          assertEquals(body.code, "E_REQUEST_STALE");
         },
       );
 
@@ -105,7 +105,7 @@ Deno.test({
           });
           assertEquals(response.status, 400);
           const body = await response.json() as { code?: string };
-          assertEquals(body.code, "REQUEST_STALE");
+          assertEquals(body.code, "E_REQUEST_STALE");
         },
       );
 
@@ -136,7 +136,7 @@ Deno.test({
           const second = await submitMessage({ receiptId, receiptSecret, messageId });
           assertEquals(second.status, 400);
           const body = await second.json() as { code?: string };
-          assertEquals(body.code, "DUPLICATE_MESSAGE");
+          assertEquals(body.code, "E_DUPLICATE_MESSAGE");
         },
       );
     });
