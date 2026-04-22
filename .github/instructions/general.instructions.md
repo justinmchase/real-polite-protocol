@@ -49,6 +49,19 @@ This repository targets Deno Deploy first.
 - Validate request input and return stable JSON error shapes for API endpoints.
 - Prefer straightforward code paths over clever abstractions.
 
+## Schema validation (required)
+
+- Treat all external boundaries as untrusted input and validate with `zod`.
+- For controllers: parse request payloads (body, query, params, headers where
+  applicable) with a Zod schema before business logic.
+- For MCP tools: validate `inputSchema` with Zod and validate/shape output with
+  a Zod schema before returning.
+- Derive TypeScript types from schemas via `z.infer<typeof Schema>`; do not
+  maintain parallel hand-written boundary types.
+- Pass only validated/parsed instances to managers/repositories.
+- If validation fails, return stable, structured errors (do not continue with
+  partial or unchecked data).
+
 ## Specification authority and change control
 
 - Treat specification sources with this strict authority order:

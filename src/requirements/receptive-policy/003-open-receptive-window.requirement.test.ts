@@ -11,7 +11,7 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async () => {
         await t.step(
-          "opening a window sets receptive_until and returns the policy",
+          "opening a window returns a new policy with policy_id and receptive_until",
           async () => {
             const token = await issueToken({
               oid: "oid-listener-win-001",
@@ -20,25 +20,18 @@ Deno.test({
             });
 
             const before = new Date();
-            const { status, body } = await callTool(
-              token,
-              "open_receptive_window",
-              { duration_seconds: 60 },
-            );
-            assertEquals(status, 200);
-            assertExists(body.result);
-
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as {
+            const { status, result } = await callTool<{
+              policy_id: string;
               receptive_until?: string;
-              window_scope?: string;
-            };
-            assertExists(payload.receptive_until);
-            assertEquals(payload.window_scope, "all");
+              mode: string;
+            }>(token, "open_receptive_window", { duration_seconds: 60 });
+            assertEquals(status, 200);
+            assertExists(result);
+            assertExists(result.policy_id);
+            assertExists(result.receptive_until);
+            assertEquals(result.mode, "all");
 
-            const receptiveUntil = new Date(payload.receptive_until!);
+            const receptiveUntil = new Date(result.receptive_until!);
             assertEquals(
               receptiveUntil > before,
               true,
@@ -61,23 +54,17 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { status, body } = await callTool(
-              token,
-              "open_receptive_window",
-              { duration_seconds: 30 },
-            );
+            const { status, result } = await callTool<{ mode: string }>(token, "open_receptive_window", {
+              duration_seconds: 30,
+            });
             assertEquals(status, 200);
-
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as { window_scope?: string };
-            assertEquals(payload.window_scope, "all");
+            assertExists(result);
+            assertEquals(result.mode, "all");
           },
         );
 
         await t.step(
-          "window with domain_filter scope stores the window filter rules",
+          "window with domain_filter scope stores the filter rules",
           async () => {
             const token = await issueToken({
               oid: "oid-listener-win-003",
@@ -85,34 +72,26 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { status, body } = await callTool(
-              token,
-              "open_receptive_window",
-              {
-                duration_seconds: 60,
-                scope: "domain_filter",
-                window_domain_filter: {
-                  rules: [{ action: "allow", pattern: "**.edu" }],
-                },
+            const { status, result } = await callTool<{
+              mode: string;
+              domain_filter?: { rules?: unknown[] };
+            }>(token, "open_receptive_window", {
+              duration_seconds: 60,
+              scope: "domain_filter",
+              domain_filter: {
+                rules: [{ action: "allow", pattern: "**.edu" }],
               },
-            );
+            });
             assertEquals(status, 200);
-
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as {
-              window_scope?: string;
-              window_domain_filter?: { rules?: unknown[] };
-            };
-            assertEquals(payload.window_scope, "domain_filter");
-            assertExists(payload.window_domain_filter);
-            assertEquals(payload.window_domain_filter.rules?.length, 1);
+            assertExists(result);
+            assertEquals(result.mode, "domain_filter");
+            assertExists(result.domain_filter);
+            assertEquals(result.domain_filter.rules?.length, 1);
           },
         );
 
         await t.step(
-          "opening a new window replaces the previous window",
+          "opening multiple windows creates multiple stacked policies",
           async () => {
             const token = await issueToken({
               oid: "oid-listener-win-004",
@@ -120,30 +99,24 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            await callTool(token, "open_receptive_window", {
+            const { result: w1 } = await callTool<{ policy_id: string }>(token, "open_receptive_window", {
               duration_seconds: 3600,
             });
+            const { result: w2 } = await callTool<{ policy_id: string }>(token, "open_receptive_window", {
+              duration_seconds: 120,
+            });
 
-            const { status, body } = await callTool(
-              token,
-              "open_receptive_window",
-              { duration_seconds: 120 },
-            );
-            assertEquals(status, 200);
+            assertExists(w1);
+            assertExists(w2);
+            // Two different policy_ids.
+            assertEquals(w1.policy_id !== w2.policy_id, true);
 
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as { receptive_until?: string };
-            assertExists(payload.receptive_until);
-
-            const receptiveUntil = new Date(payload.receptive_until!);
-            const now = new Date();
-            assertEquals(
-              receptiveUntil.getTime() - now.getTime() < 180_000,
-              true,
-              "Second window should replace the first (receptive_until ~120s, not 3600s)",
-            );
+            // Both appear in the list.
+            const { result: list } = await callTool<{
+              policies: Array<{ policy_id: string }>;
+            }>(token, "get_receptive_policies");
+            assertExists(list);
+            assertEquals(list.policies.length, 2);
           },
         );
       });

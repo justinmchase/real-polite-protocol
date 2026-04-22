@@ -593,44 +593,72 @@ Invitations are category=invitation messages that offer receipt grants.
 
 There are two forms of invitation:
 
-1. **Direct invitations** sent via the submit endpoint using an existing receipt
-   (e.g., proposing an additional category to someone you already communicate
-   with).
+1. **Direct invitations** sent when one party has obtained another's
+   `receptive_policy_id` and `receiver_domain` out-of-band (e.g., via QR code
+   or NFC). The sender provides these to the server, which resolves the receiver
+   and creates the invitation record.
 2. **Public invitations** created by a user and discoverable by invitation ID
    (Section 9.4). Public invitations are the primary mechanism for first contact
    between strangers.
 
 Because RPP has no user-level addresses (Section 3A), invitations are not "sent
-to an address." Direct invitations are delivered via receipt-based routing like
-any other message. Public invitations are discovered out-of-band (QR code, link,
-website) and accepted by the discovering party.
+to an address." The `receptive_policy_id` acts as a capability token that both
+identifies the intended receiver (without exposing their internal identifier)
+and proves they have opted in to receiving invitations.
+
+The core protocol flow is:
+
+```
+Receptive Policy → Invitation → Receipt → Message
+```
+
+A receiver MUST first establish a receptive policy before any invitation can be
+delivered to them. Receipts are issued when an invitation is accepted, and
+receipts enable future message delivery.
 
 ### 9.1 Receptive Policy
 
-Receivers MUST explicitly opt in to invitations. A receiver MAY configure:
+Receivers MUST explicitly opt in to invitations. A receiver does this by
+creating one or more **receptive policies**. Each policy is an independent
+record with a unique `policy_id` (UUID). Policies stack — a receiver MAY have
+multiple active policies simultaneously (e.g., a standing `.edu` domain-filter
+policy plus a short-lived proximity window).
 
-- receptive to all invitations,
-- receptive by domain filter (Section 9.1.4),
-- receptive for a limited time window (time-bounded receptivity),
-- not receptive (closed).
+When an invitation arrives, the server looks up the policy by the
+`receptive_policy_id` supplied in the invitation. If no matching, active,
+non-closed policy is found, delivery MUST be rejected.
 
-If a receiver is not receptive per policy, invitation delivery MUST be rejected.
+Each policy specifies a `mode`:
+
+- receptive to all invitations (`all`),
+- receptive by domain filter only (`domain_filter`, Section 9.1.4),
+- explicitly closed (`closed`).
+
+If a receiver has no policies, the default state is `closed` — the server MUST
+NOT allow invitations unless the listener has explicitly created a receptive
+policy.
 
 #### 9.1.1 Time-Bounded Receptivity
 
-A receiver MAY open a receptive window that expires after a specified duration.
+A receiver MAY open a time-bounded receptive window by calling
+`open_receptive_window`. This creates a new receptive policy record with a
+`receptive_until` timestamp and a `policy_id` that can be shared out-of-band.
 This is analogous to a Bluetooth pairing window: the receiver signals readiness
-for a short period, after which the policy automatically reverts to its prior
-state.
+for a short period by sharing their `policy_id` (e.g., as a QR code).
 
-A time-bounded receptive policy MUST include:
+A timed policy MUST include:
 
+- `policy_id`: a UUID identifying this policy,
 - `receptive_until`: an ISO 8601 timestamp after which the policy expires,
-- `scope`: any of the standard receptive filters (all, domain filter) that apply
-  during the window.
+- `mode`: the scope filter (`all` or `domain_filter`) that applies during the
+  window.
 
-Servers MUST reject invitations arriving after `receptive_until` with
-`INVITATION_NOT_RECEPTIVE`.
+Opening a new window DOES NOT replace existing windows or base policies —
+windows stack. If the receiver wants to revoke a window early, they must
+explicitly remove the policy.
+
+Servers MUST reject invitations targeting a `receptive_policy_id` whose
+`receptive_until` has passed with `INVITATION_NOT_RECEPTIVE`.
 
 Time-bounded receptivity is the RECOMMENDED mechanism for in-person exchanges
 where two parties agree to communicate and need a brief mutual discovery window.
@@ -742,8 +770,15 @@ Rules:
 An invitation MUST include:
 
 - invitation_id,
-- offered receipt terms,
-- expires_at timeout set by sender.
+- offered receipt terms.
+
+An invitation MAY include:
+
+- expires_at: an ISO 8601 UTC timestamp after which the invitation is no longer
+  valid. If omitted, the invitation does not expire and remains in the `pending`
+  state until the receiver acts on it or the sender cancels it. Senders SHOULD
+  include an `expires_at` for time-bounded exchanges (e.g., proximity pairing)
+  but MAY omit it for standing offers.
 
 Invitation state transitions:
 
@@ -999,6 +1034,93 @@ the verification is therefore bounded by trust in the domain itself.
   assess the person, not just the domain.
 - Casual or pseudonymous invitations (e.g., social, personal) MAY omit
   verification entirely.
+
+### 9.6 Sender Claims on Direct Invitations
+
+A sender MAY attach optional **claims** to a direct invitation envelope to
+provide the receiver with contextual information about the sender. Claims are
+informational only — they do not alter the protocol flow and do not affect
+receptive policy evaluation.
+
+Claims are expressed as a `claims` object nested inside the `invitation` field
+of the envelope:
+
+```json
+{
+  "category": "invitation",
+  "invitation": {
+    "receptive_policy_id": "...",
+    "proposed_terms": { "categories": ["billing"] },
+    "claims": {
+      "immutable": { "domain_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+      "user": { "name": "Alice Smith", "email": "alice@sender.example" },
+      "admin": { "institution": "Example University" },
+      "custom": { "note": "We met at the conference" }
+    }
+  }
+}
+```
+
+Four claim namespaces are defined:
+
+| Namespace   | Trust level     | Source                                                                                                                                          |
+| ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `immutable` | Highest — domain-assigned | Server-assigned values (e.g. `domain_id`) injected automatically from the sender's `immutable_fields`. The caller MUST NOT supply this namespace. The server MUST always include it. |
+| `user`      | Server-attested | Values from the sender's authenticated identity token, stored as `user_verified_fields` and resolved by the sending server. The caller MUST NOT supply values — only the server may populate this namespace. |
+| `admin`     | Admin-attested  | Values set by the sending domain's administrator, stored as `admin_verified_fields` and resolved by the sending server. The caller MUST NOT supply values directly. |
+| `custom`    | Unverified      | Caller-supplied free-form data. The receiver MUST treat these as self-declared with no independent verification.                                |
+
+The `immutable` namespace MUST be present on every direct invitation envelope.
+The server MUST populate it from the sender's `immutable_fields` record
+(Section 10B.8). The `user`, `admin`, and `custom` namespaces are optional;
+only those with at least one entry are included.
+
+#### 9.6.1 Claim Value Constraints
+
+To keep the total envelope size bounded and values reliably serializable, all
+values within the `claims` object MUST conform to the following unified
+constraints. These constraints apply equally to all four namespaces:
+
+| Constraint             | Limit                                                              |
+| ---------------------- | ------------------------------------------------------------------ |
+| Allowed value types    | `string`, `number`, `boolean`, `null`, or a flat array of those   |
+| String max length      | 512 characters per string value (including strings inside arrays)  |
+| Array max items        | 20 items per array value                                           |
+| Nested objects         | NOT allowed — only scalars and flat arrays of scalars              |
+| Max keys per namespace | 20 keys                                                            |
+| Key max length         | 64 characters per key name                                         |
+
+Servers MUST validate these constraints on inbound envelopes and MUST reject
+any `send_invitation` call whose `custom` claims violates them with
+`INVALID_MESSAGE_ENVELOPE` (HTTP 400). Servers MUST also enforce these
+constraints on server-resolved values before writing them into the envelope.
+
+#### 9.6.2 Receiver Obligations
+
+- The receiver MUST NOT treat `custom` claim values as verified or authoritative.
+- The receiver SHOULD surface the trust level of each namespace to the user
+  (e.g., "verified by sender's server" vs. "self-declared").
+- The receiver MAY use claim values to inform their accept/reject decision but
+  MUST NOT make automated protocol decisions based on claim content.
+- The receiver MAY ignore claims entirely.
+
+#### 9.6.3 Relationship to Domain-Verified Invitations (Section 9.5)
+
+The `claims` mechanism is a complementary, lighter-weight companion to the
+cryptographic `verification` attestation defined for public invitations
+(Section 9.5).
+
+| Aspect           | `claims` (Section 9.6)                | `verification` (Section 9.5)                          |
+| ---------------- | ------------------------------------- | ----------------------------------------------------- |
+| Applies to       | Direct invitations                    | Public invitations                                    |
+| Authenticity     | Server-resolved but unsigned          | Ed25519 signature by hosting domain                   |
+| Receiver action  | Informational; no verification step   | Receiver verifies signature against domain public key |
+| Scope            | Any metadata key stored in the record | Fields the domain is willing to attest                |
+
+Senders who create public invitations SHOULD use the `verification` mechanism
+(Section 9.5) rather than `claims`, as it provides cryptographic authenticity.
+`claims` is intended primarily for direct, one-to-one invitations where the
+cryptographic overhead of Section 9.5 is unnecessary.
 
 ## 10. Group Conversations
 
@@ -1334,8 +1456,14 @@ invitations.
 | `accept_invitation`        | Accept a pending invitation, optionally with narrower terms per         |
 |                            | Section 9.3. Issues a receipt to the inviting domain.                   |
 | `reject_invitation`        | Reject a pending invitation.                                            |
-| `send_invitation`          | Send a direct invitation via an existing receipt to propose additional  |
-|                            | categories or new terms to an existing contact.                         |
+| `send_invitation`          | Send an invitation to a receiver identified by `receiver_domain`        |
+|                            | and `receptive_policy_id`. The invitation envelope is delivered to the  |
+|                            | **receiver's** submit endpoint, where the receiver's server resolves    |
+|                            | the policy, validates receptivity, and creates the invitation record.   |
+|                            | Optionally attaches sender claims (Section 9.6): `include_user_claims`  |
+|                            | and `include_admin_claims` select keys from the sending server's stored |
+|                            | verified metadata; `custom_claims` passes caller-supplied unverified    |
+|                            | data subject to the value constraints of Section 9.6.1.                 |
 | `create_public_invitation` | Create a public invitation (Section 9.4) with proposed terms,           |
 |                            | optional display name, description, trust gate, and expiration.         |
 | `update_public_invitation` | Update mutable fields on a public invitation (display_name,             |
@@ -1356,11 +1484,13 @@ These tools manage the listener's receptive policy for incoming invitations
 
 | Tool                    | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
-| `get_receptive_policy`  | Retrieve the listener's current receptive policy configuration.    |
-| `set_receptive_policy`  | Update the receptive policy. Supports all modes: receptive to all, |
-|                         | by domain filter (Section 9.1.4), or closed.                       |
-| `open_receptive_window` | Create a time-bounded receptive window (Section 9.1.1) with a      |
-|                         | specified duration and scope. RECOMMENDED for proximity pairing.   |
+| `get_receptive_policies` | List the listener's receptive policies (paged). Returns an empty   |
+|                          | list if no policies exist (implies closed/not receptive).           |
+| `add_receptive_policy`   | Add a new receptive policy. Supports modes: receptive to all,      |
+|                          | by domain filter (Section 9.1.4), or closed. Policies stack.       |
+| `open_receptive_window`  | Create a time-bounded receptive policy (Section 9.1.1) with a      |
+|                          | specified duration and scope. Returns the new policy's `policy_id`. |
+|                          | RECOMMENDED for proximity pairing.                                  |
 
 ### 10B.6 Identity Tools
 
@@ -1407,15 +1537,19 @@ compares the invitation's metadata against these records and automatically
 produces (or strips) the `verification` object — no manual attestation step is
 required.
 
-Verified metadata has two distinct sources:
+Verified metadata has three distinct sources:
 
+- `immutable_fields`: values assigned by the server itself at account creation
+  (e.g. `domain_id`). These values are write-once and cannot be overwritten by
+  any administrator or user action.
 - `user_verified_fields`: values derived from the user's authenticated identity
   token.
 - `admin_verified_fields`: values supplied by a domain administrator.
 
-When the same field exists in both sources, the admin value is authoritative in
-the merged `verified_fields` view used by the server for verification and MCP
-tool responses that expose the effective record.
+Merge precedence in the effective `verified_fields` view is:
+`user_verified_fields` < `admin_verified_fields` < `immutable_fields`.
+`immutable_fields` always wins; a user or administrator cannot shadow or
+override an immutable value.
 
 | Tool                         | Description                                                        |
 | ---------------------------- | ------------------------------------------------------------------ |
@@ -1423,16 +1557,21 @@ tool responses that expose the effective record.
 |                              | verifiable fields (e.g., display_name) and their current values.   |
 |                              | This tool MUST support resume-token pagination (Section 10B.10).   |
 | `get_user_verified_metadata` | Retrieve the verified metadata record for a specific user,         |
-|                              | including `user_verified_fields`, `admin_verified_fields`, the     |
-|                              | effective merged `verified_fields`, and update timestamps.         |
+|                              | including `immutable_fields`, `user_verified_fields`,              |
+|                              | `admin_verified_fields`, the effective merged `verified_fields`,   |
+|                              | and update timestamps.                                             |
 | `set_admin_verified_metadata` | Set or update admin-supplied verified metadata for a user. These  |
 |                               | values populate `admin_verified_fields` and override conflicting  |
 |                               | user-sourced values in the effective merged record used during    |
-|                               | automatic attestation (Section 9.5.3).                            |
+|                               | automatic attestation (Section 9.5.3). Fields present in          |
+|                               | `immutable_fields` MUST NOT be settable via this tool — the       |
+|                               | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`.|
 | `remove_admin_verified_metadata` | Remove a specific field from a user's admin verified metadata. |
 |                                  | The server MUST automatically re-sign or strip the            |
 |                                  | `verification` object on any active invitation that          |
-|                                  | referenced the removed field.                                |
+|                                  | referenced the removed field. Fields present in              |
+|                                  | `immutable_fields` MUST NOT be removable via this tool — the |
+|                                  | server MUST reject such attempts with `E_IMMUTABLE_FIELD_CONFLICT`.|
 
 ### 10B.9 Domain Management — Contact Information
 
@@ -1637,13 +1776,18 @@ JSON-RPC numeric error codes.
 
 #### 11.3.2 MCP Tool/Application Error Codes
 
-| MCP Tool Code                    | Typical HTTP | Description                                              |
-| -------------------------------- | ------------ | -------------------------------------------------------- |
-| E_INTERNAL                       | 500          | Unexpected tool failure                                  |
-| E_ACCOUNT_NOT_FOUND              | 404          | Target account does not exist                            |
-| E_USER_VERIFIED_METADATA_NOT_FOUND | 404        | No verified metadata exists for the requested user       |
-| E_INVALID_RESUME_TOKEN           | 400          | Pagination resume token is malformed or expired          |
-| E_INVALID_PAGE_SIZE              | 400          | Pagination page_size is invalid                          |
+| MCP Tool Code                        | Typical HTTP | Description                                              |
+| ------------------------------------ | ------------ | -------------------------------------------------------- |
+| E_INTERNAL                           | 500          | Unexpected tool failure                                  |
+| E_ACCOUNT_NOT_FOUND                  | 404          | Target account does not exist                            |
+| E_ACCOUNT_CREATE_CONFLICT            | 500          | Account creation failed due to a concurrent write conflict |
+| E_DOMAIN_ID_ASSIGN_CONFLICT          | 500          | domain_id assignment failed due to a concurrent write conflict |
+| E_USER_VERIFIED_METADATA_NOT_FOUND   | 404          | No verified metadata exists for the requested user       |
+| E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND | 404     | The specified admin verified metadata field does not exist |
+| E_VERIFIED_METADATA_VALUE_TOO_LONG   | 400          | A verified metadata value exceeds the maximum allowed length |
+| E_IMMUTABLE_FIELD_CONFLICT           | 400          | Attempted to set or remove a field in the immutable namespace |
+| E_INVALID_RESUME_TOKEN               | 400          | Pagination resume token is malformed or expired          |
+| E_INVALID_PAGE_SIZE                  | 400          | Pagination page_size is invalid                          |
 
 ## 12. Domain Identity
 

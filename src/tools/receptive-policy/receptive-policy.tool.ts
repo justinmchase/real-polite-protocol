@@ -20,28 +20,36 @@ const DomainFilterSchema = z.object({
 });
 
 const ReceptivePolicyOutputSchema = {
+  policy_id: z.string().uuid().describe("Unique identifier for this policy"),
   oid: z.string().describe("User object identifier"),
   mode: z.enum(["all", "domain_filter", "closed"]).describe(
-    'Base receptive mode: "all", "domain_filter", or "closed"',
+    'Receptive mode: "all", "domain_filter", or "closed"',
   ),
   domain_filter: DomainFilterSchema.optional().describe(
     "Domain filter rules applied when mode is domain_filter",
   ),
   receptive_until: z.iso.datetime().optional().describe(
-    "ISO 8601 timestamp after which the active time-bounded window expires",
+    "ISO 8601 expiry timestamp for time-bounded policies",
   ),
-  window_scope: z.enum(["all", "domain_filter"]).optional().describe(
-    "Receptive mode applied during the time-bounded window",
-  ),
-  window_domain_filter: DomainFilterSchema.optional().describe(
-    "Domain filter applied during the time-bounded window when window_scope is domain_filter",
-  ),
-  updated_at: z.iso.datetime().describe(
-    "ISO 8601 timestamp of the last policy update",
+  created_at: z.iso.datetime().describe(
+    "ISO 8601 timestamp when this policy was created",
   ),
 };
 
-const SetReceptivePolicyInputSchema = {
+const ReceptivePoliciesOutputSchema = {
+  policies: z.array(z.object(ReceptivePolicyOutputSchema)).describe(
+    "List of active receptive policies for this user",
+  ),
+  page_size: z.number().int().describe("Number of results returned"),
+};
+
+const GetReceptivePoliciesInputSchema = {
+  page_size: z.number().int().min(1).max(100).optional().describe(
+    "Maximum number of results to return (default 50)",
+  ),
+};
+
+const AddReceptivePolicyInputSchema = {
   mode: z.enum(["all", "domain_filter", "closed"]).describe(
     'Receptive mode: "all" accepts any sender, "domain_filter" applies rules, "closed" blocks all invitations',
   ),
@@ -57,13 +65,17 @@ const OpenReceptiveWindowInputSchema = {
   scope: z.enum(["all", "domain_filter"]).optional().describe(
     'Receptive scope during the window: "all" (default) or "domain_filter"',
   ),
-  window_domain_filter: DomainFilterSchema.optional().describe(
+  domain_filter: DomainFilterSchema.optional().describe(
     "Domain filter to apply during the window when scope is domain_filter",
   ),
 };
 
-type SetReceptivePolicyArgs = z.infer<
-  z.ZodObject<typeof SetReceptivePolicyInputSchema>
+type GetReceptivePoliciesArgs = z.infer<
+  z.ZodObject<typeof GetReceptivePoliciesInputSchema>
+>;
+
+type AddReceptivePolicyArgs = z.infer<
+  z.ZodObject<typeof AddReceptivePolicyInputSchema>
 >;
 
 type OpenReceptiveWindowArgs = z.infer<
@@ -77,28 +89,31 @@ export class ReceptivePolicyTool {
 
   register(server: McpServer, auth: AuthInfo): void {
     server.registerTool(
-      "get_receptive_policy",
+      "get_receptive_policies",
       {
         description:
-          "Retrieve the listener's current receptive policy configuration.",
-        outputSchema: ReceptivePolicyOutputSchema,
+          "List all receptive policies for the authenticated user. Returns an empty list if no policies have been added (implying closed/not receptive).",
+        inputSchema: GetReceptivePoliciesInputSchema,
+        outputSchema: ReceptivePoliciesOutputSchema,
       },
-      withToolErrorHandling(async () => {
-        const policy = await this.receptivePolicyManager.getPolicy(auth.oid);
-        return toolResult(policy);
+      withToolErrorHandling(async (params: GetReceptivePoliciesArgs) => {
+        const all = await this.receptivePolicyManager.getPolicies(auth.oid);
+        const pageSize = params.page_size ?? 50;
+        const policies = all.slice(0, pageSize);
+        return toolResult({ policies, page_size: policies.length });
       }),
     );
 
     server.registerTool(
-      "set_receptive_policy",
+      "add_receptive_policy",
       {
         description:
-          'Update the receptive policy. Supports modes: "all" (accept from any sender), "domain_filter" (apply domain rules), or "closed" (block all invitations).',
-        inputSchema: SetReceptivePolicyInputSchema,
+          'Add a new receptive policy. Policies stack — multiple can be active simultaneously. Supports modes: "all", "domain_filter", or "closed".',
+        inputSchema: AddReceptivePolicyInputSchema,
         outputSchema: ReceptivePolicyOutputSchema,
       },
-      withToolErrorHandling(async (params: SetReceptivePolicyArgs) => {
-        const policy = await this.receptivePolicyManager.setPolicy(
+      withToolErrorHandling(async (params: AddReceptivePolicyArgs) => {
+        const policy = await this.receptivePolicyManager.addPolicy(
           auth.oid,
           params.mode,
           params.domain_filter,
@@ -111,7 +126,7 @@ export class ReceptivePolicyTool {
       "open_receptive_window",
       {
         description:
-          "Create a time-bounded receptive window for incoming invitations. Recommended for proximity pairing. The window expires after the specified duration and reverts to the base policy.",
+          "Add a time-bounded receptive policy. Windows stack with other policies — opening a new window does not remove existing ones. Recommended for proximity pairing.",
         inputSchema: OpenReceptiveWindowInputSchema,
         outputSchema: ReceptivePolicyOutputSchema,
       },
@@ -120,7 +135,7 @@ export class ReceptivePolicyTool {
           auth.oid,
           params.duration_seconds,
           params.scope ?? "all",
-          params.window_domain_filter,
+          params.domain_filter,
         );
         return toolResult(policy);
       }),

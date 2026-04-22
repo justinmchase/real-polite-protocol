@@ -53,13 +53,26 @@ export class AccountManager {
       "oid" | "name" | "email" | "preferred_username" | "ctry"
     >,
   ): Promise<Account> {
-    const account = await this.accounts.ensureByOid(auth.oid);
+    let account = await this.accounts.ensureByOid(auth.oid);
+    // Lazy migration: assign domain_id to legacy accounts that lack it.
+    if (!account.domain_id) {
+      account = await this.accounts.assignDomainId(auth.oid);
+    }
     const existingMetadata = await this.accounts.getVerifiedMetadata(auth.oid);
     if (!existingMetadata) {
       await this.accounts.setUserVerifiedMetadata(
         auth.oid,
         this.extractUserVerifiedFields(auth),
       );
+      // Seed domain_id as an immutable server-assigned claim.
+      await this.accounts.setImmutableFields(auth.oid, {
+        domain_id: account.domain_id,
+      });
+    } else if (!existingMetadata.immutable_fields["domain_id"]) {
+      // Lazy migration: seed domain_id into immutable_fields.
+      await this.accounts.setImmutableFields(auth.oid, {
+        domain_id: account.domain_id,
+      });
     }
     return account;
   }

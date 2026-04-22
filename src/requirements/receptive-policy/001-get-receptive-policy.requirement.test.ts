@@ -6,12 +6,12 @@ import {
 } from "../mcp/auth/test-helpers.ts";
 
 Deno.test({
-  name: "req:receptive-policy-001 - Listeners can retrieve their current receptive policy",
+  name: "req:receptive-policy-001 - Listeners can list their receptive policies",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async () => {
         await t.step(
-          "authenticated user gets closed policy by default",
+          "authenticated user gets empty list by default",
           async () => {
             const token = await issueToken({
               oid: "oid-listener-001",
@@ -19,26 +19,18 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { status, body } = await callTool(
-              token,
-              "get_receptive_policy",
-            );
+            const { status, result } = await callTool<{
+              policies: Array<unknown>;
+              page_size: number;
+            }>(token, "get_receptive_policies");
             assertEquals(status, 200);
-            assertExists(body.result);
-
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as {
-              oid?: string;
-              mode?: string;
-            };
-            assertEquals(payload.mode, "closed");
+            assertExists(result);
+            assertEquals(result.policies.length, 0);
           },
         );
 
         await t.step(
-          "policy reflects oid of the authenticated user",
+          "policies belong to the authenticated user",
           async () => {
             const token = await issueToken({
               oid: "oid-listener-002",
@@ -46,17 +38,18 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            const { status, body } = await callTool(
-              token,
-              "get_receptive_policy",
-            );
-            assertEquals(status, 200);
+            // Add a policy so there is something to list.
+            await callTool(token, "add_receptive_policy", { mode: "all" });
 
-            const text = (body.result as { content?: Array<{ text?: string }> })
-              .content?.[0]?.text;
-            assertExists(text);
-            const payload = JSON.parse(text) as { oid?: string };
-            assertEquals(payload.oid, "oid-listener-002");
+            const { status, result } = await callTool<{
+              policies: Array<{ oid: string; policy_id: string }>;
+              page_size: number;
+            }>(token, "get_receptive_policies");
+            assertEquals(status, 200);
+            assertExists(result);
+            assertEquals(result.policies.length, 1);
+            assertEquals(result.policies[0].oid, "oid-listener-002");
+            assertExists(result.policies[0].policy_id);
           },
         );
       });

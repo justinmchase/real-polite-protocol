@@ -1,6 +1,7 @@
 export interface Account {
   id: string;
   oid: string;
+  domain_id: string;
   display_name?: string;
   created_at: string;
   updated_at: string;
@@ -11,6 +12,7 @@ export function newAccount(oid: string, now = new Date()): Account {
   return {
     id: crypto.randomUUID(),
     oid,
+    domain_id: crypto.randomUUID(),
     created_at: timestamp,
     updated_at: timestamp,
   };
@@ -18,6 +20,7 @@ export function newAccount(oid: string, now = new Date()): Account {
 
 export interface UserVerifiedMetadataRecord {
   oid: string;
+  immutable_fields: Record<string, string>;
   user_verified_fields: Record<string, string>;
   admin_verified_fields: Record<string, string>;
   verified_fields: Record<string, string>;

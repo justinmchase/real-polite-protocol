@@ -39,3 +39,23 @@ export class AdminVerifiedMetadataFieldNotFoundError extends ApplicationError {
     );
   }
 }
+
+export class AccountCreateConflictError extends ApplicationError {
+  constructor(oid: string) {
+    super(
+      500,
+      "E_ACCOUNT_CREATE_CONFLICT",
+      `Failed to create account for oid ${oid} due to a concurrent write conflict`,
+    );
+  }
+}
+
+export class DomainIdAssignConflictError extends ApplicationError {
+  constructor(oid: string) {
+    super(
+      500,
+      "E_DOMAIN_ID_ASSIGN_CONFLICT",
+      `Failed to assign domain_id for oid ${oid} due to a concurrent write conflict`,
+    );
+  }
+}

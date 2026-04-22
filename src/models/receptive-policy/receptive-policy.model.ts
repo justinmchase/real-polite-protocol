@@ -1,5 +1,4 @@
 export type ReceptiveMode = "all" | "domain_filter" | "closed";
-export type WindowScope = "all" | "domain_filter";
 
 export interface DomainFilterRule {
   action: "allow" | "block";
@@ -11,19 +10,11 @@ export interface DomainFilter {
 }
 
 export interface ReceptivePolicy {
+  policy_id: string;
   oid: string;
   mode: ReceptiveMode;
   domain_filter?: DomainFilter;
+  /** If set, this policy expires at this ISO 8601 timestamp (timed window). */
   receptive_until?: string;
-  window_scope?: WindowScope;
-  window_domain_filter?: DomainFilter;
-  updated_at: string;
-}
-
-export function defaultReceptivePolicy(oid: string): ReceptivePolicy {
-  return {
-    oid,
-    mode: "closed",
-    updated_at: new Date().toISOString(),
-  };
+  created_at: string;
 }

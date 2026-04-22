@@ -1,8 +1,9 @@
 import { assertEquals } from "@std/assert";
 import { start } from "../mod.ts";
 
-export interface ToolCallResult {
+export interface ToolCallResult<T = unknown> {
   status: number;
+  result: T | undefined;
   body: Record<string, unknown>;
 }
 
@@ -10,11 +11,11 @@ export interface StartedServerContext {
   kvPath: string;
 }
 
-export async function callTool(
+export async function callTool<T = unknown>(
   token: string,
   toolName: string,
   args: Record<string, unknown> = {},
-): Promise<ToolCallResult> {
+): Promise<ToolCallResult<T>> {
   const response = await fetch("http://localhost:8000/mcp", {
     method: "POST",
     headers: {
@@ -29,8 +30,11 @@ export async function callTool(
       params: { name: toolName, arguments: args },
     }),
   });
-  const body = await response.json();
-  return { status: response.status, body };
+  const body = await response.json() as Record<string, unknown>;
+  const rawResult = body.result as { content?: Array<{ text?: string }> } | undefined;
+  const text = rawResult?.content?.[0]?.text;
+  const result = text !== undefined ? JSON.parse(text) as T : undefined;
+  return { status: response.status, result, body };
 }
 
 export async function withStartedServer(

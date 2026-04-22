@@ -96,6 +96,87 @@ src/
 Controllers extend grove's `Controller` class and implement the `use` method to
 register routes or middleware on the Hono application.
 
+### Schema-first boundaries
+
+- Controllers MUST validate boundary inputs with Zod before using them.
+  This includes request body, query, params, and relevant headers.
+- Define a schema once, parse with `safeParse`/`parse`, then work only with the
+  validated typed value (`z.infer<typeof Schema>`).
+- Avoid manual "required fields" arrays and ad-hoc `typeof` trees when a Zod
+  schema can express the contract.
+- Tool handlers should follow the same pattern for outputs: produce a value
+  that conforms to a Zod-defined output contract.
+- Use Zod enums (e.g., `z.enum(["type-a", "type-b"])`) to constrain discriminator
+  fields at the schema level, not in runtime conditionals.
+
+### Strategy Pattern for Extensible Logic
+
+Use the strategy pattern when:
+- Logic is **extensible** — new behaviors should be addable without modifying
+  existing code (open/closed principle).
+- Logic is **keyed by a discriminator** — a single validated field determines
+  which logic path to take (e.g., message `category`, tool name).
+- Logic is **non-trivial** — the behavior for each key is substantial enough to
+  warrant its own module and testing surface.
+
+The strategy pattern reduces cognitive load by distributing logic across focused
+modules and enables additions to be made in a consistent, patterned way.
+
+**Example: Message Handlers by Category**
+
+Define a handler interface:
+
+```ts
+export interface MessageHandler {
+  readonly category: string;
+  handle(
+    body: SubmitMessageEnvelope,
+    bodyBytes: Uint8Array,
+  ): Promise<{ messageId: string }>;
+}
+```
+
+Create concrete handlers (each in its own file/module):
+
+```ts
+// handlers/invitation.message-handler.ts
+export class InvitationMessageHandler implements MessageHandler {
+  readonly category = "invitation";
+  async handle(body, bodyBytes) {
+    // invitation-specific logic: receptive policy check, create invitation record
+    return { messageId };
+  }
+}
+
+// handlers/receipt.message-handler.ts
+export class ReceiptMessageHandler implements MessageHandler {
+  readonly category = "message";
+  async handle(body, bodyBytes) {
+    // receipt-based auth: verify HMAC signature
+    return { messageId };
+  }
+}
+```
+
+In the controller, build a handler registry and dispatch by category:
+
+```ts
+const handlers = new Map<string, MessageHandler>([
+  [new InvitationMessageHandler().category, new InvitationMessageHandler()],
+  [new ReceiptMessageHandler().category, new ReceiptMessageHandler()],
+]);
+
+// Later, in the route handler:
+const handler = handlers.get(body.category);
+if (!handler) {
+  throw new UnsupportedMessageCategoryError(body.category);
+}
+const result = await handler.handle(body, bodyBytes);
+```
+
+This mirrors the pattern used for MCP tools — a registry keyed by a discriminator,
+with each entry handling its own concerns.
+
 ### Route Controllers
 
 Route controllers register routes directly on the `GroveApp` (a Hono instance):
@@ -192,6 +273,11 @@ Do NOT scatter `Deno.env.get()` calls throughout the codebase.
 
 ## Error Handling
 
+**Never throw bare `Error` instances.** Every thrown error MUST be a subclass of
+grove's `ApplicationError`. This applies at all layers — controllers, managers,
+repositories, and tools. Bare `new Error(...)` throws bypass the structured
+error pipeline and produce unformatted 500 responses.
+
 Use grove's `ApplicationError` for structured errors. The `ErrorController`
 catches these and formats responses as:
 
@@ -207,6 +293,18 @@ catches these and formats responses as:
 RPP error codes (e.g., `RECEIPT_NOT_FOUND`) should be prefixed with `E_` per
 grove's `ErrorCode` convention (`WithPrefix<"E_">`).
 
+Define one `ApplicationError` subclass per distinct error condition, placed in
+an `*.error.ts` file co-located with the module that throws it (e.g.
+`submit.error.ts`, `domain-admin.error.ts`). Choose the HTTP status that best
+describes the condition from the caller's perspective:
+
+| Condition                       | Status |
+| ------------------------------- | ------ |
+| Resource not found              | 404    |
+| Invalid input / constraint      | 400    |
+| Unauthorized (no token)         | 401    |
+| Forbidden (wrong role/scope)    | 403    |
+| Internal invariant violated     | 500    |
 ## Success Responses
 
 Return JSON with explicit content type:

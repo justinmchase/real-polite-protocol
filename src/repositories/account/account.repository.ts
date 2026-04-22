@@ -2,6 +2,11 @@ import type { Account, UserVerifiedMetadataRecord } from "../../models/mod.ts";
 import { newAccount } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import {
+  AccountCreateConflictError,
+  AccountNotFoundError,
+  DomainIdAssignConflictError,
+} from "../../tools/domain-admin/domain-admin.error.ts";
+import {
   type PaginatedResult,
   type PaginationInput,
   InvalidResumeTokenError,
@@ -14,6 +19,7 @@ const VERIFIED_METADATA_PREFIX: Deno.KvKey = ["accounts", "verified_metadata"];
 
 interface StoredVerifiedMetadataRecord {
   oid: string;
+  immutable_fields?: Record<string, string>;
   user_verified_fields?: Record<string, string>;
   admin_verified_fields?: Record<string, string>;
   verified_fields?: Record<string, string>;
@@ -28,16 +34,20 @@ export class AccountRepository {
   private resolveVerifiedMetadata(
     record: StoredVerifiedMetadataRecord,
   ): UserVerifiedMetadataRecord {
+    const immutableFields = record.immutable_fields ?? {};
     const userVerifiedFields = record.user_verified_fields ?? {};
     const adminVerifiedFields = record.admin_verified_fields ??
       record.verified_fields ?? {};
     return {
       oid: record.oid,
+      immutable_fields: immutableFields,
       user_verified_fields: userVerifiedFields,
       admin_verified_fields: adminVerifiedFields,
+      // Merge order: user < admin < immutable (immutable has highest priority).
       verified_fields: {
         ...userVerifiedFields,
         ...adminVerifiedFields,
+        ...immutableFields,
       },
       user_updated_at: record.user_updated_at,
       admin_updated_at: record.admin_updated_at ??
@@ -82,7 +92,7 @@ export class AccountRepository {
       return retry.value;
     }
 
-    throw new Error("Failed to create account");
+    throw new AccountCreateConflictError(oid);
   }
 
   async ensureByOid(oid: string): Promise<Account> {
@@ -93,12 +103,54 @@ export class AccountRepository {
     return await this.createByOid(oid);
   }
 
+  async assignDomainId(oid: string): Promise<Account> {
+    const key: Deno.KvKey = ["accounts", "by_oid", oid];
+    const existing = await this.kv.store.get<Account>(key);
+    if (!existing.value) {
+      throw new AccountNotFoundError(oid);
+    }
+    if (existing.value.domain_id) {
+      return existing.value;
+    }
+    const updated: Account = { ...existing.value, domain_id: crypto.randomUUID() };
+    const result = await this.kv.store.atomic()
+      .check(existing)
+      .set(key, updated)
+      .commit();
+    if (result.ok) {
+      return updated;
+    }
+    // Race: another request assigned it first, re-read.
+    const retry = await this.kv.store.get<Account>(key);
+    if (retry.value) return retry.value;
+    throw new DomainIdAssignConflictError(oid);
+  }
+
   async getVerifiedMetadata(
     oid: string,
   ): Promise<UserVerifiedMetadataRecord | undefined> {
     const key: Deno.KvKey = [...VERIFIED_METADATA_PREFIX, oid];
     const entry = await this.kv.store.get<StoredVerifiedMetadataRecord>(key);
     return entry.value ? this.resolveVerifiedMetadata(entry.value) : undefined;
+  }
+
+  async setImmutableFields(
+    oid: string,
+    fields: Record<string, string>,
+  ): Promise<UserVerifiedMetadataRecord> {
+    const existing = await this.getVerifiedMetadata(oid);
+    const timestamp = new Date().toISOString();
+    const record: StoredVerifiedMetadataRecord = {
+      oid,
+      // Existing immutable values win — once written they cannot change.
+      immutable_fields: { ...fields, ...(existing?.immutable_fields ?? {}) },
+      user_verified_fields: existing?.user_verified_fields ?? {},
+      admin_verified_fields: existing?.admin_verified_fields ?? {},
+      user_updated_at: existing?.user_updated_at,
+      admin_updated_at: existing?.admin_updated_at,
+      updated_at: timestamp,
+    };
+    return await this.writeVerifiedMetadata(record);
   }
 
   async setUserVerifiedMetadata(
@@ -109,6 +161,7 @@ export class AccountRepository {
     const timestamp = new Date().toISOString();
     const record: StoredVerifiedMetadataRecord = {
       oid,
+      immutable_fields: existing?.immutable_fields ?? {},
       user_verified_fields: userVerifiedFields,
       admin_verified_fields: existing?.admin_verified_fields ?? {},
       user_updated_at: timestamp,
@@ -126,6 +179,7 @@ export class AccountRepository {
     const timestamp = new Date().toISOString();
     const record: StoredVerifiedMetadataRecord = {
       oid,
+      immutable_fields: existing?.immutable_fields ?? {},
       user_verified_fields: existing?.user_verified_fields ?? {},
       admin_verified_fields: adminVerifiedFields,
       user_updated_at: existing?.user_updated_at,

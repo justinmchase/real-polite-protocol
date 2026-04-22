@@ -102,6 +102,9 @@ const GetUserVerifiedMetadataInputSchema = {
 
 const UserVerifiedMetadataOutputSchema = {
   oid: z.string().describe("User object identifier"),
+  immutable_fields: z.record(z.string(), z.string()).describe(
+    "Server-assigned immutable metadata fields (e.g. domain_id). Cannot be modified by any tool.",
+  ),
   user_verified_fields: z.record(z.string(), z.string()).describe(
     "Verified metadata fields derived from the user's token",
   ),
