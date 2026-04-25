@@ -21,7 +21,7 @@ Deno.test({
       }
 
       await t.step(
-        "a stale timestamp (> 60 seconds old) is rejected with REQUEST_STALE",
+        "a stale timestamp (> 60 seconds old) is rejected with E_REQUEST_STALE",
         async () => {
           const staleTime = new Date(Date.now() - 90_000).toISOString(); // 90 seconds ago
           const response = await submitMessage({
@@ -38,7 +38,7 @@ Deno.test({
       );
 
       await t.step(
-        "a future timestamp (> 60 seconds ahead) is rejected with REQUEST_STALE",
+        "a future timestamp (> 60 seconds ahead) is rejected with E_REQUEST_STALE",
         async () => {
           const futureTime = new Date(Date.now() + 90_000).toISOString(); // 90 seconds in future
           const response = await submitMessage({
@@ -77,7 +77,7 @@ Deno.test({
       );
 
       await t.step(
-        "replaying the same message_id is rejected with DUPLICATE_MESSAGE",
+        "replaying the same message_id is rejected with E_DUPLICATE_MESSAGE",
         async () => {
           const messageId = crypto.randomUUID();
 

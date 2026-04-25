@@ -48,11 +48,11 @@ const InvitationOutputSchema = {
   claims: InvitationClaimsSchema.optional().describe(
     "Contextual claims attached by the sender",
   ),
-  expires_at: z.iso.datetime().optional().describe(
+  expires_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp when invitation expires, absent means indefinite",
   ),
-  created_at: z.iso.datetime().describe("ISO 8601 timestamp of creation"),
-  accepted_at: z.iso.datetime().optional().describe(
+  created_at: z.coerce.date().describe("ISO 8601 timestamp of creation"),
+  accepted_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp of acceptance",
   ),
 };
@@ -80,7 +80,7 @@ const AcceptInvitationOutputSchema = {
     usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe(
       "Usage policy",
     ),
-    issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
+    issued_at: z.coerce.date().describe("ISO 8601 timestamp of issuance"),
   }).describe("Issued receipt credentials — share with the sender"),
 };
 
@@ -112,8 +112,11 @@ const RejectInvitationInputSchema = {
 
 const SendInvitationInputSchema = {
   receiver_domain: z.string().describe("RPP domain of the receiver's server"),
-  receptive_policy_id: z.uuid().describe(
-    "Policy ID obtained from the receiver (e.g. via QR code). Identifies both the receiver and confirms they are receptive.",
+  receptive_policy_id: z.uuid().optional().describe(
+    "Policy ID obtained from the receiver (e.g. via QR code). Identifies both the receiver and confirms they are receptive. Provide either receptive_policy_id or receipt_id.",
+  ),
+  receipt_id: z.uuid().optional().describe(
+    "Receipt ID from a prior accepted invitation. Allows re-inviting an existing contact without a new receptive window.",
   ),
   proposed_terms: z.record(z.string(), z.unknown()).describe(
     "Receipt terms proposed to receiver",
@@ -127,14 +130,14 @@ const SendInvitationInputSchema = {
   custom_claims: ClaimMapSchema.optional().describe(
     "Unverified free-form claims provided by the sender. Values must be strings (≤512 chars), numbers, booleans, null, or flat arrays of those. Maximum 20 keys.",
   ),
-  expires_at: z.iso.datetime().optional().describe(
+  expires_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp when invitation expires; absent means indefinite",
   ),
 };
 
 const SendInvitationOutputSchema = {
   invitation_id: z.string().describe("Created invitation ID"),
-  created_at: z.iso.datetime().describe("ISO 8601 timestamp of creation"),
+  created_at: z.coerce.date().describe("ISO 8601 timestamp of creation"),
 };
 
 type ListInvitationsArgs = z.infer<
@@ -341,7 +344,10 @@ export class InvitationTool {
           category: "invitation" as const,
           sent_at: createdAt,
           invitation: {
-            receptive_policy_id: params.receptive_policy_id,
+            ...(params.receptive_policy_id !== undefined &&
+              { receptive_policy_id: params.receptive_policy_id }),
+            ...(params.receipt_id !== undefined &&
+              { receipt_id: params.receipt_id }),
             proposed_terms: params.proposed_terms,
             claims,
             ...(expiresAt !== undefined && { expires_at: expiresAt }),

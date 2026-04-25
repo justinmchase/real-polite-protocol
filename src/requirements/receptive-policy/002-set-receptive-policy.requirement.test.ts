@@ -49,8 +49,13 @@ Deno.test({
               scope: requiredScopes.join(" "),
             });
 
-            await callTool(token, "add_receptive_policy", { mode: "closed" });
             await callTool(token, "add_receptive_policy", { mode: "all" });
+            await callTool(token, "add_receptive_policy", {
+              mode: "domain_filter",
+              domain_filter: {
+                rules: [{ action: "allow", pattern: "*.example" }],
+              },
+            });
 
             const { result } = await callTool<{
               policies: Array<{ mode: string }>;

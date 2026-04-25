@@ -1,36 +1,50 @@
 ---
 id: invitations-005
-title: Listeners can send invitations using a receptive policy ID
+title: Listeners can send invitations via a receptive policy ID or a receipt ID
 ---
 
 # Send Invitation
 
 The MCP server MUST expose `send_invitation` so an authenticated listener can
-send an invitation to a receiver identified by a `receptive_policy_id` and
-`receiver_domain` (Section 9).
+send an invitation to a receiver identified by either a `receptive_policy_id` or
+a `receipt_id`, together with `receiver_domain` (Sections 9, 9.1.6).
 
-Because RPP has no user-level addresses (Section 3A), the `receptive_policy_id`
-is the mechanism by which a sender identifies their target without knowing the
-receiver's internal identifier. The receiver shares their domain and a
-`policy_id` out-of-band (e.g., QR code, NFC, published profile). The sender
-presents both when sending an invitation. The protocol flow is:
+RPP supports two addressing mechanisms for outgoing invitations:
 
-```
-Receptive Policy → Invitation → Receipt → Message
-```
+1. **Policy-based** — the receiver shares a `receptive_policy_id` out-of-band
+   (e.g., QR code, NFC, published profile). The sender does not know the
+   receiver's internal identifier; the receiver's submit endpoint resolves it
+   from the policy. Typical first-contact flow:
+
+   ```
+   Receptive Policy → Invitation → Receipt → Message
+   ```
+
+2. **Receipt-based** — the sender already holds a `receipt_id` from a prior
+   accepted invitation. They may re-invite the receiver by supplying that
+   `receipt_id` instead of a policy ID. The receiver's server looks up the
+   receipt, verifies an active `mode: "receipt"` policy exists for it, and
+   routes the invitation to the correct account (Section 9.1.6). Typical
+   relationship-refresh flow:
+
+   ```
+   Existing Receipt → Re-Invitation → New Receipt → Message
+   ```
+
+Exactly one of `receptive_policy_id` or `receipt_id` MUST be provided; providing
+both or neither is invalid.
 
 ## Expected behavior
 
 - The tool is available to any authenticated account.
-- The tool requires `receiver_domain`, `receptive_policy_id`, and
-  `proposed_terms` inputs.
-- The sender does **not** validate the receptive policy — the sender cannot know
-  whether the receiver's policy will accept the invitation. The sender simply
-  attaches the `receptive_policy_id` to the invitation envelope and delivers it
-  to the receiver's submit endpoint. It is the **receiver's** server (the submit
-  endpoint / `InvitationMessageHandler`) that looks up the policy, validates its
-  state (expired, closed, domain filter), resolves the `receiver_oid`, and
-  stores the invitation locally.
+- The tool requires `receiver_domain` and `proposed_terms`.
+- The caller MUST supply exactly one of `receptive_policy_id` or `receipt_id`.
+- The sender does **not** validate the policy or receipt client-side — the
+  sender simply attaches whichever identifier was provided to the invitation
+  envelope and delivers it to the receiver's submit endpoint. It is the
+  **receiver's** server (`InvitationMessageHandler`) that looks up the policy or
+  receipt, validates its state, resolves the `receiver_oid`, and stores the
+  invitation locally.
 - The tool returns the new `invitation_id` and `created_at` upon successful
   delivery to the receiver's domain.
 - If the receiver's server rejects the submission (non-2xx), the tool MUST

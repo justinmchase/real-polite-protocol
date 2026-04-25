@@ -9,7 +9,8 @@ export type RevocationReason =
   | "RATING_VIOLATION"
   | "SPAM"
   | "ABUSE"
-  | "OTHER";
+  | "OTHER"
+  | "SUPERSEDED";
 
 /**
  * Usage policy governs how many times a receipt may be used:
@@ -31,10 +32,21 @@ export interface Receipt {
    * Used as the HMAC-SHA-256 key for submit request signature verification.
    */
   secret: string;
-  /** OID of the receiver account that issued this receipt. */
+  /**
+   * OID of the receiver account that issued this receipt.
+   * Cross-domain boundary: MUST NOT be included in any data transmitted to
+   * another domain (wire messages, invitation envelopes, etc.). MAY be
+   * returned in same-domain MCP tool responses to the account owner (§3A.1).
+   */
   oid: string;
   /** Domain this receipt was issued to (the sender). */
   sender_domain: string;
+  /**
+   * Stable sender identity — the `domain_id` UUID issued by `sender_domain`.
+   * Only meaningful as the composite pair `(sender_domain, sender_domain_id)`.
+   * Used for receipt superseding (Section 6.6).
+   */
+  sender_domain_id?: string;
   /** Permitted message category (per Section 6.4 / Section 7.2). */
   category: MessageCategory;
   /** Maximum content rating the receiver will accept (per Section 6.5 / Section 7.3). */

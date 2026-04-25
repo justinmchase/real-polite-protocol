@@ -110,6 +110,16 @@ export class ReceptivePolicyClosedError extends ApplicationError {
   }
 }
 
+export class ReceiptNotActiveError extends ApplicationError {
+  constructor(receiptId: string) {
+    super(
+      403,
+      "E_RECEIPT_NOT_ACTIVE",
+      `Receipt ${receiptId} is not active`,
+    );
+  }
+}
+
 export class MessageTooLargeError extends ApplicationError {
   constructor(size: number, maxSize: number = 262144) {
     super(

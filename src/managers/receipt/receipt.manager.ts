@@ -13,9 +13,13 @@ import {
   ReceiptNotFoundError,
   ReceiptNotOwnedError,
 } from "../../tools/receipt/receipt.error.ts";
+import type { ReceptivePolicyManager } from "../receptive-policy/receptive-policy.manager.ts";
 
 export class ReceiptManager {
-  constructor(private readonly receipts: ReceiptRepository) {}
+  constructor(
+    private readonly receipts: ReceiptRepository,
+    private readonly receptivePolicies: ReceptivePolicyManager,
+  ) {}
 
   /**
    * Issue a new receipt to a sender domain on behalf of a receiver account.
@@ -26,6 +30,7 @@ export class ReceiptManager {
     senderDomain: string,
     terms: ReceiptTerms,
     invitationId?: string,
+    senderDomainId?: string,
   ): Promise<Receipt> {
     const secretBytes = new Uint8Array(32);
     crypto.getRandomValues(secretBytes);
@@ -38,6 +43,7 @@ export class ReceiptManager {
       secret,
       oid,
       sender_domain: senderDomain,
+      ...(senderDomainId !== undefined && { sender_domain_id: senderDomainId }),
       category: terms.category,
       max_content_rating: terms.max_content_rating ?? "G",
       usage_policy: terms.usage_policy ?? "any-time",
@@ -47,6 +53,34 @@ export class ReceiptManager {
     };
 
     return await this.receipts.set(receipt);
+  }
+
+  /**
+   * Revoke all active receipts for the given `(oid, senderDomain, senderDomainId)` composite
+   * with reason SUPERSEDED. Called before issuing a new receipt for the same identity.
+   */
+  async revokeSuperseded(
+    oid: string,
+    senderDomain: string,
+    senderDomainId: string,
+    revokedAt: string,
+  ): Promise<void> {
+    const active = await this.receipts.listActiveBySender(
+      oid,
+      senderDomain,
+      senderDomainId,
+    );
+    for (const receipt of active) {
+      const updated: Receipt = {
+        ...receipt,
+        status: "revoked",
+        revoked_at: revokedAt,
+        revocation_reason: "SUPERSEDED",
+      };
+      await this.receipts.set(updated, "active");
+      // Delete any receipt-based receptive policies for the superseded receipt.
+      await this.receptivePolicies.deactivateReceiptPolicies(receipt.id);
+    }
   }
 
   async get(id: string): Promise<Receipt | undefined> {
@@ -88,6 +122,9 @@ export class ReceiptManager {
       revocation_reason: reason,
       ...(detail !== undefined && { revocation_detail: detail }),
     };
-    return await this.receipts.set(updated, "active");
+    await this.receipts.set(updated, "active");
+    // Delete any receipt-based receptive policies for the revoked receipt.
+    await this.receptivePolicies.deactivateReceiptPolicies(receiptId);
+    return await this.receipts.get(receiptId) as Receipt;
   }
 }

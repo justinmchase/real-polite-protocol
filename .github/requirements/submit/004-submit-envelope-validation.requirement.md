@@ -12,13 +12,13 @@ Section 7.1.1, Section 7.1.2).
 ## Expected behavior
 
 - The request body is valid JSON; otherwise the server rejects it with
-  `INVALID_REQUEST_BODY`.
+  `E_INVALID_REQUEST_BODY`.
 - The request body includes the required message envelope fields defined by the
   base RPP envelope.
 - If required envelope fields are missing, the server rejects the request with
-  `INVALID_MESSAGE_ENVELOPE`.
+  `E_INVALID_MESSAGE_ENVELOPE`.
 - The message body size does not exceed 256 KB; oversized requests are rejected
-  with `MESSAGE_TOO_LARGE`.
+  with `E_MESSAGE_TOO_LARGE`.
 - `message_id` is unique per `sender_domain` and is used as part of replay and
   deduplication checks.
 - `sender_domain` is validated against the receipt context before message

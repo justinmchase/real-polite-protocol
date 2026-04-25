@@ -17,3 +17,6 @@ listeners to retrieve their current receptive policy records (Section 9.1).
 - Each policy record includes a `policy_id`, `mode`, optional `domain_filter`,
   optional `receptive_until`, and `created_at`.
 - The `page_size` parameter limits result count (default 50, max 100).
+- `mode: "receipt"` policies (auto-created on invitation acceptance) are
+  **excluded** from the default result set to avoid clutter. Callers MUST pass
+  `include_receipt_policies: true` to include them.

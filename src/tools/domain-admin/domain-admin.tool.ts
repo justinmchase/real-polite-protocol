@@ -27,7 +27,7 @@ const DomainIdentityOutputSchema = {
   categories_offered: z.array(z.string()).optional().describe(
     "Content categories offered",
   ),
-  rpp_since: z.iso.datetime().optional().describe(
+  rpp_since: z.coerce.date().optional().describe(
     "ISO 8601 date when RPP support began",
   ),
   contact_policy_url: z.string().url().optional().describe(
@@ -53,7 +53,7 @@ const HistoricalVerificationKeySchema = {
       "Base64-encoded public key in SPKI format",
     ),
   }).describe("Archived public verification key metadata"),
-  archived_at: z.iso.datetime().describe(
+  archived_at: z.coerce.date().describe(
     "ISO 8601 timestamp when the key was archived",
   ),
 };
@@ -114,13 +114,13 @@ const UserVerifiedMetadataOutputSchema = {
   verified_fields: z.record(z.string(), z.string()).describe(
     "Effective verified metadata fields keyed by field name",
   ),
-  user_updated_at: z.iso.datetime().optional().describe(
+  user_updated_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp of the last user metadata refresh",
   ),
-  admin_updated_at: z.iso.datetime().optional().describe(
+  admin_updated_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp of the last admin metadata update",
   ),
-  updated_at: z.iso.datetime().describe(
+  updated_at: z.coerce.date().describe(
     "ISO 8601 timestamp of the latest verification update",
   ),
 };

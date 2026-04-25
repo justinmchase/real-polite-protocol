@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type {
   InvitationManager,
+  ReceiptManager,
   ReceptivePolicyManager,
 } from "../../managers/mod.ts";
 import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
@@ -17,6 +18,7 @@ import {
   ReceptivePolicyClosedError,
   ReceptivePolicyExpiredError,
   ReceptivePolicyNotFoundError,
+  ReceiptNotActiveError,
   RequestStaleError,
 } from "./submit.error.ts";
 
@@ -46,7 +48,8 @@ export const InvitationEnvelopeSchema = z.object({
   category: z.literal("invitation"),
   sent_at: z.string().datetime(),
   invitation: z.object({
-    receptive_policy_id: z.string().uuid(),
+    receptive_policy_id: z.string().uuid().optional(),
+    receipt_id: z.string().uuid().optional(),
     proposed_terms: ReceiptTermsSchema,
     claims: z.object({
       immutable: ClaimMapSchema,
@@ -55,7 +58,10 @@ export const InvitationEnvelopeSchema = z.object({
       custom: ClaimMapSchema.optional(),
     }).optional(),
     expires_at: z.string().datetime().optional(),
-  }),
+  }).refine(
+    (d) => d.receptive_policy_id !== undefined || d.receipt_id !== undefined,
+    { message: "Either receptive_policy_id or receipt_id must be present" },
+  ),
 });
 
 export const MessageEnvelopeSchema = z.object({
@@ -104,6 +110,7 @@ export class InvitationMessageHandler implements MessageHandler {
     private readonly kv: KvService,
     private readonly invitationManager: InvitationManager,
     private readonly receptivePolicyManager: ReceptivePolicyManager,
+    private readonly receiptManager: ReceiptManager,
   ) {}
 
   async handle(
@@ -112,22 +119,52 @@ export class InvitationMessageHandler implements MessageHandler {
   ): Promise<{ messageId: string }> {
     const { invitation } = body as InvitationEnvelope;
 
-    const policy = await this.receptivePolicyManager.getById(
-      invitation.receptive_policy_id,
-    );
-    if (!policy) {
-      throw new ReceptivePolicyNotFoundError(invitation.receptive_policy_id);
-    }
-    if (
-      policy.receptive_until && new Date(policy.receptive_until) < new Date()
-    ) {
-      throw new ReceptivePolicyExpiredError(invitation.receptive_policy_id);
-    }
-    if (policy.mode === "closed") {
-      throw new ReceptivePolicyClosedError(invitation.receptive_policy_id);
-    }
+    let receiverOid: string;
 
-    const receiverOid = policy.oid;
+    if (invitation.receipt_id) {
+      // Receipt-path: look up the receipt and verify the receipt-mode policy.
+      const receipt = await this.receiptManager.get(invitation.receipt_id);
+      if (!receipt || receipt.status !== "active") {
+        throw new ReceiptNotActiveError(invitation.receipt_id);
+      }
+      const receiptPolicy = await this.receptivePolicyManager
+        .findActiveReceiptPolicy(receipt.oid, invitation.receipt_id);
+      if (!receiptPolicy) {
+        throw new ReceptivePolicyNotFoundError(invitation.receipt_id);
+      }
+      receiverOid = receipt.oid;
+    } else {
+      // Policy-path: standard receptive_policy_id flow.
+      const policyId = invitation.receptive_policy_id!;
+      const policy = await this.receptivePolicyManager.getById(policyId);
+      if (!policy) {
+        throw new ReceptivePolicyNotFoundError(policyId);
+      }
+      if (
+        policy.receptive_until && new Date(policy.receptive_until) < new Date()
+      ) {
+        throw new ReceptivePolicyExpiredError(policyId);
+      }
+      // Closed-mode: explicitly reject all senders.
+      if (policy.mode === "closed") {
+        throw new ReceptivePolicyClosedError(policyId);
+      }
+      // Contact-mode check: verify (sender_domain, domain_id) pair is in contacts.
+      if (policy.mode === "contact") {
+        const senderDomainId = invitation.claims?.immutable?.["domain_id"];
+        const senderDomain = (body as InvitationEnvelope).sender_domain;
+        const allowed = typeof senderDomainId === "string" &&
+          policy.contacts?.some(
+            (c) =>
+              c.domain_id === senderDomainId &&
+              c.domain.toLowerCase() === senderDomain.toLowerCase(),
+          );
+        if (!allowed) {
+          throw new ReceptivePolicyClosedError(policyId);
+        }
+      }
+      receiverOid = policy.oid;
+    }
 
     // Store the raw message.
     const messageId = crypto.randomUUID();

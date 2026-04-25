@@ -9,6 +9,10 @@ const RECEIPT_BY_OID_PREFIX: Deno.KvKey = ["receipts_by_oid"];
 const RECEIPT_BY_OID_STATUS_PREFIX: Deno.KvKey = ["receipts_by_oid_status"];
 /** Secondary index: filter by OID + sender_domain. */
 const RECEIPT_BY_OID_DOMAIN_PREFIX: Deno.KvKey = ["receipts_by_oid_domain"];
+/** Secondary index: filter by OID + sender_domain + sender_domain_id (composite identity). */
+const RECEIPT_BY_OID_SENDER_PREFIX: Deno.KvKey = [
+  "receipts_by_oid_sender",
+];
 
 export interface ListReceiptsOptions {
   status?: ReceiptStatus;
@@ -66,6 +70,20 @@ export class ReceiptRepository {
         receipt.id,
       );
 
+    // Index by composite sender identity (sender_domain + domain_id UUID) when both present.
+    if (receipt.sender_domain_id) {
+      op = op.set(
+        [
+          ...RECEIPT_BY_OID_SENDER_PREFIX,
+          receipt.oid,
+          receipt.sender_domain,
+          receipt.sender_domain_id,
+          receipt.id,
+        ],
+        receipt.id,
+      );
+    }
+
     // Remove stale status index entries when status transitions (e.g. active → revoked).
     if (previousStatus !== undefined && previousStatus !== receipt.status) {
       op = op.delete([
@@ -116,5 +134,31 @@ export class ReceiptRepository {
       receipts,
       nextCursor: nextResumeToken(iter.cursor),
     };
+  }
+
+  /**
+   * Return all active receipts for the given `(oid, senderDomain, senderDomainId)` composite.
+   * Used by the superseding logic before issuing a new receipt for the same identity.
+   */
+  async listActiveBySender(
+    oid: string,
+    senderDomain: string,
+    senderDomainId: string,
+  ): Promise<Receipt[]> {
+    const prefix = [
+      ...RECEIPT_BY_OID_SENDER_PREFIX,
+      oid,
+      senderDomain,
+      senderDomainId,
+    ];
+    const iter = this.kv.store.list<string>({ prefix });
+    const receipts: Receipt[] = [];
+    for await (const entry of iter) {
+      const receipt = await this.get(entry.value);
+      if (receipt && receipt.status === "active") {
+        receipts.push(receipt);
+      }
+    }
+    return receipts;
   }
 }

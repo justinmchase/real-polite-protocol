@@ -5,7 +5,9 @@ import type {
   ReceiptTerms,
 } from "../../models/mod.ts";
 import type { InvitationRepository } from "../../repositories/mod.ts";
+import type { ContactManager } from "../contacts/contact.manager.ts";
 import type { ReceiptManager } from "../receipt/receipt.manager.ts";
+import type { ReceptivePolicyManager } from "../receptive-policy/receptive-policy.manager.ts";
 import {
   InvitationNotFoundError,
   InvitationNotPendingError,
@@ -15,6 +17,8 @@ export class InvitationManager {
   constructor(
     private readonly invitations: InvitationRepository,
     private readonly receiptManager: ReceiptManager,
+    private readonly contactManager: ContactManager,
+    private readonly receptivePolicyManager: ReceptivePolicyManager,
   ) {}
 
   async createInvitation(
@@ -66,21 +70,54 @@ export class InvitationManager {
     }
 
     const acceptedTerms = negotiatedTerms ?? invitation.proposed_terms;
+    const acceptedAt = new Date().toISOString();
 
     const updated: Invitation = {
       ...invitation,
       status: "accepted",
-      accepted_at: new Date().toISOString(),
+      accepted_at: acceptedAt,
       proposed_terms: acceptedTerms,
     };
     const savedInvitation = await this.invitations.set(updated);
+
+    // Revoke any existing receipts from the same sender identity before issuing.
+    const senderDomainId = invitation.claims?.immutable?.domain_id;
+    const senderDomainIdStr = typeof senderDomainId === "string"
+      ? senderDomainId
+      : undefined;
+    if (senderDomainIdStr) {
+      await this.receiptManager.revokeSuperseded(
+        invitation.receiver_oid,
+        invitation.sender_domain,
+        senderDomainIdStr,
+        acceptedAt,
+      );
+    }
 
     const receipt = await this.receiptManager.issue(
       invitation.receiver_oid,
       invitation.sender_domain,
       acceptedTerms,
       invitation.invitation_id,
+      senderDomainIdStr,
     );
+
+    // Auto-upsert a contact for the sender identity when domain_id is present.
+    if (senderDomainIdStr) {
+      await this.contactManager.upsertFromInvitation(
+        invitation.receiver_oid,
+        invitation.sender_domain,
+        senderDomainIdStr,
+        invitation.claims,
+        acceptedAt,
+      );
+
+      // Auto-create a receipt-based receptive policy so the sender can re-invite.
+      await this.receptivePolicyManager.createReceiptPolicy(
+        invitation.receiver_oid,
+        receipt.id,
+      );
+    }
 
     return { invitation: savedInvitation, receipt };
   }

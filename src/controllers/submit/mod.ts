@@ -7,6 +7,7 @@ import {
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type {
   InvitationManager,
+  ReceiptManager,
   ReceptivePolicyManager,
 } from "../../managers/mod.ts";
 import {
@@ -31,6 +32,7 @@ export class SubmitController extends Controller {
     private readonly kv: KvService,
     private readonly invitationManager: InvitationManager,
     private readonly receptivePolicyManager: ReceptivePolicyManager,
+    private readonly receiptManager: ReceiptManager,
   ) {
     super();
 
@@ -39,6 +41,7 @@ export class SubmitController extends Controller {
       this.kv,
       this.invitationManager,
       this.receptivePolicyManager,
+      this.receiptManager,
     );
     const receiptHandler: MessageHandler = new ReceiptMessageHandler(this.kv);
 

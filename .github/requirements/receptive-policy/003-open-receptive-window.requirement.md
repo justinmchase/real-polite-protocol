@@ -26,6 +26,6 @@ RECOMMENDED mechanism for proximity pairing and in-person invitation exchanges.
   requested duration.
 - After `receptive_until` has passed, the policy is no longer active and
   invitation delivery using its `policy_id` MUST be rejected with
-  `INVITATION_NOT_RECEPTIVE`.
+  `E_RECEPTIVE_POLICY_EXPIRED`.
 - The tool returns the newly created policy including `policy_id`,
   `receptive_until`, and `mode` (the window scope).

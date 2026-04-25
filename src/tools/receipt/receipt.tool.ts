@@ -15,12 +15,16 @@ const RevocationReasonSchema = z.enum([
   "SPAM",
   "ABUSE",
   "OTHER",
+  "SUPERSEDED",
 ]);
 
 const ReceiptOutputSchema = {
   id: z.uuid().describe("Receipt ID to present in x-rpp-receipt-id header"),
   oid: z.uuid().describe("OID of the account that issued this receipt"),
   sender_domain: z.string().describe("Domain this receipt was issued to"),
+  sender_domain_id: z.string().optional().describe(
+    "Stable sender identity UUID (domain_id from claims.immutable)",
+  ),
   category: CategorySchema.describe("Permitted message category"),
   max_content_rating: ContentRatingSchema.describe("Maximum content rating"),
   usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).describe(
@@ -30,8 +34,8 @@ const ReceiptOutputSchema = {
     "Current lifecycle state",
   ),
   invitation_id: z.string().optional().describe("Source invitation ID"),
-  issued_at: z.iso.datetime().describe("ISO 8601 timestamp of issuance"),
-  revoked_at: z.iso.datetime().optional().describe(
+  issued_at: z.coerce.date().describe("ISO 8601 timestamp of issuance"),
+  revoked_at: z.coerce.date().optional().describe(
     "ISO 8601 timestamp of revocation",
   ),
   revocation_reason: RevocationReasonSchema.optional().describe(
@@ -111,7 +115,7 @@ export class ReceiptTool {
       "revoke_receipt",
       {
         description:
-          "Revoke an issued receipt. Revocation is immediate: subsequent submit requests from the sender using this receipt will be rejected with RECEIPT_REVOKED.",
+          "Revoke an issued receipt. Revocation is immediate: subsequent submit requests from the sender using this receipt will be rejected with E_RECEIPT_REVOKED.",
         inputSchema: RevokeReceiptInputSchema,
         outputSchema: ReceiptOutputSchema,
       },
