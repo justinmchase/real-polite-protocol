@@ -1,10 +1,10 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
-import { callGetPermissions } from "./test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
+import { callGetPermissions } from "../helpers/call-get-permissions.ts";
 
 interface AccountRecord {
   id: string;

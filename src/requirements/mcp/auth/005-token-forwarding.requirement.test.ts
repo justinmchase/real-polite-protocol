@@ -1,6 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../../test-helpers.ts";
-import { requiredScopes, withAuthTestContext } from "./test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
+import {
+  requiredScopes,
+  withAuthTestContext,
+} from "../../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name: "req:mcp-auth-005 - Client bearer tokens are never forwarded upstream",

@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../../test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
 
 Deno.test({
   name:

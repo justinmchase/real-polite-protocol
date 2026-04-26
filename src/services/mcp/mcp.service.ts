@@ -16,20 +16,19 @@ export class McpService {
     auth: AuthInfo,
   ): Promise<Response> {
     const server = new McpServer({
-      name: "rpp-api",
+      name: "rpp",
       version: "0.1.0",
     });
 
-    server.registerTool(
-      "hello_world",
-      { description: "Return a hello world message." },
-      () => ({
-        content: [{ type: "text", text: "Hello, world!" }],
-      }),
-    );
-
     for (const tool of tools) {
-      tool.register(server, auth);
+      try {
+        tool.register(server, auth);
+      } catch (e) {
+        console.error(
+          `[MCP] Failed to register tool ${tool.constructor.name}:`,
+          e,
+        );
+      }
     }
 
     const transport = new WebStandardStreamableHTTPServerTransport({

@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../../test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
 import {
-  assertAuthFailure,
   requiredScopes,
   testAudience,
   withAuthTestContext,
-} from "./test-helpers.ts";
+} from "../../helpers/with-auth-test-context.ts";
+import { assertAuthFailure } from "../../helpers/assert-auth-failure.ts";
 
 Deno.test({
   name:

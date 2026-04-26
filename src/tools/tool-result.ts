@@ -6,9 +6,15 @@ export function toolResult<T extends object>(
   structuredContent: T,
 ): CallToolResult {
   const serializableContent = toSerializable(structuredContent);
+  const text = JSON.stringify(serializableContent);
+  // structuredContent on the wire is JSON. Round-trip through JSON to convert
+  // Date instances (and any other non-JSON-native values) into their wire
+  // shape (ISO strings, etc.), so it matches the tool's `outputSchema`
+  // (which describes the wire format clients consume).
+  const wireContent = JSON.parse(text);
   return {
-    content: [{ type: "text", text: JSON.stringify(serializableContent) }],
-    structuredContent: serializableContent,
+    content: [{ type: "text", text }],
+    structuredContent: wireContent,
   };
 }
 

@@ -1,5 +1,10 @@
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import type { Account, UserVerifiedMetadataRecord } from "../../models/mod.ts";
-import { newAccount } from "../../models/mod.ts";
+import {
+  AccountSchema,
+  newAccount,
+  UserVerifiedMetadataRecordSchema,
+} from "../../models/account/account.model.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import {
   AccountCreateConflictError,
@@ -23,9 +28,9 @@ interface StoredVerifiedMetadataRecord {
   user_verified_fields?: Record<string, string>;
   admin_verified_fields?: Record<string, string>;
   verified_fields?: Record<string, string>;
-  user_updated_at?: string;
-  admin_updated_at?: string;
-  updated_at: string;
+  user_updated_at?: Date;
+  admin_updated_at?: Date;
+  updated_at: Date;
 }
 
 export class AccountRepository {
@@ -38,7 +43,7 @@ export class AccountRepository {
     const userVerifiedFields = record.user_verified_fields ?? {};
     const adminVerifiedFields = record.admin_verified_fields ??
       record.verified_fields ?? {};
-    return {
+    return UserVerifiedMetadataRecordSchema.parse({
       oid: record.oid,
       immutable_fields: immutableFields,
       user_verified_fields: userVerifiedFields,
@@ -53,7 +58,7 @@ export class AccountRepository {
       admin_updated_at: record.admin_updated_at ??
         (record.admin_verified_fields ? record.updated_at : undefined),
       updated_at: record.updated_at,
-    };
+    });
   }
 
   private async writeVerifiedMetadata(
@@ -66,15 +71,15 @@ export class AccountRepository {
 
   async findByOid(oid: string): Promise<Account | undefined> {
     const key: Deno.KvKey = ["accounts", "by_oid", oid];
-    const entry = await this.kv.store.get<Account>(key);
-    return entry.value ?? undefined;
+    const entry = await this.kv.store.get<unknown>(key);
+    return entry.value ? AccountSchema.parse(entry.value) : undefined;
   }
 
   async createByOid(oid: string): Promise<Account> {
     const key: Deno.KvKey = ["accounts", "by_oid", oid];
-    const existing = await this.kv.store.get<Account>(key);
+    const existing = await this.kv.store.get<unknown>(key);
     if (existing.value) {
-      return existing.value;
+      return AccountSchema.parse(existing.value);
     }
 
     const account = newAccount(oid);
@@ -87,9 +92,9 @@ export class AccountRepository {
       return account;
     }
 
-    const retry = await this.kv.store.get<Account>(key);
+    const retry = await this.kv.store.get<unknown>(key);
     if (retry.value) {
-      return retry.value;
+      return AccountSchema.parse(retry.value);
     }
 
     throw new AccountCreateConflictError(oid);
@@ -105,16 +110,17 @@ export class AccountRepository {
 
   async assignDomainId(oid: string): Promise<Account> {
     const key: Deno.KvKey = ["accounts", "by_oid", oid];
-    const existing = await this.kv.store.get<Account>(key);
+    const existing = await this.kv.store.get<unknown>(key);
     if (!existing.value) {
       throw new AccountNotFoundError(oid);
     }
-    if (existing.value.domain_id) {
-      return existing.value;
+    const existingAccount = AccountSchema.parse(existing.value);
+    if (existingAccount.domain_id) {
+      return existingAccount;
     }
     const updated: Account = {
-      ...existing.value,
-      domain_id: crypto.randomUUID(),
+      ...existingAccount,
+      domain_id: generateUUIDv7(),
     };
     const result = await this.kv.store.atomic()
       .check(existing)
@@ -124,8 +130,8 @@ export class AccountRepository {
       return updated;
     }
     // Race: another request assigned it first, re-read.
-    const retry = await this.kv.store.get<Account>(key);
-    if (retry.value) return retry.value;
+    const retry = await this.kv.store.get<unknown>(key);
+    if (retry.value) return AccountSchema.parse(retry.value);
     throw new DomainIdAssignConflictError(oid);
   }
 
@@ -134,7 +140,11 @@ export class AccountRepository {
   ): Promise<UserVerifiedMetadataRecord | undefined> {
     const key: Deno.KvKey = [...VERIFIED_METADATA_PREFIX, oid];
     const entry = await this.kv.store.get<StoredVerifiedMetadataRecord>(key);
-    return entry.value ? this.resolveVerifiedMetadata(entry.value) : undefined;
+    return entry.value
+      ? this.resolveVerifiedMetadata(
+        entry.value as StoredVerifiedMetadataRecord,
+      )
+      : undefined;
   }
 
   async setImmutableFields(
@@ -142,7 +152,7 @@ export class AccountRepository {
     fields: Record<string, string>,
   ): Promise<UserVerifiedMetadataRecord> {
     const existing = await this.getVerifiedMetadata(oid);
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date();
     const record: StoredVerifiedMetadataRecord = {
       oid,
       // Existing immutable values win — once written they cannot change.
@@ -161,7 +171,7 @@ export class AccountRepository {
     userVerifiedFields: Record<string, string>,
   ): Promise<UserVerifiedMetadataRecord> {
     const existing = await this.getVerifiedMetadata(oid);
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date();
     const record: StoredVerifiedMetadataRecord = {
       oid,
       immutable_fields: existing?.immutable_fields ?? {},
@@ -179,7 +189,7 @@ export class AccountRepository {
     adminVerifiedFields: Record<string, string>,
   ): Promise<UserVerifiedMetadataRecord> {
     const existing = await this.getVerifiedMetadata(oid);
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date();
     const record: StoredVerifiedMetadataRecord = {
       oid,
       immutable_fields: existing?.immutable_fields ?? {},

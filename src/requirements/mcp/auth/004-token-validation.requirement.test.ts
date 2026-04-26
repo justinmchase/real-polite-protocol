@@ -1,11 +1,12 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../../test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
 import {
-  assertAuthFailure,
   requiredScopes,
   testAudience,
   withAuthTestContext,
-} from "./test-helpers.ts";
+} from "../../helpers/with-auth-test-context.ts";
+import { assertAuthFailure } from "../../helpers/assert-auth-failure.ts";
+import { tamperPayloadWithoutResigning } from "../../helpers/tamper-token.ts";
 
 Deno.test({
   name:
@@ -108,26 +109,3 @@ Deno.test({
     });
   },
 });
-
-function tamperPayloadWithoutResigning(token: string): string {
-  const [header, payload, signature] = token.split(".");
-  const decodedPayload = JSON.parse(decodeBase64Url(payload)) as Record<
-    string,
-    unknown
-  >;
-  decodedPayload.sub = "tampered-subject";
-  const tamperedPayload = encodeBase64Url(
-    new TextEncoder().encode(JSON.stringify(decodedPayload)),
-  );
-  return `${header}.${tamperedPayload}.${signature}`;
-}
-
-function decodeBase64Url(value: string): string {
-  return new TextDecoder().decode(
-    Uint8Array.fromBase64(value, { alphabet: "base64url" }),
-  );
-}
-
-function encodeBase64Url(bytes: Uint8Array): string {
-  return bytes.toBase64({ alphabet: "base64url", omitPadding: true });
-}

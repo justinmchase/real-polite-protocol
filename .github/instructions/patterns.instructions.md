@@ -109,6 +109,70 @@ register routes or middleware on the Hono application.
 - Use Zod enums (e.g., `z.enum(["type-a", "type-b"])`) to constrain
   discriminator fields at the schema level, not in runtime conditionals.
 
+### Date and timestamp handling at boundaries
+
+`Date` is the canonical internal type. ISO 8601 strings only exist on the wire
+and at rest. The system coerces inbound, never outbound.
+
+**Layer-by-layer rules:**
+
+| Layer                                | Rule                                                                                                                                                                                                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Models (`src/models/**`)             | Define a Zod schema using `z.coerce.date()` for every timestamp field. Export both the schema and `type X = z.infer<typeof XSchema>`. The interface MUST type timestamps as `Date`, never `string`.                                                               |
+| Repositories (`src/repositories/**`) | On every read from KV, parse the raw value through the model's Zod schema before returning it. KV preserves `Date` via structured clone, but the schema parse guarantees correctness for legacy or hand-seeded records. On writes, store `Date` objects directly. |
+| Managers (`src/managers/**`)         | Accept and return `Date` objects. Use `new Date()` to generate timestamps — never `new Date().toISOString()`. Compare `Date` objects directly.                                                                                                                    |
+| Controllers (`src/controllers/**`)   | Inbound request schemas: use `z.coerce.date()` on any timestamp field (e.g. `sent_at`, `expires_at`). Pass the resulting `Date` to managers unchanged.                                                                                                            |
+| Tools (`src/tools/**`)               | Input schemas: `z.coerce.date()` for any timestamp filter or argument. Output schemas: `z.coerce.date()` so the response is shaped as a `Date` (and JSON serialization on the wire produces an ISO string automatically).                                         |
+| External wire bodies                 | When constructing an outbound HTTP body, emit `Date` objects in the object literal; let `JSON.stringify` produce the ISO string. Do not pre-stringify with `.toISOString()`.                                                                                      |
+
+**Concrete forbidden patterns (treat as bugs):**
+
+```ts
+// ❌ string-typed timestamp in a model
+interface Account { created_at: string }
+
+// ❌ pre-stringifying before handing off
+return await repo.set({ ...x, updated_at: new Date().toISOString() });
+
+// ❌ inbound schema that keeps a string
+const Schema = z.object({ sent_at: z.string().datetime() });
+
+// ❌ string comparison of timestamps
+if (policy.receptive_until < new Date().toISOString()) { ... }
+```
+
+**Concrete required patterns:**
+
+```ts
+// ✅ model: Zod schema is the source of truth
+export const AccountSchema = z.object({
+  id: z.string(),
+  oid: z.string(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date(),
+});
+export type Account = z.infer<typeof AccountSchema>;
+
+// ✅ repository: parse on read
+async get(id: string): Promise<Account | undefined> {
+  const entry = await this.kv.store.get(["accounts", id]);
+  return entry.value ? AccountSchema.parse(entry.value) : undefined;
+}
+
+// ✅ manager: pass Date through
+const account: Account = { ...prev, updated_at: new Date() };
+return await this.repo.set(account);
+
+// ✅ controller input: coerce inbound
+const Body = z.object({ sent_at: z.coerce.date() });
+
+// ✅ Date comparison
+if (policy.receptive_until && policy.receptive_until < new Date()) { ... }
+```
+
+When `JSON.stringify` runs on the response, `Date` instances render as ISO 8601
+strings — that is the only place stringification should happen.
+
 ### Strategy Pattern for Extensible Logic
 
 Use the strategy pattern when:

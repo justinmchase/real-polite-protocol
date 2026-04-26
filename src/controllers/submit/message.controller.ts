@@ -4,12 +4,24 @@ import {
   type IContext,
   type IState,
 } from "@justinmchase/grove";
-import { z } from "zod";
+import { encodeHex } from "@std/encoding/hex";
 import type { KvService } from "../../services/kv/kv.service.ts";
-import type { InvitationManager } from "../../managers/mod.ts";
+import type {
+  InvitationManager,
+  MessageManager,
+  ReceiptManager,
+  ReceptivePolicyManager,
+} from "../../managers/mod.ts";
 import {
+  InvitationNotFoundError,
+} from "../../managers/invitation/invitation.error.ts";
+import {
+  DeliveryTokenInvalidError,
   DuplicateMessageError,
+  InvalidAuthHeadersError,
+  InvalidContentTypeError,
   InvalidMessageEnvelopeError,
+  InvalidReceiptEnvelopeError,
   InvalidRequestBodyError,
   MessageTooLargeError,
   MissingReceiptIdError,
@@ -20,153 +32,231 @@ import {
   RequestStaleError,
 } from "./submit.error.ts";
 import {
+  type InvitationEnvelope,
   InvitationMessageHandler,
-  type MessageHandler,
+  type ReceiptCallbackEnvelope,
+  ReceiptCallbackEnvelopeSchema,
+  ReceiptCallbackHandler,
   ReceiptMessageHandler,
-  type SubmitMessageEnvelope,
+  SubmitMessageEnvelopeSchema,
 } from "./message-handler.ts";
 
-// Discriminator enum for message categories
-const MessageCategoryEnum = z.enum(["invitation", "message"]);
-
-const SubmitMessageEnvelopeSchema = z.object({
-  message_id: z.string(),
-  sender_domain: z.string(),
-  category: MessageCategoryEnum,
-  content_rating: z.string(),
-  sent_at: z.string().datetime(),
-  subject: z.string(),
-  body: z.object({
-    content_type: z.literal("text/markdown"),
-    content: z.string(),
-  }),
-  metadata: z.record(z.string(), z.unknown()),
-});
+const MAX_SIZE = 262144; // 256 KB
+const ALLOWED_CONTENT_TYPES = new Set(["text/markdown", "application/json"]);
 
 export class SubmitController extends Controller {
-  private readonly handlers: Map<string, MessageHandler>;
+  private readonly invitationHandler: InvitationMessageHandler;
+  private readonly messageHandler: ReceiptMessageHandler;
+  private readonly callbackHandler: ReceiptCallbackHandler;
 
   constructor(
     private readonly kv: KvService,
-    private readonly invitationManager: InvitationManager,
+    invitationManager: InvitationManager,
+    receptivePolicyManager: ReceptivePolicyManager,
+    receiptManager: ReceiptManager,
+    messageManager: MessageManager,
   ) {
     super();
-
-    // Build handler registry by category
-    const invitationHandler: MessageHandler = new InvitationMessageHandler(
-      this.kv,
-      this.invitationManager,
+    this.invitationHandler = new InvitationMessageHandler(
+      kv,
+      invitationManager,
+      receptivePolicyManager,
+      receiptManager,
     );
-    const receiptHandler: MessageHandler = new ReceiptMessageHandler(this.kv);
-
-    this.handlers = new Map([
-      ["invitation", invitationHandler],
-      ["message", receiptHandler],
-    ]);
+    this.messageHandler = new ReceiptMessageHandler(kv, messageManager);
+    this.callbackHandler = new ReceiptCallbackHandler(kv);
   }
 
   // deno-lint-ignore require-await
   async use<TContext extends IContext, TState extends IState<TContext>>(
     app: GroveApp<TContext, TState>,
   ): Promise<void> {
-    app.post("/rpp/v1/messages", async (ctx) => {
-      const bodyBytes = await ctx.req.arrayBuffer();
-      const MAX_SIZE = 262144; // 256 KB
+    app.post("/rpp/v1/envelopes", async (ctx) => {
+      const rawBuffer = await ctx.req.arrayBuffer();
+      const bodyBytes = new Uint8Array(rawBuffer);
 
-      if (bodyBytes.byteLength > MAX_SIZE) {
-        throw new MessageTooLargeError(bodyBytes.byteLength, MAX_SIZE);
+      // 1. Size check
+      if (bodyBytes.length > MAX_SIZE) {
+        throw new MessageTooLargeError(bodyBytes.length, MAX_SIZE);
       }
 
-      // Parse request body JSON
+      // 2. Parse JSON
       let bodyJson: unknown;
       try {
-        const bodyText = new TextDecoder().decode(bodyBytes);
-        bodyJson = JSON.parse(bodyText);
+        bodyJson = JSON.parse(new TextDecoder().decode(bodyBytes));
       } catch {
         throw new InvalidRequestBodyError("Failed to parse JSON");
       }
 
-      const parsedBody = SubmitMessageEnvelopeSchema.safeParse(bodyJson);
-      if (!parsedBody.success) {
-        const issue = parsedBody.error.issues[0];
-        const path = issue?.path?.length ? issue.path.join(".") : "body";
-        throw new InvalidMessageEnvelopeError(
-          `${path}: ${issue?.message ?? "invalid payload"}`,
-        );
+      // 3. Exclusive identity headers
+      const receiptIdHeader = ctx.req.header("x-rpp-receipt-id");
+      const invitationIdHeader = ctx.req.header("x-rpp-invitation-id");
+      if (receiptIdHeader && invitationIdHeader) {
+        throw new InvalidAuthHeadersError();
       }
 
-      const body: SubmitMessageEnvelope = parsedBody.data;
+      const signature = ctx.req.header("x-rpp-signature");
+      const timestamp = ctx.req.header("x-rpp-timestamp");
 
-      // For non-invitation messages, verify receipt-based HMAC authentication
-      if (body.category === "message") {
-        const receiptId = ctx.req.header("x-rpp-receipt-id");
-        const signature = ctx.req.header("x-rpp-signature");
-        const timestamp = ctx.req.header("x-rpp-timestamp");
+      // 4. Route by category
+      const raw = bodyJson as Record<string, unknown>;
+      const category = raw?.category;
 
-        if (!receiptId) {
-          throw new MissingReceiptIdError();
+      if (category === "receipt") {
+        // --- Receipt callback path ---
+        const parsed = ReceiptCallbackEnvelopeSchema.safeParse(bodyJson);
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          throw new InvalidReceiptEnvelopeError(
+            issue?.message ?? "invalid receipt envelope",
+          );
         }
 
-        if (!signature) {
-          throw new MissingSignatureError();
-        }
+        const envelope = parsed.data as ReceiptCallbackEnvelope;
 
-        if (!timestamp) {
-          throw new MissingTimestampError();
-        }
+        // Auth: verify HMAC using delivery token stored with invitation
+        if (!signature) throw new MissingSignatureError();
+        if (!timestamp) throw new MissingTimestampError();
 
-        // Timestamp freshness check (RFC §5.1.1): must be within ±60 seconds.
         const requestTime = new Date(timestamp).getTime();
-        if (isNaN(requestTime)) {
-          throw new MissingTimestampError();
-        }
+        if (isNaN(requestTime)) throw new MissingTimestampError();
         const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
         if (diffSeconds > 60) {
           throw new RequestStaleError(Math.round(diffSeconds));
         }
 
-        // Verify HMAC signature
-        const receiptEntry = await this.kv.store.get(["receipts", receiptId]);
-        if (!receiptEntry.value) {
-          throw new ReceiptNotFoundError(receiptId);
+        const invEntry = await this.kv.store.get(
+          ["invitations", envelope.invitation_id],
+        );
+        if (!invEntry.value) {
+          throw new InvitationNotFoundError(envelope.invitation_id);
         }
 
-        const receipt = receiptEntry.value as { secret: string };
+        const inv = invEntry.value as {
+          delivery?: { token: string };
+          status?: string;
+        };
+        const deliveryToken = inv.delivery?.token;
+        if (!deliveryToken) {
+          throw new DeliveryTokenInvalidError();
+        }
+
         const isValid = await this.verifyHmac(
-          receipt.secret,
+          deliveryToken,
           timestamp,
-          new Uint8Array(bodyBytes),
+          bodyBytes,
           signature,
         );
-
         if (!isValid) {
-          throw new ReceiptInvalidSignatureError();
+          throw new DeliveryTokenInvalidError();
+        }
+
+        // Dispatch (also checks pending state)
+        const result = await this.callbackHandler.handle(envelope);
+        return ctx.json(
+          { ok: true, accepted: true, invitation_id: result.messageId },
+          202,
+        );
+      } else {
+        // --- Invitation / message path ---
+        const parsed = SubmitMessageEnvelopeSchema.safeParse(bodyJson);
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          const path = issue?.path?.length ? issue.path.join(".") : "body";
+          throw new InvalidMessageEnvelopeError(
+            `${path}: ${issue?.message ?? "invalid payload"}`,
+          );
+        }
+
+        const envelope = parsed.data;
+
+        // Content-type check for message category
+        if (envelope.category === "message") {
+          const ct = envelope.message.body.content_type;
+          if (!ALLOWED_CONTENT_TYPES.has(ct)) {
+            throw new InvalidContentTypeError(ct);
+          }
+        }
+
+        // Auth per category
+        if (envelope.category === "message") {
+          if (!receiptIdHeader) throw new MissingReceiptIdError();
+          if (!signature) throw new MissingSignatureError();
+          if (!timestamp) throw new MissingTimestampError();
+
+          const requestTime = new Date(timestamp).getTime();
+          if (isNaN(requestTime)) throw new MissingTimestampError();
+          const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
+          if (diffSeconds > 60) {
+            throw new RequestStaleError(Math.round(diffSeconds));
+          }
+
+          const receiptEntry = await this.kv.store.get(
+            ["receipts", receiptIdHeader],
+          );
+          if (!receiptEntry.value) {
+            throw new ReceiptNotFoundError(receiptIdHeader);
+          }
+
+          const receipt = receiptEntry.value as { secret: string };
+          const isValid = await this.verifyHmac(
+            receipt.secret,
+            timestamp,
+            bodyBytes,
+            signature,
+          );
+          if (!isValid) throw new ReceiptInvalidSignatureError();
+        } else if (envelope.category === "invitation") {
+          // Invitation envelopes (both policy-based and receipt-based) require
+          // no additional HMAC auth at the transport layer. The InvitationMessageHandler
+          // validates the receipt status and policy for receipt-based invitations.
+        }
+
+        // Dedup
+        if (envelope.category === "message") {
+          const dedupKey = [
+            "dedup",
+            envelope.sender_domain,
+            envelope.message_id,
+          ];
+          const existing = await this.kv.store.get(dedupKey);
+          if (existing.value !== null) {
+            throw new DuplicateMessageError(envelope.message_id);
+          }
+          await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
+        } else if (envelope.category === "invitation") {
+          const inv = envelope as InvitationEnvelope;
+          const invId = inv.invitation.invitation_id;
+          const dedupKey = ["dedup", envelope.sender_domain, invId];
+          const existing = await this.kv.store.get(dedupKey);
+          if (existing.value !== null) {
+            throw new DuplicateMessageError(invId);
+          }
+          await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
+        }
+
+        // Dispatch
+        const context = {
+          bodyBytes,
+          receiptId: receiptIdHeader ?? undefined,
+          signature: signature ?? undefined,
+          timestamp: timestamp ?? undefined,
+        };
+
+        if (envelope.category === "invitation") {
+          const result = await this.invitationHandler.handle(envelope, context);
+          return ctx.json(
+            { ok: true, accepted: true, invitation_id: result.messageId },
+            202,
+          );
+        } else {
+          const result = await this.messageHandler.handle(envelope, context);
+          return ctx.json(
+            { ok: true, accepted: true, message_id: result.messageId },
+            202,
+          );
         }
       }
-
-      // Message ID deduplication (RFC §5.1.1): reject reuse within 60-second window.
-      const dedupKey = ["dedup", body.sender_domain, body.message_id];
-      const existing = await this.kv.store.get(dedupKey);
-      if (existing.value !== null) {
-        throw new DuplicateMessageError(body.message_id);
-      }
-      // Record with 65-second TTL (slightly longer than the freshness window).
-      await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
-
-      // Dispatch to handler based on category
-      const handler = this.handlers.get(body.category);
-      if (!handler) {
-        throw new InvalidMessageEnvelopeError(
-          `Unsupported message category: ${body.category}`,
-        );
-      }
-
-      const result = await handler.handle(body);
-
-      return ctx.json(
-        { ok: true, accepted: true, message_id: result.messageId },
-        202,
-      );
     });
   }
 
@@ -197,10 +287,7 @@ export class SubmitController extends Controller {
       combined,
     );
 
-    const computedHex = Array.from(new Uint8Array(computedSignature))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
+    const computedHex = encodeHex(new Uint8Array(computedSignature));
     return computedHex === presentedSignature.toLowerCase();
   }
 }

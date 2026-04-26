@@ -1,10 +1,10 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
-import { callGetPermissions } from "./test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
+import { callGetPermissions } from "../helpers/call-get-permissions.ts";
 
 Deno.test({
   name: "req:account-009 - domain_id is an immutable admin-verified claim",

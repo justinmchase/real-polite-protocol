@@ -1,4 +1,4 @@
-import type { Contact } from "../../models/mod.ts";
+import { type Contact, ContactSchema } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import { nextResumeToken } from "../../utils/pagination.ts";
 
@@ -27,12 +27,12 @@ export class ContactRepository {
 
   /** Look up a contact by its synthetic id. */
   async get(ownerOid: string, contactId: string): Promise<Contact | undefined> {
-    const entry = await this.kv.store.get<Contact>([
+    const entry = await this.kv.store.get<unknown>([
       ...CONTACT_PREFIX,
       ownerOid,
       contactId,
     ]);
-    return entry.value ?? undefined;
+    return entry.value ? ContactSchema.parse(entry.value) : undefined;
   }
 
   /**

@@ -10,6 +10,7 @@ import type {
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+import { inputDate, outputDate } from "../date-schema.ts";
 
 // ── shared schemas ──────────────────────────────────────────────────────────
 
@@ -24,8 +25,13 @@ const ClaimValueSchema = z.union([
 
 const ContactFieldRecordSchema = z.object({
   value: ClaimValueSchema,
-  source: z.enum(["sender_verified", "domain_admin", "sender_custom", "owner_note"]),
-  recorded_at: z.coerce.date(),
+  source: z.enum([
+    "sender_verified",
+    "domain_admin",
+    "sender_custom",
+    "owner_note",
+  ]),
+  recorded_at: outputDate(),
 });
 
 const CurrentFieldsSchema = z.record(z.string(), ContactFieldRecordSchema);
@@ -37,8 +43,8 @@ const ContactOutputSchema = {
   current_fields: CurrentFieldsSchema.describe(
     "Flat-merged most-recent claim fields",
   ),
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
+  created_at: outputDate(),
+  updated_at: outputDate(),
 };
 
 const ContactDetailOutputSchema = {
@@ -118,7 +124,7 @@ const InviteContactInputSchema = {
   custom_claims: CustomClaimsSchema.optional().describe(
     "Free-form claims provided by the sender",
   ),
-  expires_at: z.coerce.date().optional().describe(
+  expires_at: inputDate().optional().describe(
     "ISO 8601 timestamp when invitation expires; absent means indefinite",
   ),
 };
@@ -140,7 +146,7 @@ const SetContactFieldOutputSchema = ContactDetailOutputSchema;
 
 const InviteContactOutputSchema = {
   invitation_id: z.string().describe("Unique invitation identifier"),
-  created_at: z.coerce.date(),
+  created_at: outputDate(),
 };
 
 // ── type inference ────────────────────────────────────────────────────────────
@@ -159,18 +165,11 @@ import type { Contact } from "../../models/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 
 function toContactOutput(c: Contact) {
-  // Spread each record into a fresh object to prevent toSerializable's reference
-  // deduplication from collapsing current_fields entries (which are the same
-  // in-memory objects as the first elements of the fields arrays).
-  const currentFields: Record<string, unknown> = {};
-  for (const [key, record] of Object.entries(flatMerge(c.fields))) {
-    currentFields[key] = { ...record };
-  }
   return {
     id: c.id,
     domain: c.domain,
     domain_id: c.domain_id,
-    current_fields: currentFields,
+    current_fields: flatMerge(c.fields),
     created_at: c.created_at,
     updated_at: c.updated_at,
   };
@@ -300,7 +299,9 @@ export class ContactTool {
         );
 
         const messageId = crypto.randomUUID();
-        const createdAt = new Date().toISOString();
+        const invitationId = crypto.randomUUID();
+        const deliveryToken = crypto.randomUUID();
+        const createdAt = new Date();
 
         const envelope = {
           message_id: messageId,
@@ -308,6 +309,7 @@ export class ContactTool {
           category: "invitation" as const,
           sent_at: createdAt,
           invitation: {
+            invitation_id: invitationId,
             ...(params.receptive_policy_id !== undefined && {
               receptive_policy_id: params.receptive_policy_id,
             }),
@@ -319,13 +321,17 @@ export class ContactTool {
             ...(params.expires_at !== undefined && {
               expires_at: params.expires_at,
             }),
+            delivery: {
+              domain: senderDomain,
+              token: deliveryToken,
+            },
           },
         };
 
         const receiverIsLocalhost = contact.domain === "localhost" ||
           contact.domain.startsWith("localhost:");
         const scheme = receiverIsLocalhost ? "http" : "https";
-        const url = `${scheme}://${contact.domain}/rpp/v1/messages`;
+        const url = `${scheme}://${contact.domain}/rpp/v1/envelopes`;
 
         const response = await fetch(url, {
           method: "POST",
@@ -343,7 +349,10 @@ export class ContactTool {
         // Consume the response body to avoid leaks
         await response.text();
 
-        return toolResult({ invitation_id: messageId, created_at: createdAt });
+        return toolResult({
+          invitation_id: invitationId,
+          created_at: createdAt,
+        });
       }),
     );
   }

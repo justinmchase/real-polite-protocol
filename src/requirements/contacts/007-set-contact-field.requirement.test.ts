@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name: "req:contacts-007 - Owner can add custom fields to a contact",

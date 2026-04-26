@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 // Contacts-mode receptive policy lets a listener accept invitations only from
 // a pre-approved set of (domain, domain_id) pairs.

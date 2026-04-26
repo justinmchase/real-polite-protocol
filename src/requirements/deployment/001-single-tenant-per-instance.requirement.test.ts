@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 
 Deno.test({
   name: "req:deployment-001 - Single-Tenant-Per-Instance Deployment",

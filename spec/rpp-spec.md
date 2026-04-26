@@ -40,7 +40,8 @@ RPP does not define human-facing mailbox UX or storage implementation details.
 - Receiver: The destination of a message.
 - Domain: A DNS hostname operating an RPP server.
 - Receipt: A receiver-issued permission token describing what a sender may send.
-- Reply Receipt: An optional receipt embedded in a message to permit a response.
+- Reply Invite: An optional invitation embedded in a message that offers the
+  receiver a path to reply.
 - Invitation: A special category message that proposes a future receipt grant.
 - Public Invitation: A standing invitation discoverable by invitation ID.
 - Listener: An authenticated MCP client connected to its own RPP server.
@@ -71,11 +72,10 @@ server-assigned OID (opaque identifier, typically from an OIDC token). OIDs are
 strictly server-internal with respect to cross-domain communication: they MUST
 NOT appear in any data transmitted to another domain — including submitted
 message envelopes, invitation envelopes, receptive policy tokens, or any HTTP
-request or response body sent over the wire between RPP servers. OIDs MAY
-appear in same-domain MCP tool responses visible only to the account owner or
-domain administrator. The only cross-domain identity artifacts defined by this
-protocol are `domain` (a DNS hostname) and `domain_id` (a UUID scoped to that
-domain).
+request or response body sent over the wire between RPP servers. OIDs MAY appear
+in same-domain MCP tool responses visible only to the account owner or domain
+administrator. The only cross-domain identity artifacts defined by this protocol
+are `domain` (a DNS hostname) and `domain_id` (a UUID scoped to that domain).
 
 ### 3A.2 Display Names
 
@@ -98,7 +98,7 @@ have no protocol significance.
 
 ### 3A.3 Voluntary Identity Disclosure on Receipts
 
-When a receiver issues a receipt (via invitation acceptance or reply receipt),
+When a receiver issues a receipt (via invitation acceptance or reply invite),
 the receiver MAY attach a voluntary display name to the receipt. This helps the
 sender identify who granted the receipt but is never required and never used for
 authentication.
@@ -131,16 +131,22 @@ local development and testing.
 
 An RPP server MUST expose two HTTP endpoints:
 
-1. RPP Submit Endpoint (backend-to-backend):
+1. RPP Envelope Endpoint (backend-to-backend):
    - Method: POST
-   - Path: implementation-defined (RECOMMENDED: /rpp/v1/messages)
-   - Purpose: Accept one message envelope per request.
+   - Path: implementation-defined (RECOMMENDED: `/rpp/v1/envelopes`)
+   - Purpose: Accept one envelope per request. Envelopes carry `message`,
+     `invitation`, or `receipt` payloads (Section 7).
 
 2. MCP Endpoint (listener interface):
    - Transport: MCP over HTTP
-   - Path: implementation-defined (RECOMMENDED: /mcp)
+   - Path: implementation-defined (RECOMMENDED: `/mcp`)
    - Purpose: Authenticated send/receive and workflow orchestration for local
      listeners connected to their own server domain.
+
+Cross-domain peers identify each other by **domain** (DNS hostname). Peers
+SHOULD fetch the domain identity endpoint (Section 12.1) to discover the exact
+endpoint URLs before first contact. Servers that do not publish a domain
+identity document are assumed to expose the conventional paths above.
 
 ### 4.3 Agent and Cross-Server Communication
 
@@ -154,49 +160,71 @@ An RPP server MUST expose two HTTP endpoints:
 
 ## 5. Authentication and Authorization
 
-### 5.1 Submit Endpoint Authentication
+### 5.1 Envelope Endpoint Authentication
 
-RPP submit authentication is receipt-based and request-bound.
+RPP envelope-endpoint authentication is HMAC-based and request-bound. The
+authentication scheme is uniform across all envelope kinds (Section 7); only the
+**identity header** and the **HMAC key source** vary by kind.
 
-Each POST request MUST include:
+Each POST request MUST include exactly one identity header — selected by
+envelope kind — together with the signature and timestamp headers:
 
-- x-rpp-receipt-id: Identifier of a previously issued receipt.
-- x-rpp-signature: Signature derived from hashing the raw request body with the
-  receipt secret.
-- x-rpp-timestamp: ISO 8601 UTC timestamp of when the request was created (see
+| Identity header       | Used by envelope kind(s)                              | HMAC key                                 |
+| --------------------- | ----------------------------------------------------- | ---------------------------------------- |
+| `x-rpp-receipt-id`    | `message`; `invitation` (receipt-based re-invitation) | `receipt_secret` of the named receipt    |
+| `x-rpp-invitation-id` | `receipt` (invitation-acceptance callback)            | `delivery_token` of the named invitation |
+
+Invitation envelopes against an open receptive policy (i.e., first contact where
+no prior receipt exists) are a third case: the `receptive_policy_id` embedded in
+the envelope itself acts as the bearer credential authorizing delivery into that
+policy window. Such envelopes MAY be submitted without an identity header. A
+future revision MAY tighten this to require HMAC over a policy-scoped key; for
+v0.2-draft, policy-based invitations rely on the secrecy of the
+`receptive_policy_id` (which is shared out-of-band by the receiver, e.g., via QR
+code).
+
+In addition, every HMAC-signed request MUST include:
+
+- `x-rpp-signature`: lowercase-hex HMAC-SHA-256 of the canonical input below,
+  using the key resolved from the identity header.
+- `x-rpp-timestamp`: ISO 8601 UTC timestamp of when the request was created (see
   Section 5.1.1).
 
-Initial profile (v0.2 draft):
+Canonical HMAC input:
 
-- Algorithm: HMAC-SHA-256
-- Construction: HMAC_SHA256(key=receipt_secret, data=x-rpp-timestamp + "." +
-  request_body_bytes)
-- Encoding: lowercase hex
+```
+HMAC_SHA256(key=<resolved-key>, data=x-rpp-timestamp + "." + request_body_bytes)
+```
 
 The HMAC input MUST be the concatenation of the `x-rpp-timestamp` header value,
 a literal ASCII period (`.`), and the raw request body bytes. This binds the
 timestamp to the signature and prevents an attacker from replaying a captured
 request with a fresh timestamp.
 
-Servers MUST reject requests with missing, unknown, malformed, expired, or
-policy-violating receipt context.
+The receiving server resolves the key by:
 
-The canonical list of RPP error codes the submit endpoint MAY return is defined
-in the unified **RPP Error Code Registry** in Section 11.2. Submit-endpoint
-errors correspond to registry entries whose category is `submit` or
-`receptive-policy`. These cover: missing or malformed authentication headers,
-invalid or stale request bodies, duplicate `message_id` values, unknown or
-revoked or expired receipts, signature mismatches, oversize payloads, and
-receptive-policy lookup and lifecycle failures associated with invitation
-messages.
+1. Reading whichever identity header is present.
+2. Looking up the corresponding record (receipt or invitation) and extracting
+   its associated key (`receipt_secret` or `delivery_token`).
+3. Computing the HMAC over the canonical input.
+4. Comparing constant-time against `x-rpp-signature`.
 
-Notes on HTTP status usage on the submit endpoint:
+For HMAC-signed requests, exactly one identity header MUST be present. Multiple
+identity headers, or an identity header that does not match the envelope
+`category`, MUST be rejected with `E_INVALID_AUTH_HEADERS`.
+
+Servers MUST reject requests with missing, unknown, malformed, expired,
+consumed, or policy-violating credentials. The canonical list of RPP error codes
+is defined in the **RPP Error Code Registry** in Section 11.2.
+
+Notes on HTTP status usage on the envelope endpoint:
 
 - HTTP 400 is used for syntactic and structural request errors that are
-  independent of receipt validity.
-- HTTP 403 is used for all receipt authorization failures. Servers MUST NOT use
-  401 for the submit endpoint because authentication is receipt-based, not
-  session-based.
+  independent of credential validity.
+- HTTP 403 is used for all credential authorization failures (unknown receipt,
+  revoked policy, consumed delivery token, signature mismatch). Servers MUST NOT
+  use 401 for the envelope endpoint because authentication is credential-based,
+  not session-based.
 - HTTP 413 is used when the request body exceeds the protocol maximum size
   (Section 7.1.1).
 - The RPP error code MUST be returned in the response body per the error model
@@ -204,27 +232,33 @@ Notes on HTTP status usage on the submit endpoint:
 
 #### 5.1.1 Replay Protection
 
-RPP uses a combination of timestamp freshness and message ID deduplication to
+RPP uses a combination of timestamp freshness and envelope-ID deduplication to
 prevent replay attacks.
 
-**Timestamp freshness.** Every submit request MUST include an `x-rpp-timestamp`
-header containing an ISO 8601 UTC timestamp (e.g., `2026-04-04T12:00:00Z`). The
-receiving server MUST reject any request whose timestamp differs from the
-server's current UTC time by more than **60 seconds** with `E_REQUEST_STALE`
-(see Section 11.2).
+**Timestamp freshness.** Every envelope request MUST include an
+`x-rpp-timestamp` header containing an ISO 8601 UTC timestamp (e.g.,
+`2026-04-04T12:00:00Z`). The receiving server MUST reject any request whose
+timestamp differs from the server's current UTC time by more than **60 seconds**
+with `E_REQUEST_STALE` (see Section 11.2).
 
-**Message ID deduplication.** The receiving server MUST maintain a
-per-sender-domain cache of recently seen `message_id` values. If a request
-arrives with a `message_id` that the server has already accepted from the same
-`sender_domain` within the deduplication window, the server MUST reject the
-request with `E_DUPLICATE_MESSAGE` (see Section 11.2). The deduplication cache
-MUST retain entries
+**Envelope deduplication.** The receiving server MUST maintain a deduplication
+cache keyed by envelope identity:
+
+- `message` envelopes: deduplicated by `(sender_domain, message_id)`.
+- `invitation` envelopes: deduplicated by `(sender_domain, invitation_id)`.
+- `receipt` envelopes: deduplicated by `invitation_id` (only one terminal
+  callback per invitation is ever valid; see Section 9.7).
+
+If a request arrives whose dedup key the server has already accepted within the
+deduplication window, the server MUST reject it with `E_DUPLICATE_MESSAGE`
+(submit-equivalent) for messages and invitations, or `E_INVITATION_NOT_PENDING`
+for a duplicate receipt callback. The deduplication cache MUST retain entries
 for at least **60 seconds** — matching the timestamp freshness window. Servers
 MAY retain entries longer.
 
 These two mechanisms work together: the 60-second timestamp window limits how
-long a captured request remains valid, and the message ID cache ensures that
-even within that window, the same request cannot be accepted twice.
+long a captured request remains valid, and the dedup cache ensures that even
+within that window, the same envelope cannot be accepted twice.
 
 **Clock tolerance.** Servers SHOULD allow minor clock drift between domains. The
 60-second window is chosen to accommodate typical NTP synchronization variations
@@ -333,10 +367,10 @@ The authorization flow proceeds as follows:
 #### 5.2.8 MCP Endpoint Error Codes
 
 The MCP endpoint returns errors drawn from the unified **RPP Error Code
-Registry** in Section 11.2. The `mcp-auth` category covers authentication,
-token validation, origin validation, and scope enforcement failures; the
-`mcp-tool` category covers errors raised during tool execution. The general
-HTTP status conventions for the MCP endpoint are:
+Registry** in Section 11.2. The `mcp-auth` category covers authentication, token
+validation, origin validation, and scope enforcement failures; the `mcp-tool`
+category covers errors raised during tool execution. The general HTTP status
+conventions for the MCP endpoint are:
 
 | HTTP Status | Condition                                      |
 | ----------- | ---------------------------------------------- |
@@ -432,11 +466,26 @@ about which secret to use and accumulate stale keys. Superseding guarantees at
 most one active receipt per
 `(receiver_account, sender_domain, sender_domain_id)` triple.
 
-## 7. Message Model
+## 7. Envelope Model
 
-### 7.1 Submit Request Envelope
+The envelope endpoint (Section 4.2) accepts a single JSON envelope per POST.
+Every envelope has a top-level `category` field that selects one of three
+**envelope kinds**:
 
-The POST body MUST be JSON with this base shape:
+| `category`   | Kind       | Purpose                                                 | Section |
+| ------------ | ---------- | ------------------------------------------------------- | ------- |
+| `invitation` | invitation | Offer a future receipt grant                            | §9      |
+| `receipt`    | receipt    | Deliver an invitation acceptance/rejection to a sender  | §9.7    |
+| any other    | message    | Normal message body (e.g., `correspondence`, `billing`) | §7.1    |
+
+The category registry in Section 7.2 enumerates all message-kind values. The
+`invitation` and `receipt` categories are reserved protocol kinds and are NOT
+message bodies in the user-facing sense; they carry protocol control payloads.
+
+### 7.1 Message Envelope
+
+A `message`-kind envelope carries a normal user-facing message body. The POST
+body MUST be JSON with this base shape:
 
 ```json
 {
@@ -451,7 +500,7 @@ The POST body MUST be JSON with this base shape:
     "content_type": "text/markdown",
     "content": "Please find attached..."
   },
-  "reply_receipt": null,
+  "reply_invite": null,
   "metadata": {}
 }
 ```
@@ -469,7 +518,7 @@ The POST body MUST be JSON with this base shape:
   user should receive the message. There is no receiver field in the envelope.
 - category MUST be one value from the category registry.
 - content_rating MUST be one value from the content rating registry.
-- reply_receipt MAY be omitted or null.
+- reply_invite MAY be omitted or null.
 
 ### 7.1.1 Maximum Message Size
 
@@ -489,25 +538,47 @@ mandatory and not configurable.
 ### 7.1.2 Message Body Content Type
 
 The `body` object in the message envelope MUST contain a `content_type` field
-and a `content` field. RPP defines **Markdown** as the sole content type for
-human-readable message bodies.
+and a `content` field. RPP defines two permitted content types:
 
-The `content_type` field MUST be `text/markdown`.
+- **`text/markdown`** — for human-readable message bodies.
+- **`application/json`** — for structured, machine-readable payloads (e.g.,
+  agent-to-agent coordination, structured notifications, transactional data).
 
-All messages MUST use `content_type: "text/markdown"`. The `content` field MUST
-be a UTF-8 Markdown string conforming to CommonMark.
+The `content_type` field MUST be exactly one of these two values. Servers MUST
+reject any message with any other `content_type` with `E_INVALID_CONTENT_TYPE`.
+
+#### Markdown bodies (`text/markdown`)
+
+When `content_type` is `text/markdown`, the `content` field MUST be a UTF-8
+Markdown string conforming to CommonMark.
 
 Senders SHOULD use CommonMark syntax for structure (headings, lists, links,
 emphasis, code blocks). Senders MUST NOT embed raw HTML in Markdown content —
 receiving clients SHOULD strip any HTML tags encountered during rendering.
 
-This restriction gives RPP a single, portable, plaintext-safe format that every
-client can render consistently. Unlike email, there is no negotiation between
-HTML, plain text, and multipart alternatives. Markdown is readable as plain text
-and renderable as rich text — one format serves both needs.
+This gives RPP a single, portable, plaintext-safe format that every client can
+render consistently. Unlike email, there is no negotiation between HTML, plain
+text, and multipart alternatives. Markdown is readable as plain text and
+renderable as rich text — one format serves both needs.
 
-Servers MUST reject any message with a `content_type` other than
-`text/markdown`.
+#### JSON bodies (`application/json`)
+
+When `content_type` is `application/json`, the `content` field MUST be a UTF-8
+string containing a syntactically valid JSON document (RFC 8259). The top-level
+JSON value MUST be an object or an array; bare scalars (string, number, boolean,
+null) MUST NOT be used as the top-level value.
+
+Servers MUST validate JSON syntax before accepting the message and MUST reject
+malformed JSON with `E_INVALID_BODY` (HTTP 400). Servers MUST NOT attempt to
+interpret, transform, or schema-validate the JSON payload beyond syntactic
+well-formedness — application-level schema is the responsibility of sender and
+receiver.
+
+Receiving clients MUST NOT render JSON content as if it were Markdown. Receivers
+SHOULD treat JSON bodies as opaque structured data intended for programmatic
+consumption.
+
+The 256 KB envelope limit (Section 7.1.1) applies regardless of `content_type`.
 
 ### 7.2 Category Registry (Initial)
 
@@ -559,7 +630,10 @@ MUST reject messages rated M or R.
 
 ### 7.4 Response
 
-Successful submission MUST return HTTP 202 or HTTP 200 with:
+Successful acceptance of an envelope MUST return HTTP 202 or HTTP 200. The
+response body shape varies by envelope kind:
+
+**Message envelope** — the response confirms acceptance:
 
 ```json
 {
@@ -569,63 +643,128 @@ Successful submission MUST return HTTP 202 or HTTP 200 with:
 }
 ```
 
-## 8. Reply Receipts
+**Invitation envelope** — the response confirms acceptance for delivery and
+echoes the invitation_id. If the receiver's receptive policy auto-accepts at
+submit time (rather than holding the invitation as `pending`), the response MAY
+additionally include the issued receipt inline as an optimization:
 
-A sender MAY include a `reply_receipt` in a message. A reply receipt is a
-standard receipt (Section 6.1) embedded in the message body that grants the
-receiver permission to send one or more messages back to the sender — even if no
-prior receiver-issued receipt existed in the reverse direction.
+```json
+{
+  "ok": true,
+  "accepted": true,
+  "invitation_id": "019644a1-7e2a-7b3c-8d1e-1f2a3b4c5d6e",
+  "receipt": {
+    "id": "...",
+    "secret": "...",
+    "category": "billing",
+    "max_content_rating": "PG",
+    "usage_policy": "any-time",
+    "issued_at": "2026-04-25T12:00:00Z"
+  }
+}
+```
 
-### 8.1 Reply Receipt Properties
+When the inline receipt is present, the sender MAY skip waiting for the receipt
+callback (Section 9.7); when it is absent, the sender MUST wait for the
+canonical callback delivery. The inline form is a strict optimization and is
+optional for receivers; senders MUST handle both forms.
 
-A reply receipt is a full receipt and MUST include all required receipt fields
-(Section 6.1): `id`, `secret`, `category`, `max_content_rating`, `usage_policy`,
-`validity` constraints, and `interval_budget`.
+**Receipt envelope** — see Section 9.7. The response confirms the callback was
+processed and consumed the delivery token.
 
-The sender defines all terms on the reply receipt. There are no protocol-imposed
-defaults or restrictions beyond those that apply to any receipt:
+## 8. Reply Invites
 
-- The sender MAY set any `category` — it need not match the parent message's
-  category. For example, a `billing` message may include a reply receipt
-  permitting a `correspondence` response.
-- The sender MAY set any `max_content_rating`.
-- The sender MAY set any `usage_policy` (`one-time`, `multiple-time`, or
-  `any-time`).
-- The sender MAY set validity constraints, interval budgets, and expiration.
+A sender MAY include a `reply_invite` in a message. A reply invite is a standard
+invitation payload (Section 9) embedded in the message body that offers the
+receiver a path to reply — even if no prior receipt existed in the reverse
+direction.
 
-The receiver is never obligated to use, store, or honor a reply receipt. The
+Unlike a reply receipt, a reply invite does **not** embed a bearer credential.
+The receiver uses it as input to the normal invitation flow: the receiver sends
+a `category: "invitation"` message back to the sender's submit endpoint citing
+the `receptive_policy_id` (or `receiver_domain`) supplied in the invite. The
+sender's server processes it exactly like any other incoming invitation. If the
+sender accepts, a receipt is issued to the receiver in the normal way (Section
+6). The receiver then holds that receipt and may send messages back to the
+sender using it.
+
+The key properties of this design:
+
+- No secret credential travels in a message body or is stored in the receiver's
+  message store.
+- The sender retains full control: they may accept, decline, or let a receptive
+  policy decide automatically.
+- Invitation acceptance does **not** notify the original sender. The receiver
+  either sends an invitation back or does not; silence is always valid.
+- The full invitation → receipt → message path is the same protocol primitive
+  already used everywhere else in RPP.
+
+### 8.1 Reply Invite Properties
+
+A `reply_invite` MUST include:
+
+- `receptive_policy_id` — the UUID of an active receptive policy on the sender's
+  server that the receiver may target when sending their reply invitation.
+- `receiver_domain` — the sender's domain, so the receiver's server knows where
+  to POST the invitation.
+
+A `reply_invite` MAY include:
+
+- `proposed_terms` — a suggested `ReceiptTerms` object (Section 6.1) that the
+  sender is willing to issue. The sender is not bound by these terms; they are
+  informational guidance to the receiver.
+- `expires_at` — an ISO 8601 timestamp after which the policy window is no
+  longer guaranteed to be open.
+
+The receiver is never obligated to use, store, or honor a reply invite. The
 receiver MAY ignore it entirely.
 
-### 8.2 Reply Receipt Validation
+### 8.2 Reply Invite Processing
 
-Reply receipts MUST be validated exactly like any other receipt. When the
-receiver uses a reply receipt to send a message back to the original sender:
+When a receiver's server encounters a `reply_invite` in an inbound message, it
+MAY store the invite alongside the message so the listener can act on it later.
+The receiver's server MUST NOT automatically send an invitation back without
+explicit listener authorization.
 
-- The receiver's server includes the reply receipt's `id` in the
-  `x-rpp-receipt-id` header and signs the request body with the reply receipt's
-  `secret`.
-- The original sender's server validates the signature, category, content
-  rating, usage policy, and all other receipt constraints.
-- If validation fails, the message is rejected with the standard error codes
-  (Section 5.1).
+When a listener decides to reply, their server sends a `category: "invitation"`
+envelope to the original sender's domain (one cross-domain POST), citing the
+`receptive_policy_id` from the invite. The original sender's server processes
+this exactly like any direct invitation (Section 9). Acceptance follows the
+canonical asynchronous flow:
 
-### 8.3 Reply Receipt Chaining
+1. The original sender's listener accepts (or rejects) the invitation at any
+   later point — this MAY be immediate or delayed by days, months, or longer.
+2. The original sender's server delivers the resulting receipt back to the
+   replying party's domain via a `category: "receipt"` callback (Section 9.7).
+3. The replying party's server stores the receipt and the listener may then send
+   reply messages using it per the normal envelope flow.
 
-A message sent using a reply receipt MAY itself include a new reply receipt.
-This allows multi-turn conversations to develop naturally without either party
-needing to go through the invitation flow. Each reply receipt in the chain is
-independent — it does not inherit terms from any prior receipt.
+**Auto-accept optimization.** Because the originating sender embedded the
+`reply_invite` precisely to signal willingness to receive replies, the targeted
+receptive policy SHOULD be configured to auto-accept. When auto-acceptance
+applies, the original sender's server MAY return the receipt inline in the HTTP
+202 response to the invitation POST (see §7.4) and skip the §9.7 callback. This
+is an optimization; the canonical asynchronous path remains fully supported and
+is what the replying party MUST be prepared to handle by default.
 
-Servers SHOULD NOT impose a protocol-level limit on reply chain depth. However,
-servers MAY enforce local policy limits on the number of outstanding reply
-receipts a user has issued.
+### 8.3 Reply Invite Chaining
 
-### 8.4 Reply Receipt Revocation
+A message delivered using a receipt obtained via a reply invite MAY itself
+include a new `reply_invite`. This allows multi-turn conversations to develop
+naturally without either party needing to discover the other's receptive policy
+out-of-band. Each reply invite is independent — it references a fresh policy and
+does not inherit terms from any prior receipt or invite.
 
-Reply receipts follow the standard receipt lifecycle (Section 6.2). The sender
-who issued the reply receipt MAY revoke it at any time using the standard
-revocation mechanism (Section 10A.1). Once revoked, any message sent using the
-reply receipt MUST be rejected with `E_RECEIPT_REVOKED` (see Section 11.2).
+Servers SHOULD NOT impose a protocol-level limit on reply chain depth.
+
+### 8.4 Reply Invite Expiry
+
+A `reply_invite` is valid as long as the referenced `receptive_policy_id` is
+active on the sender's server. If the policy has been deactivated or expired by
+the time the receiver sends their invitation, the sender's server MUST reject
+the invitation with the standard policy-not-found error (Section 11). The
+`expires_at` hint in the invite is informational only; receivers SHOULD NOT rely
+on it as an authoritative expiry.
 
 ## 9. Invitations
 
@@ -683,9 +822,9 @@ Each policy specifies a `mode`:
 - explicitly closed to all senders (`closed`).
 
 The `closed` mode allows a receiver to publish an explicit "not accepting"
- signal without removing all policies. A policy with `mode: "closed"` will
- always cause delivery to be rejected with `E_RECEPTIVE_POLICY_CLOSED`,
- regardless of other policies, when that specific policy is referenced.
+signal without removing all policies. A policy with `mode: "closed"` will always
+cause delivery to be rejected with `E_RECEPTIVE_POLICY_CLOSED`, regardless of
+other policies, when that specific policy is referenced.
 
 > **No `status: "deactivated"` field.** Receptive policies have no deactivated
 > state. Receipt-mode policies are **deleted** when their backing receipt is
@@ -916,8 +1055,8 @@ invitation with a `receipt_id`:
 5. The invitation is created as `pending` on the receiver's account.
 
 **Automatic deletion.** When a receipt is revoked (for any reason including
-superseding), the server MUST delete all `mode: "receipt"` policies
-associated with that `receipt_id`.
+superseding), the server MUST delete all `mode: "receipt"` policies associated
+with that `receipt_id`.
 
 **Superseding interaction.** When a receipt is superseded by a new one (Section
 6.6), the following cascade occurs atomically:
@@ -931,8 +1070,8 @@ The sender's previously held `receipt_id` is now stale. Any re-invitation
 attempt that presents the old `receipt_id` will be rejected at step 1 of
 invitation delivery (above) with `E_RECEIPT_NOT_ACTIVE`. The sender obtains the
 new `receipt_id` only when the receiver's domain delivers it as part of the new
-accepted-invitation response; until that exchange occurs, the sender SHOULD
-fall back to other receptive mechanisms (e.g., a contact-mode or domain-filter
+accepted-invitation response; until that exchange occurs, the sender SHOULD fall
+back to other receptive mechanisms (e.g., a contact-mode or domain-filter
 policy) or wait for the receiver to initiate contact.
 
 **Rationale.** Receipt-based re-invitation allows the sender to refresh the
@@ -944,23 +1083,39 @@ they must explicitly accept each new invitation.
 
 An invitation MUST include:
 
-- invitation_id,
-- offered receipt terms.
+- `invitation_id`,
+- offered receipt terms,
+- `delivery` — the receipt-callback delivery descriptor (see Section 9.7).
 
 An invitation MAY include:
 
-- expires_at: an ISO 8601 UTC timestamp after which the invitation is no longer
-  valid. If omitted, the invitation does not expire and remains in the `pending`
-  state until the receiver acts on it or the sender cancels it. Senders SHOULD
-  include an `expires_at` for time-bounded exchanges (e.g., proximity pairing)
-  but MAY omit it for standing offers.
+- `expires_at`: an ISO 8601 UTC timestamp after which the invitation is no
+  longer valid. If omitted, the invitation does not expire and remains in the
+  `pending` state until the receiver acts on it or the sender cancels it.
+  Senders SHOULD include an `expires_at` for time-bounded exchanges (e.g.,
+  proximity pairing) but MAY omit it for standing offers.
+
+The `delivery` block is REQUIRED on every direct invitation envelope (Section
+9.6 shows the full envelope). It carries the sender's domain and a single-use
+HMAC key (`delivery_token`) that the receiver's server uses to authenticate the
+eventual `category: "receipt"` callback that delivers the acceptance or
+rejection. Public invitations (Section 9.4) generate a `delivery` block per
+accepting party at the time of acceptance; see Section 9.7.
 
 Invitation state transitions:
 
-- pending -> accepted
-- pending -> rejected
-- pending/accepted -> cancelled (sender action)
-- pending -> expired
+- `pending` -> `accepted` (receiver listener accepted; receipt issued and
+  delivered to sender via §9.7)
+- `pending` -> `rejected` (receiver listener rejected; rejection delivered to
+  sender via §9.7)
+- `pending`/`accepted` -> `cancelled` (sender action)
+- `pending` -> `expired` (no acceptance before `expires_at`)
+
+The `accepted` and `rejected` transitions on the receiver's side are NOT
+complete until the corresponding receipt envelope has been successfully
+delivered to the sender (or, in the auto-accept inline-receipt optimization,
+returned in the §7.4 response). Until delivery succeeds, the receiver's server
+MUST treat the invitation as in a transitional state and retry per Section 9.7.
 
 When an invitation is cancelled, all receipts derived from that invitation MUST
 be invalidated.
@@ -973,9 +1128,9 @@ receipt's lifecycle. If that receipt is subsequently revoked — by either party
 for any reason including superseding — already-pending invitations derived from
 that receipt are unaffected and remain in `pending` state. The receiver MAY
 still accept, reject, or let them expire normally; the sender MAY still cancel
-them. Revoking a receipt cascades only to receipts issued *from* prior accepted
-invitations (Section 6.6), not to still-pending invitations that were *delivered
-via* that receipt.
+them. Revoking a receipt cascades only to receipts issued _from_ prior accepted
+invitations (Section 6.6), not to still-pending invitations that were _delivered
+via_ that receipt.
 
 ### 9.3 Invitation Term Negotiation
 
@@ -1280,8 +1435,8 @@ constraints. These constraints apply equally to all four namespaces:
 Servers MUST validate these constraints on inbound envelopes and MUST reject any
 `send_invitation` call whose `custom` claims violates them with
 `E_INVALID_MESSAGE_ENVELOPE` (HTTP 400; see Section 11.2). Servers MUST also
-enforce these
-constraints on server-resolved values before writing them into the envelope.
+enforce these constraints on server-resolved values before writing them into the
+envelope.
 
 #### 9.6.2 Receiver Obligations
 
@@ -1310,6 +1465,157 @@ Senders who create public invitations SHOULD use the `verification` mechanism
 (Section 9.5) rather than `claims`, as it provides cryptographic authenticity.
 `claims` is intended primarily for direct, one-to-one invitations where the
 cryptographic overhead of Section 9.5 is unnecessary.
+
+### 9.7 Acceptance Callback (Receipt Envelope)
+
+Invitations may sit in `pending` state for an arbitrary duration — minutes,
+days, or years — before a listener acts on them. To deliver the resulting
+receipt (or rejection) back to the sender across that asynchronous gap, RPP
+defines a dedicated **receipt envelope** that the receiver's server POSTs to the
+sender's envelope endpoint. The receipt envelope is the canonical mechanism for
+completing invitation lifecycle.
+
+#### 9.7.1 Delivery Block on Invitations
+
+Every direct invitation envelope (Section 9.6) MUST include a `delivery` object
+that describes how to reach the originating sender's envelope endpoint and
+supplies the credential that authenticates the future callback:
+
+```json
+"delivery": {
+  "domain": "sender.example",
+  "token": "<128-bit hex string, generated by sender>",
+  "expires_at": "2027-04-25T12:00:00Z"
+}
+```
+
+| Field        | Required | Description                                                                                                                                                |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `domain`     | REQUIRED | The sender's RPP domain. The receiver's server constructs the callback URL by combining this with the conventional envelope path (Section 4.2).            |
+| `token`      | REQUIRED | A high-entropy (≥128 bits) sender-generated value used as the HMAC key for the receipt envelope (Section 5.1). Single-use, scoped to this `invitation_id`. |
+| `expires_at` | OPTIONAL | ISO 8601 timestamp after which the sender will no longer accept the callback. If omitted, the token is valid for the lifetime of the invitation.           |
+
+The sender:
+
+- MUST generate a fresh `token` per invitation. Tokens MUST NOT be reused across
+  invitations.
+- MUST persist the `(invitation_id, token)` pair so that the eventual callback
+  can be authenticated.
+- MUST treat the token as consumed on first successful (`accepted` or
+  `rejected`) callback delivery; subsequent callbacks for the same
+  `invitation_id` MUST be rejected with `E_DELIVERY_TOKEN_CONSUMED`.
+
+For public invitations (Section 9.4), the `delivery` block is generated by the
+hosting domain at the moment of acceptance: when an acceptor's server fetches
+the invitation and indicates intent to accept, the hosting domain returns a
+freshly issued `delivery` block scoped to that acceptance. The exact mechanism
+is implementation-defined.
+
+#### 9.7.2 Receipt Envelope
+
+When a receiver's listener accepts or rejects an invitation, the receiver's
+server constructs a `category: "receipt"` envelope and POSTs it to
+`https://{delivery.domain}/rpp/v1/envelopes` (or whatever path the sender
+publishes per Section 4.2 / 12.1).
+
+Acceptance shape:
+
+```json
+{
+  "category": "receipt",
+  "invitation_id": "019644a1-7e2a-7b3c-8d1e-1f2a3b4c5d6e",
+  "decision": "accepted",
+  "reason": "Looking forward to working with you!",
+  "receipt": {
+    "id": "...",
+    "secret": "...",
+    "category": "billing",
+    "max_content_rating": "PG",
+    "usage_policy": "any-time",
+    "issued_at": "2026-04-25T12:00:00Z",
+    "display_name": "Alice"
+  }
+}
+```
+
+Rejection shape:
+
+```json
+{
+  "category": "receipt",
+  "invitation_id": "019644a1-7e2a-7b3c-8d1e-1f2a3b4c5d6e",
+  "decision": "rejected",
+  "reason": "Not accepting new correspondents at this time."
+}
+```
+
+Fields:
+
+| Field           | Required when                     | Description                                                                              |
+| --------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `category`      | always                            | MUST be the literal string `"receipt"`.                                                  |
+| `invitation_id` | always                            | The `invitation_id` of the original invitation. Acts as the dedup key (Section 5.1.1).   |
+| `decision`      | always                            | One of `"accepted"` or `"rejected"`.                                                     |
+| `receipt`       | REQUIRED if `decision = accepted` | The newly issued receipt: id, secret, terms, and optional voluntary display name.        |
+| `reason`        | OPTIONAL (either decision)        | Free-form short string for human consumption only. MUST NOT be used for routing or auth. |
+
+Authentication: the receiver's server signs the receipt envelope per Section
+5.1, using `x-rpp-invitation-id` as the identity header and the original
+invitation's `delivery.token` as the HMAC key.
+
+#### 9.7.3 Sender Processing
+
+On receiving a `category: "receipt"` envelope, the sender's server MUST:
+
+1. Locate the invitation by `invitation_id`. If unknown, reject with
+   `E_INVITATION_NOT_FOUND`.
+2. Verify the invitation is still `pending`. If `cancelled`, `expired`, or
+   already terminal (`accepted`/`rejected`), reject with
+   `E_INVITATION_NOT_PENDING`.
+3. Verify the `delivery.token` matches the stored token for that invitation. If
+   not, reject with `E_DELIVERY_TOKEN_INVALID`. If the token is past its
+   `expires_at`, reject with `E_DELIVERY_TOKEN_EXPIRED`. If the token has
+   already been consumed by a prior callback, reject with
+   `E_DELIVERY_TOKEN_CONSUMED`.
+4. Verify the HMAC signature per Section 5.1.
+5. On `decision = accepted`: store the receipt locally, mark the invitation
+   `accepted`, mark the delivery token consumed.
+6. On `decision = rejected`: mark the invitation `rejected`, mark the delivery
+   token consumed.
+7. Return HTTP 202 with
+   `{ "ok": true, "accepted": true, "invitation_id": "…" }`.
+
+#### 9.7.4 Retry Semantics
+
+If the callback POST fails with a transient network error or 5xx response, the
+receiver's server SHOULD retry with exponential backoff. The sender's server
+treats retries as idempotent: because the `invitation_id` is the dedup key
+(Section 5.1.1), the second successful delivery returns the same 202 response
+without changing state.
+
+If the callback fails permanently (sender's domain unreachable for a prolonged
+period, or `E_INVITATION_NOT_FOUND` returned because the sender cancelled the
+invitation), the receiver's server marks the invitation locally as the listener
+requested (e.g., `accepted`) but flags the receipt as **undelivered**. The
+receipt remains usable for sending future messages (those messages will be
+authenticated by the receipt secret on the sender's side once the sender becomes
+reachable), but the receiver's tooling SHOULD surface the undelivered state to
+the listener.
+
+#### 9.7.5 Auto-Accept Optimization
+
+When a receiver's policy auto-accepts an invitation at submit time, the sender's
+server is already mid-request and there is no asynchronous gap to bridge. As an
+optimization, the receiver's server MAY return the issued receipt inline in the
+§7.4 response and skip the §9.7.2 callback. Senders MUST handle both forms:
+
+- If the inline `receipt` is present in the §7.4 response, the sender treats the
+  invitation as `accepted` immediately.
+- If absent, the sender MUST wait for the canonical callback; no acceptance has
+  occurred until then.
+
+The inline form is a strict optimization; receivers are never required to use
+it.
 
 ## 10. Group Conversations
 
@@ -1382,7 +1688,7 @@ When a user sends a message to a group, the message envelope includes a
     "content_type": "text/markdown",
     "content": "Hey all, quick update..."
   },
-  "reply_receipt": null,
+  "reply_invite": null,
   "metadata": {}
 }
 ```
@@ -1405,7 +1711,7 @@ a `group_id`, it MUST verify:
 
 If any check fails, the server MUST reject the message.
 
-Reply receipts MUST NOT be included in group messages. Multi-party reply receipt
+Reply invites MUST NOT be included in group messages. Multi-party reply invite
 semantics are undefined and would undermine the group model.
 
 ### 10.5 Leaving a Group
@@ -1493,8 +1799,8 @@ Revocation reasons are drawn from a fixed set:
 
 - reason_detail: an OPTIONAL human-readable string providing additional context.
 - Revocation MUST be immediate: once acknowledged, the receipt status becomes
-  revoked and subsequent submit requests using it MUST return `E_RECEIPT_REVOKED`
-  (see Section 11.2).
+  revoked and subsequent submit requests using it MUST return
+  `E_RECEIPT_REVOKED` (see Section 11.2).
 - The server SHOULD record the revocation reason for audit and policy purposes.
 - Revocation of a receipt derived from an invitation does not automatically
   cancel the invitation unless the receiver explicitly cancels it.
@@ -1532,12 +1838,12 @@ The replacement receipt is a new, independent receipt with its own `id` and
 revoked receipt.
 
 Because RPP does not deliver revocation notifications, the sender discovers the
-change when their next message is rejected with `E_RECEIPT_REVOKED` (see
-Section 11.2). To deliver
-the replacement receipt to the sender, the receiver has two options:
+change when their next message is rejected with `E_RECEIPT_REVOKED` (see Section
+11.2). To deliver the replacement receipt to the sender, the receiver has two
+options:
 
 1. **Send via an existing receipt in the reverse direction.** If the receiver
-   holds a receipt from the sender (e.g., from a reply receipt or prior
+   holds a receipt from the sender (e.g., via a reply invite or prior
    invitation), the receiver MAY send a message containing the replacement
    receipt details.
 2. **Out-of-band delivery.** The receiver MAY communicate the new receipt
@@ -1647,6 +1953,9 @@ invitations.
 | `accept_invitation`        | Accept a pending invitation, optionally with narrower terms per         |
 |                            | Section 9.3. Issues a receipt to the inviting domain.                   |
 | `reject_invitation`        | Reject a pending invitation.                                            |
+| `cancel_invitation`        | Cancel a direct invitation the listener sent, transitioning it to       |
+|                            | `cancelled`. Valid from `pending` or `accepted` state. All receipts     |
+|                            | derived from the invitation are immediately revoked (Section 9.2).      |
 | `send_invitation`          | Send an invitation to a receiver identified by `receiver_domain`        |
 |                            | and `receptive_policy_id`. The invitation envelope is delivered to the  |
 |                            | **receiver's** submit endpoint, where the receiver's server resolves    |
@@ -1856,15 +2165,15 @@ updated when an invitation is accepted.
 
 A contact record represents a known sender identity on a given receiver account.
 
-| Field        | Type                                   | Description                                                             |
-| ------------ | -------------------------------------- | ----------------------------------------------------------------------- |
-| `id`         | UUID string                            | Server-assigned stable identifier for this contact record.              |
-| `owner_oid`  | string                                 | OID of the receiver account that owns this contact.                     |
+| Field        | Type                                   | Description                                                                                           |
+| ------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `id`         | UUID string                            | Server-assigned stable identifier for this contact record.                                            |
+| `owner_oid`  | string                                 | OID of the receiver account that owns this contact.                                                   |
 | `domain`     | string                                 | Issuing hostname of the contact, set once at creation from `sender_domain`; **immutable** thereafter. |
-| `domain_id`  | UUID string                            | `domain_id` UUID scoped to `domain`. Unique per `(owner_oid, domain)`.  |
-| `fields`     | `Record<string, ContactFieldRecord[]>` | Claim fields with full history, newest-first per field key.             |
-| `created_at` | ISO 8601                               | When the contact was first created.                                     |
-| `updated_at` | ISO 8601                               | When the contact was last updated.                                      |
+| `domain_id`  | UUID string                            | `domain_id` UUID scoped to `domain`. Unique per `(owner_oid, domain)`.                                |
+| `fields`     | `Record<string, ContactFieldRecord[]>` | Claim fields with full history, newest-first per field key.                                           |
+| `created_at` | ISO 8601                               | When the contact was first created.                                                                   |
+| `updated_at` | ISO 8601                               | When the contact was last updated.                                                                    |
 
 The combination `(owner_oid, domain, domain_id)` is the logical unique key for a
 contact. Two different domains that happen to issue the same `domain_id` UUID to
@@ -1873,11 +2182,11 @@ contacts using the full composite key; matching on `domain_id` alone is invalid.
 
 A `ContactFieldRecord` holds one historical value for a claim field:
 
-| Field         | Type                                    | Description                                |
-| ------------- | --------------------------------------- | ------------------------------------------ |
-| `value`       | string, number, boolean, null, or array | The claim value as received.               |
+| Field         | Type                                                                           | Description                                                                                                                                                                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `value`       | string, number, boolean, null, or array                                        | The claim value as received.                                                                                                                                                                                                                                                                                                                   |
 | `source`      | `"sender_verified"` \| `"domain_admin"` \| `"sender_custom"` \| `"owner_note"` | Which claim namespace the value came from. `"sender_verified"` means the sender attested the value in `claims.user`; `"domain_admin"` means the sending domain's administrator attested the value; `"sender_custom"` means the sender supplied it in `claims.custom`; `"owner_note"` means the contact owner added it via `set_contact_field`. |
-| `recorded_at` | ISO 8601                                | When this value was recorded.              |
+| `recorded_at` | ISO 8601                                                                       | When this value was recorded.                                                                                                                                                                                                                                                                                                                  |
 
 ### 10C.2 Auto-Creation on Invitation Acceptance
 
@@ -1896,9 +2205,9 @@ type (direct, public, or receipt-based re-invitation):
 - Merge `claims.user`, `claims.admin`, and `claims.custom` into `fields`:
   - For each key-value pair, prepend a new `ContactFieldRecord` to the history
     array for that field key. Never replace existing history entries.
-  - Record the `source` (`"sender_verified"` for `claims.user`, `"domain_admin"` for
-    `claims.admin`, or `"sender_custom"` for `claims.custom`) and `recorded_at`
-    as the acceptance timestamp.
+  - Record the `source` (`"sender_verified"` for `claims.user`, `"domain_admin"`
+    for `claims.admin`, or `"sender_custom"` for `claims.custom`) and
+    `recorded_at` as the acceptance timestamp.
 
 Similarly, the auto-creation of a `mode: "receipt"` receptive policy on
 acceptance (Section 9.1.6) applies to all accepted invitations that produce a
@@ -2029,65 +2338,72 @@ The `Category` column groups codes by the subsystem that raises them:
 - `domain-admin` — errors raised by domain-administration tools (Section 10B).
 - `mcp-auth` — errors returned by the MCP endpoint's authentication,
   token-validation, and origin-validation layer (Section 5.2).
-- `mcp-tool` — generic tool-execution errors returned through the MCP tool
-  error envelope.
+- `mcp-tool` — generic tool-execution errors returned through the MCP tool error
+  envelope.
 - `pagination` — errors raised when validating pagination parameters on
   list-style tools.
 
-| RPP Error Code                            | HTTP | Category         | Condition                                                             |
-| ----------------------------------------- | ---- | ---------------- | --------------------------------------------------------------------- |
-| E_MISSING_RECEIPT_ID                      | 400  | submit           | `x-rpp-receipt-id` header missing                                     |
-| E_MISSING_SIGNATURE                       | 400  | submit           | `x-rpp-signature` header missing                                      |
-| E_MISSING_TIMESTAMP                       | 400  | submit           | `x-rpp-timestamp` header missing                                      |
-| E_INVALID_REQUEST_BODY                    | 400  | submit           | Request body is not valid JSON                                        |
-| E_INVALID_MESSAGE_ENVELOPE                | 400  | submit           | Required message envelope fields missing or invalid                   |
-| E_REQUEST_STALE                           | 400  | submit           | Timestamp outside the freshness window (Section 5.1.1)                |
-| E_DUPLICATE_MESSAGE                       | 400  | submit           | Duplicate `message_id` within deduplication window (Section 5.1.1)    |
-| E_MISSING_RECEPTIVE_POLICY_ID             | 400  | submit           | Invitation message missing `metadata.receptive_policy_id`             |
-| E_RECEIPT_NOT_FOUND                       | 403  | submit           | Receipt id not recognized by this server                              |
-| E_RECEIPT_INVALID_SIGNATURE               | 403  | submit           | Request signature does not match the computed HMAC                    |
-| E_RECEIPT_REVOKED                         | 403  | submit           | Receipt has been revoked                                              |
-| E_RECEIPT_EXPIRED                         | 403  | submit           | Receipt has expired                                                   |
-| E_MESSAGE_TOO_LARGE                       | 413  | submit           | Request body exceeds 256 KB (Section 7.1.1)                           |
-| E_RECEPTIVE_POLICY_NOT_FOUND              | 403  | receptive-policy | Receptive policy not found for the supplied `receptive_policy_id`     |
-| E_RECEPTIVE_POLICY_EXPIRED                | 403  | receptive-policy | Receptive policy's `receptive_until` has passed                       |
-| E_RECEPTIVE_POLICY_CLOSED                 | 403  | receptive-policy | Receptive policy is closed to the supplied sender                     |
-| E_RECEIPT_NOT_ACTIVE                      | 403  | receptive-policy | Referenced receipt is not active for receipt-based re-invitation      |
-| E_INVALID_WINDOW_SCOPE                    | 400  | receptive-policy | Invalid receptive window scope (must be `all` or `domain_filter`)     |
+| RPP Error Code                            | HTTP | Category         | Condition                                                                                               |
+| ----------------------------------------- | ---- | ---------------- | ------------------------------------------------------------------------------------------------------- |
+| E_ACCOUNT_CREATE_CONFLICT                 | 500  | domain-admin     | Concurrent write conflict during account creation                                                       |
+| E_ACCOUNT_NOT_FOUND                       | 404  | domain-admin     | No registered account found for the supplied `oid`                                                      |
+| E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND | 404  | domain-admin     | Specified admin-verified metadata field does not exist for the user                                     |
+| E_DELIVERY_TOKEN_CONSUMED                 | 403  | invitation       | Receipt-callback `delivery_token` has already been consumed by a prior callback                         |
+| E_DELIVERY_TOKEN_EXPIRED                  | 403  | invitation       | Receipt-callback `delivery_token` is past its `expires_at`                                              |
+| E_DELIVERY_TOKEN_INVALID                  | 403  | invitation       | Receipt-callback `delivery_token` does not match the stored token for the invitation                    |
+| E_DOMAIN_ID_ASSIGN_CONFLICT               | 500  | domain-admin     | Concurrent write conflict during `domain_id` assignment                                                 |
+| E_DUPLICATE_MESSAGE                       | 400  | submit           | Duplicate `message_id` within deduplication window (Section 5.1.1)                                      |
+| E_EXPIRED                                 | 401  | mcp-auth         | Token is expired (`exp` claim in the past)                                                              |
+| E_IMMUTABLE_FIELD_CONFLICT                | 400  | domain-admin     | Attempted to set or remove a field in the immutable namespace                                           |
+| E_INSUFFICIENT_SCOPE                      | 403  | mcp-auth         | Required MCP scope(s) missing from the token                                                            |
+| E_INTERNAL                                | 500  | mcp-tool         | Unhandled tool failure wrapped by the tool error handler                                                |
+| E_INVALID_AUTH_HEADERS                    | 400  | submit           | Multiple identity headers present, or identity header does not match envelope `category`                |
+| E_INVALID_AUDIENCE                        | 401  | mcp-auth         | Token audience does not match the expected audience                                                     |
+| E_INVALID_BODY                            | 400  | message          | `application/json` body is not syntactically valid JSON (RFC 8259)                                      |
+| E_INVALID_CONTENT_TYPE                    | 400  | message          | `content_type` value is not a permitted type (Section 7.1.2)                                            |
+| E_INVALID_FORMAT                          | 401  | mcp-auth         | Authorization header format is invalid                                                                  |
+| E_INVALID_ISSUER                          | 401  | mcp-auth         | Token issuer does not match the expected issuer                                                         |
+| E_INVALID_KEY_FORMAT                      | 400  | mcp-auth         | JWKS key payload is malformed                                                                           |
+| E_INVALID_MESSAGE_ENVELOPE                | 400  | submit           | Required message envelope fields missing or invalid                                                     |
+| E_INVALID_ORIGIN                          | 400  | mcp-auth         | Origin header is invalid or does not match the expected origin                                          |
+| E_INVALID_PAGE_SIZE                       | 400  | pagination       | Pagination `page_size` is invalid                                                                       |
 | E_INVALID_RECEPTIVE_MODE                  | 400  | receptive-policy | Invalid receptive mode (must be `all`, `domain_filter`, `contact`, or `closed`; `receipt` is auto-only) |
-| E_INVITATION_NOT_FOUND                    | 404  | invitation       | Invitation not found                                                  |
-| E_INVITATION_NOT_PENDING                  | 400  | invitation       | Invitation cannot be accepted because it is not in `pending` status   |
-| E_RECEIPT_NOT_FOUND                       | 404  | receipt          | Receipt not found in tool context                                     |
-| E_RECEIPT_ALREADY_REVOKED                 | 400  | receipt          | Receipt is already revoked                                            |
-| E_RECEIPT_NOT_OWNED                       | 403  | receipt          | Receipt was not issued by this account                                |
-| E_ACCOUNT_NOT_FOUND                       | 404  | domain-admin     | No registered account found for the supplied `oid`                    |
-| E_ACCOUNT_CREATE_CONFLICT                 | 500  | domain-admin     | Concurrent write conflict during account creation                     |
-| E_DOMAIN_ID_ASSIGN_CONFLICT               | 500  | domain-admin     | Concurrent write conflict during `domain_id` assignment               |
-| E_USER_VERIFIED_METADATA_NOT_FOUND        | 404  | domain-admin     | No verified metadata exists for the requested user                    |
-| E_ADMIN_VERIFIED_METADATA_FIELD_NOT_FOUND | 404  | domain-admin     | Specified admin-verified metadata field does not exist for the user   |
-| E_VERIFIED_METADATA_VALUE_TOO_LONG        | 400  | domain-admin     | Verified metadata value exceeds the 512-character limit               |
-| E_IMMUTABLE_FIELD_CONFLICT                | 400  | domain-admin     | Attempted to set or remove a field in the immutable namespace         |
-| MISSING_AUTH                              | 401  | mcp-auth         | MCP request arrived without authentication context                    |
-| E_MISSING_HEADER                          | 401  | mcp-auth         | Authorization header is missing                                       |
-| E_INVALID_FORMAT                          | 401  | mcp-auth         | Authorization header format is invalid                                |
-| E_NOT_CONFIGURED                          | 500  | mcp-auth         | Auth subsystem is not configured on the server                        |
-| E_INVALID_ORIGIN                          | 400  | mcp-auth         | Origin header is invalid or does not match the expected origin        |
-| E_MISSING_OID                             | 401  | mcp-auth         | Required `oid` claim is absent from the token                         |
-| E_INVALID_TOKEN_FORMAT                    | 401  | mcp-auth         | JWT structure is invalid (not three Base64URL segments)               |
-| E_EXPIRED                                 | 401  | mcp-auth         | Token is expired (`exp` claim in the past)                            |
-| E_NOT_YET_VALID                           | 401  | mcp-auth         | Token's `nbf` claim is in the future                                  |
-| E_INVALID_ISSUER                          | 401  | mcp-auth         | Token issuer does not match the expected issuer                       |
-| E_INVALID_AUDIENCE                        | 401  | mcp-auth         | Token audience does not match the expected audience                   |
-| E_KEY_NOT_FOUND                           | 401  | mcp-auth         | Signing key could not be resolved from JWKS                           |
-| E_JWKS_FETCH_FAILED                       | 401  | mcp-auth         | JWKS retrieval from the issuer failed                                 |
-| E_INSUFFICIENT_SCOPE                      | 403  | mcp-auth         | Required MCP scope(s) missing from the token                          |
-| E_UNSUPPORTED_ALGORITHM                   | 400  | mcp-auth         | JWT signing algorithm is not supported                                |
-| E_INVALID_KEY_FORMAT                      | 400  | mcp-auth         | JWKS key payload is malformed                                         |
-| E_INVALID_SIGNATURE                       | 401  | mcp-auth         | JWT signature validation failed                                       |
-| E_SIGNATURE_VERIFICATION_FAILED           | 401  | mcp-auth         | Signature verification process failed                                 |
-| E_INTERNAL                                | 500  | mcp-tool         | Unhandled tool failure wrapped by the tool error handler              |
-| E_INVALID_RESUME_TOKEN                    | 400  | pagination       | Pagination resume token is malformed or expired                       |
-| E_INVALID_PAGE_SIZE                       | 400  | pagination       | Pagination `page_size` is invalid                                     |
+| E_INVALID_REQUEST_BODY                    | 400  | submit           | Request body is not valid JSON                                                                          |
+| E_INVALID_RESUME_TOKEN                    | 400  | pagination       | Pagination resume token is malformed or expired                                                         |
+| E_INVALID_SIGNATURE                       | 401  | mcp-auth         | JWT signature validation failed                                                                         |
+| E_INVALID_TOKEN_FORMAT                    | 401  | mcp-auth         | JWT structure is invalid (not three Base64URL segments)                                                 |
+| E_INVALID_WINDOW_SCOPE                    | 400  | receptive-policy | Invalid receptive window scope (must be `all` or `domain_filter`)                                       |
+| E_INVITATION_NOT_FOUND                    | 404  | invitation       | Invitation not found                                                                                    |
+| E_INVITATION_NOT_PENDING                  | 400  | invitation       | Invitation cannot be accepted or rejected because it is not in `pending` status                         |
+| E_JWKS_FETCH_FAILED                       | 401  | mcp-auth         | JWKS retrieval from the issuer failed                                                                   |
+| E_KEY_NOT_FOUND                           | 401  | mcp-auth         | Signing key could not be resolved from JWKS                                                             |
+| E_MESSAGE_TOO_LARGE                       | 413  | submit           | Request body exceeds 256 KB (Section 7.1.1)                                                             |
+| E_MISSING_HEADER                          | 401  | mcp-auth         | Authorization header is missing                                                                         |
+| E_MISSING_OID                             | 401  | mcp-auth         | Required `oid` claim is absent from the token                                                           |
+| E_MISSING_RECEIPT_ID                      | 400  | submit           | `x-rpp-receipt-id` header missing                                                                       |
+| E_MISSING_RECEPTIVE_POLICY_ID             | 400  | submit           | Invitation message missing `metadata.receptive_policy_id`                                               |
+| E_MISSING_SIGNATURE                       | 400  | submit           | `x-rpp-signature` header missing                                                                        |
+| E_MISSING_TIMESTAMP                       | 400  | submit           | `x-rpp-timestamp` header missing                                                                        |
+| E_NOT_CONFIGURED                          | 500  | mcp-auth         | Auth subsystem is not configured on the server                                                          |
+| E_NOT_YET_VALID                           | 401  | mcp-auth         | Token's `nbf` claim is in the future                                                                    |
+| E_RECEIPT_ALREADY_REVOKED                 | 400  | receipt          | Receipt is already revoked                                                                              |
+| E_RECEIPT_ENVELOPE_INVALID                | 400  | invitation       | Receipt envelope is missing required fields or has structurally invalid shape                           |
+| E_RECEIPT_EXPIRED                         | 403  | submit           | Receipt has expired                                                                                     |
+| E_RECEIPT_INVALID_SIGNATURE               | 403  | submit           | Request signature does not match the computed HMAC                                                      |
+| E_RECEIPT_NOT_ACTIVE                      | 403  | receptive-policy | Referenced receipt is not active for receipt-based re-invitation                                        |
+| E_RECEIPT_NOT_FOUND                       | 403  | submit           | Receipt id not recognized by this server                                                                |
+| E_RECEIPT_NOT_FOUND                       | 404  | receipt          | Receipt not found in tool context                                                                       |
+| E_RECEIPT_NOT_OWNED                       | 403  | receipt          | Receipt was not issued by this account                                                                  |
+| E_RECEIPT_REVOKED                         | 403  | submit           | Receipt has been revoked                                                                                |
+| E_RECEPTIVE_POLICY_CLOSED                 | 403  | receptive-policy | Receptive policy is closed to the supplied sender                                                       |
+| E_RECEPTIVE_POLICY_EXPIRED                | 403  | receptive-policy | Receptive policy's `receptive_until` has passed                                                         |
+| E_RECEPTIVE_POLICY_NOT_FOUND              | 403  | receptive-policy | Receptive policy not found for the supplied `receptive_policy_id`                                       |
+| E_REQUEST_STALE                           | 400  | submit           | Timestamp outside the freshness window (Section 5.1.1)                                                  |
+| E_SIGNATURE_VERIFICATION_FAILED           | 401  | mcp-auth         | Signature verification process failed                                                                   |
+| E_UNSUPPORTED_ALGORITHM                   | 400  | mcp-auth         | JWT signing algorithm is not supported                                                                  |
+| E_USER_VERIFIED_METADATA_NOT_FOUND        | 404  | domain-admin     | No verified metadata exists for the requested user                                                      |
+| E_VERIFIED_METADATA_VALUE_TOO_LONG        | 400  | domain-admin     | Verified metadata value exceeds the 512-character limit                                                 |
+| MISSING_AUTH                              | 401  | mcp-auth         | MCP request arrived without authentication context                                                      |
 
 Notes:
 
@@ -2117,10 +2433,12 @@ notices, operational coordination) between domain operators.
 
 ### 12.1 Domain Self-Identification Endpoint
 
-An RPP server MAY expose a public domain identity endpoint that provides
-metadata about the domain without revealing its users.
+An RPP server SHOULD expose a public domain identity endpoint that provides
+metadata about the domain without revealing its users. Publishing this endpoint
+allows cross-domain peers to discover exact endpoint URLs (Section 4.2) without
+relying solely on path conventions.
 
-- Path: RECOMMENDED `/.well-known/rpp-domain-identity`
+- Path: `/.well-known/rpp-domain-identity`
 - Method: GET
 - Authentication: NONE (publicly accessible)
 
@@ -2135,6 +2453,8 @@ The response MUST be JSON with the following shape:
   "categories_offered": ["correspondence", "event", "transactional"],
   "rpp_since": "2025-06-01T00:00:00Z",
   "contact_policy_url": "https://cs.example-university.edu/rpp-policy",
+  "envelope_endpoint": "https://cs.example-university.edu/rpp/v1/envelopes",
+  "mcp_endpoint": "https://cs.example-university.edu/mcp",
   "public_key": {
     "algorithm": "Ed25519",
     "key": "MCowBQYDK2VwAyEA..."
@@ -2144,16 +2464,22 @@ The response MUST be JSON with the following shape:
 
 Fields:
 
-| Field              | Required | Description                                         |
-| ------------------ | -------- | --------------------------------------------------- |
-| domain             | REQUIRED | The RPP domain this identity describes              |
-| display_name       | REQUIRED | Human-readable name for the domain                  |
-| domain_type        | OPTIONAL | Self-declared category (see Section 12.1.1)         |
-| parent_domain      | OPTIONAL | Parent organization domain, if applicable           |
-| categories_offered | OPTIONAL | Message categories this domain typically sends      |
-| rpp_since          | OPTIONAL | Date the domain first began operating an RPP server |
-| contact_policy_url | OPTIONAL | URL for out-of-band administrative contact          |
-| public_key         | OPTIONAL | Domain verification key (see Section 9.5)           |
+| Field              | Required | Description                                           |
+| ------------------ | -------- | ----------------------------------------------------- |
+| domain             | REQUIRED | The RPP domain this identity describes                |
+| display_name       | REQUIRED | Human-readable name for the domain                    |
+| envelope_endpoint  | REQUIRED | Full HTTPS URL of the envelope endpoint (Section 4.2) |
+| mcp_endpoint       | REQUIRED | Full HTTPS URL of the MCP endpoint (Section 4.2)      |
+| domain_type        | OPTIONAL | Self-declared category (see Section 12.1.1)           |
+| parent_domain      | OPTIONAL | Parent organization domain, if applicable             |
+| categories_offered | OPTIONAL | Message categories this domain typically sends        |
+| rpp_since          | OPTIONAL | Date the domain first began operating an RPP server   |
+| contact_policy_url | OPTIONAL | URL for out-of-band administrative contact            |
+| public_key         | OPTIONAL | Domain verification key (see Section 9.5)             |
+
+Servers that do not publish a domain identity document are assumed to expose the
+conventional endpoint paths defined in Section 4.2. Peers MAY fall back to those
+paths when the `/.well-known/rpp-domain-identity` fetch fails with a 404.
 
 The `contact_policy_url` is the sole mechanism for domain-to-domain
 administrative communication in RPP. It SHOULD point to a page describing how to

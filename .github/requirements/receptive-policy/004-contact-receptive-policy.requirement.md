@@ -29,5 +29,5 @@ appears in the policy's `contacts` list.
    `contacts` parameter (array of `{domain, domain_id}` objects).
 8. The `contacts` list is immutable after creation. To add or remove an entry,
    the caller MUST delete the policy and create a new one with the revised list.
-   The replacement policy receives a new `policy_id`; callers are responsible for
-   distributing the new `policy_id` to affected senders.
+   The replacement policy receives a new `policy_id`; callers are responsible
+   for distributing the new `policy_id` to affected senders.

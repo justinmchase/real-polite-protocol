@@ -4,6 +4,7 @@ import { DomainIdentityRepository } from "./domain-identity/mod.ts";
 import { ReceptivePolicyRepository } from "./receptive-policy/mod.ts";
 import { InvitationRepository } from "./invitation/mod.ts";
 import { ReceiptRepository } from "./receipt/mod.ts";
+import { MessageRepository } from "./messages/mod.ts";
 import type { Services } from "../services/mod.ts";
 
 export * from "./account/mod.ts";
@@ -12,6 +13,7 @@ export * from "./domain-identity/mod.ts";
 export * from "./receptive-policy/mod.ts";
 export * from "./invitation/mod.ts";
 export * from "./receipt/mod.ts";
+export * from "./messages/mod.ts";
 
 export interface Repositories {
   accounts: AccountRepository;
@@ -20,6 +22,7 @@ export interface Repositories {
   receptivePolicy: ReceptivePolicyRepository;
   invitations: InvitationRepository;
   receipts: ReceiptRepository;
+  messages: MessageRepository;
 }
 
 export function initRepositories(
@@ -31,6 +34,7 @@ export function initRepositories(
   const receptivePolicy = new ReceptivePolicyRepository(services.kv);
   const invitations = new InvitationRepository(services.kv);
   const receipts = new ReceiptRepository(services.kv);
+  const messages = new MessageRepository(services.kv);
   return {
     accounts,
     contacts,
@@ -38,5 +42,6 @@ export function initRepositories(
     receptivePolicy,
     invitations,
     receipts,
+    messages,
   };
 }

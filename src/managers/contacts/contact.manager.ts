@@ -1,3 +1,4 @@
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import type {
   Contact,
   ContactFieldRecord,
@@ -46,7 +47,7 @@ export class ContactManager {
     senderDomain: string,
     domainId: string,
     claims: InvitationClaims | undefined,
-    recordedAt: string,
+    recordedAt: Date,
   ): Promise<Contact> {
     const existing = await this.contacts.getByDomainKey(
       ownerOid,
@@ -55,7 +56,7 @@ export class ContactManager {
     );
 
     const base: Contact = existing ?? {
-      id: crypto.randomUUID(),
+      id: generateUUIDv7(),
       owner_oid: ownerOid,
       domain: senderDomain,
       domain_id: domainId,
@@ -107,6 +108,14 @@ export class ContactManager {
     return contact;
   }
 
+  async getByDomainKey(
+    ownerOid: string,
+    domain: string,
+    domainId: string,
+  ): Promise<Contact | undefined> {
+    return await this.contacts.getByDomainKey(ownerOid, domain, domainId);
+  }
+
   async list(
     ownerOid: string,
     opts?: ListContactsOptions,
@@ -135,7 +144,7 @@ export class ContactManager {
     const record: ContactFieldRecord = {
       value,
       source: "owner_note",
-      recorded_at: new Date().toISOString(),
+      recorded_at: new Date(),
     };
     const existing = contact.fields[key] ?? [];
     const updatedFields = {

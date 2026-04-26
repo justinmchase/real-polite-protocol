@@ -1,28 +1,50 @@
-export interface DomainIdentity {
-  domain: string;
-  display_name: string;
-  domain_type?: string;
-  parent_domain?: string;
-  categories_offered?: string[];
-  rpp_since?: string;
-  contact_policy_url?: string;
-}
+import { z } from "zod";
 
-export interface DomainVerificationPublicKey {
-  algorithm: "Ed25519";
-  key: string;
-}
+export const DomainIdentitySchema = z.object({
+  domain: z.string(),
+  display_name: z.string(),
+  domain_type: z.string().optional(),
+  parent_domain: z.string().optional(),
+  categories_offered: z.array(z.string()).optional(),
+  rpp_since: z.string().optional(),
+  contact_policy_url: z.string().optional(),
+});
 
-export interface DomainVerificationKey {
-  key_id: string;
-  public_key: DomainVerificationPublicKey;
-}
+export type DomainIdentity = z.infer<typeof DomainIdentitySchema>;
 
-export interface StoredDomainVerificationKey extends DomainVerificationKey {
-  private_key: string;
-  created_at: string;
-}
+export const DomainVerificationPublicKeySchema = z.object({
+  algorithm: z.literal("Ed25519"),
+  key: z.string(),
+});
 
-export interface HistoricalVerificationKey extends DomainVerificationKey {
-  archived_at: string;
-}
+export type DomainVerificationPublicKey = z.infer<
+  typeof DomainVerificationPublicKeySchema
+>;
+
+export const DomainVerificationKeySchema = z.object({
+  key_id: z.string(),
+  public_key: DomainVerificationPublicKeySchema,
+});
+
+export type DomainVerificationKey = z.infer<
+  typeof DomainVerificationKeySchema
+>;
+
+export const StoredDomainVerificationKeySchema = DomainVerificationKeySchema
+  .extend({
+    private_key: z.string(),
+    created_at: z.coerce.date(),
+  });
+
+export type StoredDomainVerificationKey = z.infer<
+  typeof StoredDomainVerificationKeySchema
+>;
+
+export const HistoricalVerificationKeySchema = DomainVerificationKeySchema
+  .extend({
+    archived_at: z.coerce.date(),
+  });
+
+export type HistoricalVerificationKey = z.infer<
+  typeof HistoricalVerificationKeySchema
+>;

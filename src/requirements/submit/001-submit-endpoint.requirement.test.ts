@@ -1,10 +1,10 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
-import { computeHmac } from "./test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
+import { computeHmac } from "../helpers/compute-hmac.ts";
 
 Deno.test({
   name:
-    "req:submit-001 - Servers expose a submit endpoint for one message envelope per request",
+    "req:submit-001 - Servers expose an envelope endpoint that accepts message, invitation, and receipt envelopes",
   fn: async (t) => {
     await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
@@ -44,7 +44,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -116,7 +116,7 @@ Deno.test({
               secondBytes,
             );
 
-            const first = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const first = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -127,7 +127,7 @@ Deno.test({
               body: firstJson,
             });
 
-            const second = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const second = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",

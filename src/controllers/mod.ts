@@ -25,6 +25,7 @@ export async function initControllers(
     context.managers.invitations,
     context.managers.receptivePolicy,
     context.managers.receipts,
+    context.managers.messages,
   ).use(app);
   await new AuthDiscoveryController(context.services.config).use(app);
   await new AuthMiddleware(context.services.auth).use(app);

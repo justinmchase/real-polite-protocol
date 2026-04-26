@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { AccountManager } from "../../managers/mod.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+import { outputDate } from "../date-schema.ts";
 
 const PermissionsOutputSchema = {
   account_id: z.string().describe("The account identifier"),
@@ -27,13 +28,13 @@ const VerifiedMetadataOutputSchema = {
   verified_fields: z.record(z.string(), z.string()).describe(
     "Effective verified metadata fields after applying admin precedence",
   ),
-  user_updated_at: z.string().optional().describe(
+  user_updated_at: outputDate().optional().describe(
     "ISO 8601 timestamp of the last user metadata refresh",
   ),
-  admin_updated_at: z.string().optional().describe(
+  admin_updated_at: outputDate().optional().describe(
     "ISO 8601 timestamp of the last admin metadata update",
   ),
-  updated_at: z.string().describe("ISO 8601 timestamp of last update"),
+  updated_at: outputDate().describe("ISO 8601 timestamp of last update"),
 };
 
 export class AccountTool {

@@ -4,6 +4,7 @@ export * from "./domain-admin/mod.ts";
 export * from "./receptive-policy/mod.ts";
 export * from "./invitations/mod.ts";
 export * from "./receipt/mod.ts";
+export * from "./messages/mod.ts";
 export * from "./tool-result.ts";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -13,6 +14,7 @@ import type {
   ContactManager,
   DomainIdentityManager,
   InvitationManager,
+  MessageManager,
   ReceiptManager,
   ReceptivePolicyManager,
 } from "../managers/mod.ts";
@@ -23,6 +25,7 @@ import { DomainAdminTool } from "./domain-admin/domain-admin.tool.ts";
 import { ReceptivePolicyTool } from "./receptive-policy/receptive-policy.tool.ts";
 import { InvitationTool } from "./invitations/invitations.tool.ts";
 import { ReceiptTool } from "./receipt/receipt.tool.ts";
+import { MessageTool } from "./messages/message.tool.ts";
 
 export interface Tool {
   register(server: McpServer, auth: AuthInfo): void;
@@ -36,6 +39,7 @@ export function initTools(
     receptivePolicy: ReceptivePolicyManager;
     invitations: InvitationManager;
     receipts: ReceiptManager;
+    messages: MessageManager;
   },
   config: ConfigService,
 ): Tool[] {
@@ -57,5 +61,12 @@ export function initTools(
       config,
     ),
     new ReceiptTool(managers.receipts),
+    new MessageTool(
+      managers.receipts,
+      managers.accounts,
+      config,
+      managers.messages,
+      managers.contacts,
+    ),
   ];
 }

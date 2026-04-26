@@ -19,3 +19,13 @@ export class InvitationNotPendingError extends ApplicationError {
     );
   }
 }
+
+export class InvitationNotCancellableError extends ApplicationError {
+  constructor(invitationId: string, currentStatus: string) {
+    super(
+      400,
+      "E_INVITATION_NOT_CANCELLABLE",
+      `Invitation ${invitationId} cannot be cancelled: current status is "${currentStatus}"`,
+    );
+  }
+}

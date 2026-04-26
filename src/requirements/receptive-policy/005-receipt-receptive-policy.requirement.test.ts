@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 // Receipt-mode receptive policies are auto-created when a listener accepts an
 // invitation.  They allow the original sender to re-invite via the issued
@@ -126,7 +126,10 @@ Deno.test({
 
               // Verify the receipt-mode policy is deleted.
               assertExists(receiptPolicyId);
-              const entry = await kv.get(["receptive_policies", receiptPolicyId]);
+              const entry = await kv.get([
+                "receptive_policies",
+                receiptPolicyId,
+              ]);
               assertEquals(entry.value, null);
             },
           );

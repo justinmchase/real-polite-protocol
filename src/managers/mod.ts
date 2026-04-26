@@ -4,6 +4,7 @@ import { DomainIdentityManager } from "./domain-identity/mod.ts";
 import { ReceptivePolicyManager } from "./receptive-policy/mod.ts";
 import { InvitationManager } from "./invitation/mod.ts";
 import { ReceiptManager } from "./receipt/mod.ts";
+import { MessageManager } from "./messages/mod.ts";
 import type { Repositories } from "../repositories/mod.ts";
 import type { Services } from "../services/mod.ts";
 
@@ -13,6 +14,7 @@ export * from "./domain-identity/mod.ts";
 export * from "./receptive-policy/mod.ts";
 export * from "./invitation/mod.ts";
 export * from "./receipt/mod.ts";
+export * from "./messages/mod.ts";
 
 export interface Managers {
   accounts: AccountManager;
@@ -21,6 +23,7 @@ export interface Managers {
   receptivePolicy: ReceptivePolicyManager;
   invitations: InvitationManager;
   receipts: ReceiptManager;
+  messages: MessageManager;
 }
 
 export function initManagers(
@@ -43,6 +46,7 @@ export function initManagers(
     contacts,
     receptivePolicy,
   );
+  const messages = new MessageManager(repositories.messages);
   return {
     accounts,
     contacts,
@@ -50,5 +54,6 @@ export function initManagers(
     receptivePolicy,
     invitations,
     receipts,
+    messages,
   };
 }

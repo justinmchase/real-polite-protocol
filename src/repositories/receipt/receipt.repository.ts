@@ -1,4 +1,8 @@
-import type { Receipt, ReceiptStatus } from "../../models/mod.ts";
+import {
+  type Receipt,
+  ReceiptSchema,
+  type ReceiptStatus,
+} from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import { nextResumeToken } from "../../utils/pagination.ts";
 
@@ -32,8 +36,8 @@ export class ReceiptRepository {
   constructor(private readonly kv: KvService) {}
 
   async get(id: string): Promise<Receipt | undefined> {
-    const entry = await this.kv.store.get<Receipt>([...RECEIPT_PREFIX, id]);
-    return entry.value ?? undefined;
+    const entry = await this.kv.store.get<unknown>([...RECEIPT_PREFIX, id]);
+    return entry.value ? ReceiptSchema.parse(entry.value) : undefined;
   }
 
   /**

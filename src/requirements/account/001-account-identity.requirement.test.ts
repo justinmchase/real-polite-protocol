@@ -1,10 +1,10 @@
 import { assertEquals, assertExists, assertNotEquals } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
-import { callGetPermissions } from "./test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
+import { callGetPermissions } from "../helpers/call-get-permissions.ts";
 
 Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { ReceptivePolicyManager } from "../../managers/mod.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+import { outputDate } from "../date-schema.ts";
 
 const DomainFilterRuleSchema = z.object({
   action: z.enum(["allow", "block"]).describe(
@@ -41,10 +42,10 @@ const ReceptivePolicyOutputSchema = {
   receipt_id: z.string().uuid().optional().describe(
     "Receipt ID this policy is bound to (mode: receipt)",
   ),
-  receptive_until: z.coerce.date().optional().describe(
+  receptive_until: outputDate().optional().describe(
     "ISO 8601 expiry timestamp for time-bounded policies",
   ),
-  created_at: z.coerce.date().describe(
+  created_at: outputDate().describe(
     "ISO 8601 timestamp when this policy was created",
   ),
 };
@@ -61,7 +62,7 @@ const GetReceptivePoliciesInputSchema = {
     "Maximum number of results to return (default 50)",
   ),
   include_receipt_policies: z.boolean().optional().describe(
-    "When true, include auto-created mode:\"receipt\" policies in the results. Defaults to false to reduce clutter.",
+    'When true, include auto-created mode:"receipt" policies in the results. Defaults to false to reduce clutter.',
   ),
 };
 

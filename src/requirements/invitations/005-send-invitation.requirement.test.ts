@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name:
@@ -101,6 +101,36 @@ Deno.test({
                 assertExists(invitation.created_at);
                 // expires_at is optional — absent means the invitation never expires
               }
+            },
+          );
+
+          await t.step(
+            "send_invitation attaches a delivery block with domain and token to the envelope",
+            async () => {
+              const { status, result } = await callTool<
+                { invitation_id?: string }
+              >(token, "send_invitation", {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "billing" },
+              });
+
+              assertEquals(status, 200);
+              assertExists(result);
+              const invitationId = result.invitation_id;
+              assertExists(invitationId);
+
+              // The receiver stores the invitation including the delivery block
+              // from the sender's envelope, enabling the callback flow.
+              const stored = await kv.get(["invitations", invitationId]);
+              assertExists(stored.value);
+              const invitation = stored.value as Record<string, unknown>;
+              const delivery = invitation.delivery as
+                | Record<string, unknown>
+                | undefined;
+              assertExists(delivery);
+              assertExists(delivery.domain); // sender's RPP domain
+              assertExists(delivery.token); // single-use HMAC key for receipt callback
             },
           );
 

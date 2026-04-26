@@ -9,6 +9,7 @@ import {
   UserVerifiedMetadataNotFoundError,
 } from "./domain-admin.error.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+import { outputDate } from "../date-schema.ts";
 
 const PaginationInputSchema = {
   page_size: z.number().int().min(1).max(200).optional().describe(
@@ -27,7 +28,7 @@ const DomainIdentityOutputSchema = {
   categories_offered: z.array(z.string()).optional().describe(
     "Content categories offered",
   ),
-  rpp_since: z.coerce.date().optional().describe(
+  rpp_since: outputDate().optional().describe(
     "ISO 8601 date when RPP support began",
   ),
   contact_policy_url: z.string().url().optional().describe(
@@ -53,7 +54,7 @@ const HistoricalVerificationKeySchema = {
       "Base64-encoded public key in SPKI format",
     ),
   }).describe("Archived public verification key metadata"),
-  archived_at: z.coerce.date().describe(
+  archived_at: outputDate().describe(
     "ISO 8601 timestamp when the key was archived",
   ),
 };
@@ -114,13 +115,13 @@ const UserVerifiedMetadataOutputSchema = {
   verified_fields: z.record(z.string(), z.string()).describe(
     "Effective verified metadata fields keyed by field name",
   ),
-  user_updated_at: z.coerce.date().optional().describe(
+  user_updated_at: outputDate().optional().describe(
     "ISO 8601 timestamp of the last user metadata refresh",
   ),
-  admin_updated_at: z.coerce.date().optional().describe(
+  admin_updated_at: outputDate().optional().describe(
     "ISO 8601 timestamp of the last admin metadata update",
   ),
-  updated_at: z.coerce.date().describe(
+  updated_at: outputDate().describe(
     "ISO 8601 timestamp of the latest verification update",
   ),
 };

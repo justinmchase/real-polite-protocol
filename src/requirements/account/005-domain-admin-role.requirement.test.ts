@@ -1,10 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
-import { callGetPermissions } from "./test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
+import { callGetPermissions } from "../helpers/call-get-permissions.ts";
 
 Deno.test("req:account-005 - Domain role authorization derives from token roles claim", async (t) => {
   await withAuthTestContext(async ({ issueToken }) => {

@@ -66,6 +66,48 @@ This repository targets Deno Deploy first.
 - If validation fails, return stable, structured errors (do not continue with
   partial or unchecked data).
 
+## Date and timestamp handling (required)
+
+The single most important rule: **`Date` objects are the canonical internal
+representation everywhere in the system. Strings only exist on serialized
+boundaries (the wire and KV storage). Coerce on entry, never on exit.**
+
+- **Internal**: every model field, manager argument, repository return value,
+  and controller-internal variable that represents a moment in time MUST be a
+  `Date`. Never type a date as `string` in any in-memory representation.
+- **Inbound boundaries** (HTTP request bodies, headers, query params, MCP tool
+  inputs, KV reads, any external JSON): parse with `z.coerce.date()` (or pipe to
+  `z.coerce.date()`). After parsing, only `Date` objects flow forward.
+- **Outbound boundaries** (HTTP response bodies, MCP tool outputs, KV writes):
+  emit `Date` objects directly and let `JSON.stringify` (or KV's structured
+  clone) handle serialization. Do **not** call `.toISOString()` to "pre-format"
+  values — that strips the `Date` type and forces the next reader to re-parse.
+- **Repository reads**: KV preserves `Date` via structured clone, but legacy
+  string-typed records may exist. Repositories MUST validate every record
+  through a Zod model schema with `z.coerce.date()` on date fields before
+  returning. This guarantees callers always receive `Date` objects.
+- **Model schemas**: define each persisted/transferred model as a Zod schema
+  with `z.coerce.date()` for every timestamp field, and derive the TypeScript
+  type via `z.infer<typeof Schema>`. The schema is the single source of truth.
+- **Forbidden patterns** (these are bugs):
+  - `created_at: string` (or any timestamp typed as `string` in a
+    model/interface)
+  - `new Date().toISOString()` outside of a serialization step that JSON would
+    handle anyway
+  - `z.string().datetime()` for any date field crossing an inbound boundary —
+    use `z.coerce.date()` instead
+  - Manually `JSON.stringify`-ing a `Date` and then parsing it back
+  - Calling `.toISOString()` before passing a value to a manager, repository, or
+    tool result
+- **Comparisons**: with `Date` objects, use direct comparison (`a < b`,
+  `a.getTime() - b.getTime()`). Do not compare ISO strings lexicographically;
+  coerce to `Date` first.
+- **Generating "now"**: use `new Date()` and pass the `Date` through; never
+  `new Date().toISOString()`.
+
+When you find a violation, fix it at the source — do not paper over it
+downstream with another coercion.
+
 ## Specification authority and change control
 
 - Treat specification sources with this strict authority order:
@@ -105,3 +147,8 @@ This repository targets Deno Deploy first.
 - When the user asks to add, import, or update a module, use the
   `deno-add-module` skill.
 - When editing CI, keep the workflow fast and deterministic.
+
+## Temporary Files
+
+- All temporary files created for testing or development purposes should be
+  placed in a `.tmp/` directory at the root of the project.

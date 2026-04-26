@@ -1,10 +1,10 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
-import { submitMessage } from "../submit/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
+import { submitMessage } from "../helpers/submit-message.ts";
 
 Deno.test({
   name: "req:receipts-003 - Listeners can revoke an issued receipt",

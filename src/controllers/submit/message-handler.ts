@@ -1,24 +1,32 @@
+import { encodeHex } from "@std/encoding/hex";
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import { z } from "zod";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type {
   InvitationManager,
+  MessageManager,
   ReceiptManager,
   ReceptivePolicyManager,
 } from "../../managers/mod.ts";
 import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
+import type { MessageCategory } from "../../models/message-category.ts";
 import { CONTENT_RATINGS } from "../../models/content-rating.ts";
+import {
+  InvitationNotFoundError,
+  InvitationNotPendingError,
+} from "../../managers/invitation/invitation.error.ts";
 import {
   MissingReceiptIdError,
   MissingSignatureError,
   MissingTimestampError,
   ReceiptExpiredError,
   ReceiptInvalidSignatureError,
+  ReceiptNotActiveError,
   ReceiptNotFoundError,
   ReceiptRevokedError,
   ReceptivePolicyClosedError,
   ReceptivePolicyExpiredError,
   ReceptivePolicyNotFoundError,
-  ReceiptNotActiveError,
   RequestStaleError,
 } from "./submit.error.ts";
 
@@ -42,14 +50,20 @@ const ReceiptTermsSchema = z.object({
   interval_budget: z.number().int().positive().optional(),
 }).catchall(z.unknown());
 
+const DeliverySchema = z.object({
+  domain: z.string(),
+  token: z.string(),
+});
+
 export const InvitationEnvelopeSchema = z.object({
   message_id: z.string(),
   sender_domain: z.string(),
   category: z.literal("invitation"),
-  sent_at: z.string().datetime(),
+  sent_at: z.coerce.date(),
   invitation: z.object({
-    receptive_policy_id: z.string().uuid().optional(),
-    receipt_id: z.string().uuid().optional(),
+    invitation_id: z.string(),
+    receptive_policy_id: z.uuid().optional(),
+    receipt_id: z.uuid().optional(),
     proposed_terms: ReceiptTermsSchema,
     claims: z.object({
       immutable: ClaimMapSchema,
@@ -57,7 +71,8 @@ export const InvitationEnvelopeSchema = z.object({
       admin: ClaimMapSchema.optional(),
       custom: ClaimMapSchema.optional(),
     }).optional(),
-    expires_at: z.string().datetime().optional(),
+    expires_at: z.coerce.date().optional(),
+    delivery: DeliverySchema,
   }).refine(
     (d) => d.receptive_policy_id !== undefined || d.receipt_id !== undefined,
     { message: "Either receptive_policy_id or receipt_id must be present" },
@@ -67,16 +82,47 @@ export const InvitationEnvelopeSchema = z.object({
 export const MessageEnvelopeSchema = z.object({
   message_id: z.string(),
   sender_domain: z.string(),
+  sender_domain_id: z.string().optional(),
   category: z.literal("message"),
-  sent_at: z.string().datetime(),
+  sent_at: z.coerce.date(),
   message: z.object({
     content_rating: z.string(),
     subject: z.string(),
     body: z.object({
-      content_type: z.literal("text/markdown"),
+      content_type: z.string(),
       content: z.string(),
     }),
   }),
+});
+
+const ReceiptObjectSchema = z.object({
+  id: z.string(),
+  secret: z.string(),
+  category: z.string(),
+  max_content_rating: z.string().optional(),
+  usage_policy: z.string().optional(),
+  issued_at: z.coerce.date(),
+}).catchall(z.unknown());
+
+export const ReceiptCallbackEnvelopeSchema = z.object({
+  category: z.literal("receipt"),
+  invitation_id: z.string(),
+  decision: z.enum(["accepted", "rejected"]),
+  receipt: ReceiptObjectSchema.optional(),
+  reason: z.string().optional(),
+}).superRefine((d, ctx) => {
+  if (d.decision === "accepted" && d.receipt === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "receipt is required when decision is 'accepted'",
+    });
+  }
+  if (d.decision === "rejected" && d.receipt !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "receipt must not be present when decision is 'rejected'",
+    });
+  }
 });
 
 export const SubmitMessageEnvelopeSchema = z.discriminatedUnion("category", [
@@ -87,6 +133,9 @@ export const SubmitMessageEnvelopeSchema = z.discriminatedUnion("category", [
 export type InvitationEnvelope = z.infer<typeof InvitationEnvelopeSchema>;
 export type MessageEnvelope = z.infer<typeof MessageEnvelopeSchema>;
 export type SubmitMessageEnvelope = z.infer<typeof SubmitMessageEnvelopeSchema>;
+export type ReceiptCallbackEnvelope = z.infer<
+  typeof ReceiptCallbackEnvelopeSchema
+>;
 
 export interface HandlerContext {
   bodyBytes: Uint8Array;
@@ -141,7 +190,7 @@ export class InvitationMessageHandler implements MessageHandler {
         throw new ReceptivePolicyNotFoundError(policyId);
       }
       if (
-        policy.receptive_until && new Date(policy.receptive_until) < new Date()
+        policy.receptive_until && policy.receptive_until < new Date()
       ) {
         throw new ReceptivePolicyExpiredError(policyId);
       }
@@ -167,27 +216,31 @@ export class InvitationMessageHandler implements MessageHandler {
     }
 
     // Store the raw message.
-    const messageId = crypto.randomUUID();
+    const messageId = generateUUIDv7();
     await this.kv.store.set(["messages", messageId], body);
 
     await this.invitationManager.createInvitation(
-      body.message_id,
+      invitation.invitation_id,
       receiverOid,
       body.sender_domain,
       invitation.proposed_terms,
       invitation.claims,
       invitation.expires_at,
       messageId,
+      invitation.delivery,
     );
 
-    return { messageId };
+    return { messageId: invitation.invitation_id };
   }
 }
 
 export class ReceiptMessageHandler implements MessageHandler {
   readonly category = "message";
 
-  constructor(private readonly kv: KvService) {}
+  constructor(
+    private readonly kv: KvService,
+    private readonly messageManager: MessageManager,
+  ) {}
 
   async handle(
     body: SubmitMessageEnvelope,
@@ -224,7 +277,12 @@ export class ReceiptMessageHandler implements MessageHandler {
       throw new ReceiptNotFoundError(receiptId);
     }
 
-    const receipt = receiptEntry.value as { secret: string; status?: string };
+    const receipt = receiptEntry.value as {
+      secret: string;
+      status?: string;
+      oid?: string;
+      category?: string;
+    };
     if (receipt.status === "revoked") {
       throw new ReceiptRevokedError(receiptId);
     }
@@ -243,10 +301,14 @@ export class ReceiptMessageHandler implements MessageHandler {
       throw new ReceiptInvalidSignatureError();
     }
 
-    const messageId = crypto.randomUUID();
-    await this.kv.store.set(["messages", messageId], body);
+    const stored = await this.messageManager.store(
+      receipt.oid ?? generateUUIDv7(),
+      receiptId,
+      (receipt.category ?? "correspondence") as MessageCategory,
+      body as MessageEnvelope,
+    );
 
-    return { messageId };
+    return { messageId: stored.id };
   }
 
   private async verifyHmac(
@@ -276,9 +338,74 @@ export class ReceiptMessageHandler implements MessageHandler {
       combined,
     );
 
-    const computedHex = Array.from(new Uint8Array(computedSignature))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    const computedHex = encodeHex(new Uint8Array(computedSignature));
+
+    return computedHex === presentedSignature.toLowerCase();
+  }
+}
+
+export class ReceiptCallbackHandler {
+  constructor(private readonly kv: KvService) {}
+
+  async handle(
+    envelope: ReceiptCallbackEnvelope,
+  ): Promise<{ messageId: string }> {
+    const { invitation_id, decision, receipt } = envelope;
+
+    // Look up invitation to check status
+    const entry = await this.kv.store.get(["invitations", invitation_id]);
+    if (!entry.value) {
+      throw new InvitationNotFoundError(invitation_id);
+    }
+
+    const invitation = entry.value as {
+      status: string;
+      [key: string]: unknown;
+    };
+
+    if (invitation.status !== "pending") {
+      throw new InvitationNotPendingError(invitation_id, invitation.status);
+    }
+
+    // Transition invitation state
+    const updated = {
+      ...invitation,
+      status: decision,
+      ...(decision === "accepted" && receipt && { receipt }),
+    };
+    await this.kv.store.set(["invitations", invitation_id], updated);
+
+    return { messageId: invitation_id };
+  }
+
+  async verifyHmac(
+    secret: string,
+    timestamp: string,
+    bodyBytes: Uint8Array,
+    presentedSignature: string,
+  ): Promise<boolean> {
+    const key = new TextEncoder().encode(secret);
+    const data = new TextEncoder().encode(`${timestamp}.`);
+
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      key,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+
+    const combined = new Uint8Array(data.length + bodyBytes.length);
+    combined.set(data, 0);
+    combined.set(bodyBytes, data.length);
+
+    const computedSignature = await crypto.subtle.sign(
+      "HMAC",
+      cryptoKey,
+      combined,
+    );
+
+    const computedHex = encodeHex(new Uint8Array(computedSignature));
 
     return computedHex === presentedSignature.toLowerCase();
   }

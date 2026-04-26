@@ -4,6 +4,7 @@ import type { AuthInfo } from "../../context.ts";
 import type { ReceiptManager } from "../../managers/mod.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
+import { outputDate } from "../date-schema.ts";
 
 const CategorySchema = z.enum(MESSAGE_CATEGORIES);
 const ContentRatingSchema = z.enum(CONTENT_RATINGS);
@@ -34,8 +35,8 @@ const ReceiptOutputSchema = {
     "Current lifecycle state",
   ),
   invitation_id: z.string().optional().describe("Source invitation ID"),
-  issued_at: z.coerce.date().describe("ISO 8601 timestamp of issuance"),
-  revoked_at: z.coerce.date().optional().describe(
+  issued_at: outputDate().describe("ISO 8601 timestamp of issuance"),
+  revoked_at: outputDate().optional().describe(
     "ISO 8601 timestamp of revocation",
   ),
   revocation_reason: RevocationReasonSchema.optional().describe(

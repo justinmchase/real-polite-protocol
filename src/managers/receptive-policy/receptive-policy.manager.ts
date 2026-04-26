@@ -1,3 +1,4 @@
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import type {
   ContactPolicyEntry,
   DomainFilter,
@@ -34,7 +35,7 @@ export class ReceptivePolicyManager {
     receiptId?: string,
   ): Promise<ReceptivePolicy> {
     const policy: ReceptivePolicy = {
-      policy_id: crypto.randomUUID(),
+      policy_id: generateUUIDv7(),
       oid,
       mode,
       ...(mode === "domain_filter" && domainFilter
@@ -42,7 +43,7 @@ export class ReceptivePolicyManager {
         : {}),
       ...(mode === "contact" && contacts ? { contacts } : {}),
       ...(mode === "receipt" && receiptId ? { receipt_id: receiptId } : {}),
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
     };
     return await this.receptivePolicies.add(policy);
   }
@@ -55,16 +56,16 @@ export class ReceptivePolicyManager {
   ): Promise<ReceptivePolicy> {
     const receptiveUntil = new Date(
       Date.now() + durationSeconds * 1000,
-    ).toISOString();
+    );
     const policy: ReceptivePolicy = {
-      policy_id: crypto.randomUUID(),
+      policy_id: generateUUIDv7(),
       oid,
       mode: scope,
       ...(scope === "domain_filter" && windowDomainFilter
         ? { domain_filter: windowDomainFilter }
         : {}),
       receptive_until: receptiveUntil,
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
     };
     return await this.receptivePolicies.add(policy);
   }
@@ -78,11 +79,11 @@ export class ReceptivePolicyManager {
     receiptId: string,
   ): Promise<ReceptivePolicy> {
     const policy: ReceptivePolicy = {
-      policy_id: crypto.randomUUID(),
+      policy_id: generateUUIDv7(),
       oid,
       mode: "receipt",
       receipt_id: receiptId,
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
     };
     return await this.receptivePolicies.add(policy);
   }

@@ -23,8 +23,8 @@ listeners to add a new receptive policy for incoming invitations (Section 9.1).
   - `closed` — explicitly rejects all senders; delivery via this policy always
     returns `E_RECEPTIVE_POLICY_CLOSED`.
 - The `receipt` mode MUST NOT be accepted as input to this tool. Receipt-mode
-  policies are auto-created by the server when an invitation is accepted (Section
-  9.1.6) and are never user-createable. The output schema MAY include
+  policies are auto-created by the server when an invitation is accepted
+  (Section 9.1.6) and are never user-createable. The output schema MAY include
   `mode: "receipt"` policies when listing existing policies, but the input for
   this tool is limited to `all`, `domain_filter`, `contact`, and `closed`.
 - When `mode` is `domain_filter`, the tool MUST also accept a `domain_filter`

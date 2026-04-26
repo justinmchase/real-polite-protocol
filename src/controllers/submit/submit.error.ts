@@ -161,3 +161,83 @@ export class ReceiptExpiredError extends ApplicationError {
     super(403, "E_RECEIPT_EXPIRED", `Receipt ${receiptId} has expired`);
   }
 }
+
+export class InvalidContentTypeError extends ApplicationError {
+  constructor(contentType: string) {
+    super(
+      400,
+      "E_INVALID_CONTENT_TYPE",
+      `content_type "${contentType}" is not permitted; must be "text/markdown" or "application/json"`,
+    );
+  }
+}
+
+export class InvalidBodyError extends ApplicationError {
+  constructor(reason: string) {
+    super(
+      400,
+      "E_INVALID_BODY",
+      `Invalid body: ${reason}`,
+    );
+  }
+}
+
+export class InvalidAuthHeadersError extends ApplicationError {
+  constructor() {
+    super(
+      400,
+      "E_INVALID_AUTH_HEADERS",
+      "Both x-rpp-receipt-id and x-rpp-invitation-id were provided; only one identity header is permitted per request",
+    );
+  }
+}
+
+export class InvalidReceiptEnvelopeError extends ApplicationError {
+  constructor(reason: string) {
+    super(
+      400,
+      "E_RECEIPT_ENVELOPE_INVALID",
+      `Invalid receipt envelope: ${reason}`,
+    );
+  }
+}
+
+export class DeliveryTokenInvalidError extends ApplicationError {
+  constructor() {
+    super(
+      401,
+      "E_DELIVERY_TOKEN_INVALID",
+      "HMAC signature does not match delivery token",
+    );
+  }
+}
+
+export class DeliveryTokenConsumedError extends ApplicationError {
+  constructor() {
+    super(
+      400,
+      "E_DELIVERY_TOKEN_CONSUMED",
+      "Delivery token has already been consumed",
+    );
+  }
+}
+
+export class DeliveryTokenExpiredError extends ApplicationError {
+  constructor() {
+    super(
+      400,
+      "E_DELIVERY_TOKEN_EXPIRED",
+      "Delivery token has expired",
+    );
+  }
+}
+
+export class MissingInvitationIdError extends ApplicationError {
+  constructor() {
+    super(
+      400,
+      "E_MISSING_INVITATION_ID",
+      "x-rpp-invitation-id header is required for receipt callbacks",
+    );
+  }
+}

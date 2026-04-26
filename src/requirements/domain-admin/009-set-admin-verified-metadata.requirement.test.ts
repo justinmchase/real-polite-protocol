@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name:
@@ -19,6 +19,7 @@ Deno.test({
               await kv.set(["accounts", "by_oid", "oid-target-user"], {
                 id: "account-target-user",
                 oid: "oid-target-user",
+                domain_id: "00000000-0000-7000-8000-000000000001",
                 created_at: "2026-04-20T00:00:00.000Z",
                 updated_at: "2026-04-20T00:00:00.000Z",
               });

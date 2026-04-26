@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { stub } from "@std/testing/mock";
-import { withStartedServer } from "../../test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
 
 Deno.test({
   name: "req:mcp-auth-009 - MCP and OAuth endpoints are served over HTTPS",

@@ -1,4 +1,4 @@
-import type { Invitation } from "../../models/mod.ts";
+import { type Invitation, InvitationSchema } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 
 const INVITATION_PREFIX: Deno.KvKey = ["invitations"];
@@ -8,8 +8,8 @@ export class InvitationRepository {
 
   async get(invitationId: string): Promise<Invitation | undefined> {
     const key: Deno.KvKey = [...INVITATION_PREFIX, invitationId];
-    const entry = await this.kv.store.get<Invitation>(key);
-    return entry.value ?? undefined;
+    const entry = await this.kv.store.get<unknown>(key);
+    return entry.value ? InvitationSchema.parse(entry.value) : undefined;
   }
 
   async set(invitation: Invitation): Promise<Invitation> {
@@ -26,7 +26,7 @@ export class InvitationRepository {
     for await (
       const entry of this.kv.store.list({ prefix: INVITATION_PREFIX })
     ) {
-      const invitation = entry.value as Invitation;
+      const invitation = InvitationSchema.parse(entry.value);
       if (invitation.receiver_oid === oid) {
         results.push(invitation);
       }

@@ -41,10 +41,16 @@ both or neither is invalid.
 - The caller MUST supply exactly one of `receptive_policy_id` or `receipt_id`.
 - The sender does **not** validate the policy or receipt client-side — the
   sender simply attaches whichever identifier was provided to the invitation
-  envelope and delivers it to the receiver's submit endpoint. It is the
+  envelope and delivers it to the receiver's envelope endpoint. It is the
   **receiver's** server (`InvitationMessageHandler`) that looks up the policy or
   receipt, validates its state, resolves the `receiver_oid`, and stores the
   invitation locally.
+- The server MUST attach a `delivery` block to every outbound invitation
+  envelope (Section 9.7.1). The block MUST include the sender's `domain` and a
+  freshly generated single-use `token` (≥128 bits of entropy) that will serve as
+  the HMAC key for the eventual receipt-callback (Section 9.7.2). The server
+  MUST persist the `(invitation_id, delivery_token)` pair locally so the future
+  callback can be authenticated. Tokens MUST NOT be reused across invitations.
 - The tool returns the new `invitation_id` and `created_at` upon successful
   delivery to the receiver's domain.
 - If the receiver's server rejects the submission (non-2xx), the tool MUST

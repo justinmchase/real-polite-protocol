@@ -1,7 +1,10 @@
-import type {
-  DomainIdentity,
-  HistoricalVerificationKey,
-  StoredDomainVerificationKey,
+import {
+  type DomainIdentity,
+  DomainIdentitySchema,
+  type HistoricalVerificationKey,
+  HistoricalVerificationKeySchema,
+  type StoredDomainVerificationKey,
+  StoredDomainVerificationKeySchema,
 } from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import {
@@ -24,8 +27,8 @@ export class DomainIdentityRepository {
   constructor(private readonly kv: KvService) {}
 
   async get(): Promise<DomainIdentity | undefined> {
-    const entry = await this.kv.store.get<DomainIdentity>(DOMAIN_IDENTITY_KEY);
-    return entry.value ?? undefined;
+    const entry = await this.kv.store.get<unknown>(DOMAIN_IDENTITY_KEY);
+    return entry.value ? DomainIdentitySchema.parse(entry.value) : undefined;
   }
 
   async set(identity: DomainIdentity): Promise<void> {
@@ -35,10 +38,12 @@ export class DomainIdentityRepository {
   async getActiveVerificationKey(): Promise<
     StoredDomainVerificationKey | undefined
   > {
-    const entry = await this.kv.store.get<StoredDomainVerificationKey>(
+    const entry = await this.kv.store.get<unknown>(
       ACTIVE_VERIFICATION_KEY,
     );
-    return entry.value ?? undefined;
+    return entry.value
+      ? StoredDomainVerificationKeySchema.parse(entry.value)
+      : undefined;
   }
 
   async setActiveVerificationKey(
@@ -58,12 +63,12 @@ export class DomainIdentityRepository {
   }
 
   async listHistoricalVerificationKeys(): Promise<HistoricalVerificationKey[]> {
-    const entries = this.kv.store.list<HistoricalVerificationKey>({
+    const entries = this.kv.store.list<unknown>({
       prefix: HISTORICAL_VERIFICATION_KEY_PREFIX,
     });
     const keys: HistoricalVerificationKey[] = [];
     for await (const entry of entries) {
-      keys.push(entry.value);
+      keys.push(HistoricalVerificationKeySchema.parse(entry.value));
     }
     return keys;
   }
@@ -74,9 +79,9 @@ export class DomainIdentityRepository {
     const pageSize = normalizePageSize(pagination.page_size);
     const cursor = normalizeResumeToken(pagination.resume_token);
 
-    let entries: Deno.KvListIterator<HistoricalVerificationKey>;
+    let entries: Deno.KvListIterator<unknown>;
     try {
-      entries = this.kv.store.list<HistoricalVerificationKey>({
+      entries = this.kv.store.list<unknown>({
         prefix: HISTORICAL_VERIFICATION_KEY_PREFIX,
       }, {
         limit: pageSize,
@@ -88,7 +93,7 @@ export class DomainIdentityRepository {
 
     const keys: HistoricalVerificationKey[] = [];
     for await (const entry of entries) {
-      keys.push(entry.value);
+      keys.push(HistoricalVerificationKeySchema.parse(entry.value));
     }
 
     return {

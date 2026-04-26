@@ -1,6 +1,7 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
-import { computeHmac } from "./test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
+import { computeHmac } from "../helpers/compute-hmac.ts";
+import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
 
 const testMessage = {
   message_id: crypto.randomUUID(),
@@ -16,15 +17,13 @@ const testMessage = {
 
 Deno.test({
   name:
-    "req:submit-002 - Submit requests are authenticated with receipt-based HMAC signatures",
-  ignore: true,
+    "req:submit-002 - Envelope requests are authenticated with HMAC signatures keyed by envelope kind",
   fn: async (t) => {
-    // TODO: implement after invitations system exists to issue test receipts
     await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
 
       try {
-        // Create a test receipt
+        // Create a test receipt for message-envelope auth tests.
         const receiptId = crypto.randomUUID();
         const receiptSecret = crypto.randomUUID();
         await kv.set(
@@ -37,7 +36,7 @@ Deno.test({
         const timestamp = new Date().toISOString();
 
         await t.step(
-          "Rejects requests with missing x-rpp-receipt-id header",
+          "Rejects message envelope with missing x-rpp-receipt-id header",
           async () => {
             const signature = await computeHmac(
               receiptSecret,
@@ -45,7 +44,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -57,14 +56,14 @@ Deno.test({
 
             assertEquals(response.status, 400);
             const payload = await response.json();
-            assertEquals(payload.error.code, "MISSING_RECEIPT_ID");
+            assertEquals(payload.code, "E_MISSING_RECEIPT_ID");
           },
         );
 
         await t.step(
           "Rejects requests with missing x-rpp-signature header",
           async () => {
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -76,7 +75,7 @@ Deno.test({
 
             assertEquals(response.status, 400);
             const payload = await response.json();
-            assertEquals(payload.error.code, "MISSING_SIGNATURE");
+            assertEquals(payload.code, "E_MISSING_SIGNATURE");
           },
         );
 
@@ -89,7 +88,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -101,7 +100,7 @@ Deno.test({
 
             assertEquals(response.status, 400);
             const payload = await response.json();
-            assertEquals(payload.error.code, "MISSING_TIMESTAMP");
+            assertEquals(payload.code, "E_MISSING_TIMESTAMP");
           },
         );
 
@@ -113,7 +112,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -126,30 +125,61 @@ Deno.test({
 
           assertEquals(response.status, 403);
           const payload = await response.json();
-          assertEquals(payload.error.code, "RECEIPT_NOT_FOUND");
-        });
-
-        await t.step("Rejects requests with invalid signature", async () => {
-          const invalidSignature = "0".repeat(64);
-
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-rpp-receipt-id": receiptId,
-              "x-rpp-signature": invalidSignature,
-              "x-rpp-timestamp": timestamp,
-            },
-            body: bodyJson,
-          });
-
-          assertEquals(response.status, 403);
-          const payload = await response.json();
-          assertEquals(payload.error.code, "RECEIPT_INVALID_SIGNATURE");
+          assertEquals(payload.code, "E_RECEIPT_NOT_FOUND");
         });
 
         await t.step(
-          "Accepts requests with valid receipt and signature",
+          "Rejects requests with invalid HMAC signature",
+          async () => {
+            const invalidSignature = "0".repeat(64);
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": invalidSignature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 403);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_RECEIPT_INVALID_SIGNATURE");
+          },
+        );
+
+        await t.step(
+          "Rejects requests that carry both x-rpp-receipt-id and x-rpp-invitation-id (E_INVALID_AUTH_HEADERS)",
+          async () => {
+            const invitationId = crypto.randomUUID();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-invitation-id": invitationId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_AUTH_HEADERS");
+          },
+        );
+
+        await t.step(
+          "Accepts message envelope with valid receipt and HMAC signature",
           async () => {
             const signature = await computeHmac(
               receiptSecret,
@@ -157,7 +187,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -173,6 +203,48 @@ Deno.test({
             assertEquals(payload.ok, true);
             assertEquals(payload.accepted, true);
             assertExists(payload.message_id);
+          },
+        );
+
+        await t.step(
+          "Accepts receipt envelope signed with x-rpp-invitation-id and delivery token",
+          async () => {
+            // Seed a local invitation as it would be stored when the sender sent it
+            // and is now waiting for the receipt callback.
+            const invitationId = crypto.randomUUID();
+            const deliveryToken = crypto.randomUUID();
+            await kv.set(["invitations", invitationId], {
+              invitation_id: invitationId,
+              receiver_oid: crypto.randomUUID(),
+              sender_domain: "partner.example",
+              status: "pending",
+              delivery: {
+                domain: "partner.example",
+                token: deliveryToken,
+              },
+              proposed_terms: { category: "billing" },
+              created_at: new Date().toISOString(),
+            });
+
+            const response = await submitReceiptCallback({
+              invitationId,
+              deliveryToken,
+              decision: "accepted",
+              receipt: {
+                id: crypto.randomUUID(),
+                secret: crypto.randomUUID(),
+                category: "billing",
+                max_content_rating: "G",
+                usage_policy: "any-time",
+                issued_at: new Date().toISOString(),
+              },
+              baseUrl,
+            });
+
+            assertEquals(response.status, 202);
+            const payload = await response.json();
+            assertEquals(payload.ok, true);
+            assertEquals(payload.accepted, true);
           },
         );
       } finally {

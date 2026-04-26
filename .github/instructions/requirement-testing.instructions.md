@@ -105,6 +105,36 @@ that mirrors the path structure of `.github/requirements/`.
 - Unit tests (`*.test.ts` next to modules) should also exist for focused
   component testing.
 
+## Test Helper Organization
+
+**NEVER place helper functions in test files.** All reusable test helper
+functions MUST be placed in `src/requirements/helpers/`, each in its own file
+with an appropriately named filename. Test files must contain ONLY `Deno.test()`
+calls and imports — no module-level helper functions, closures, or shared
+fixtures defined inline.
+
+```
+src/requirements/helpers/
+  with-started-server.ts        # withStartedServer()
+  with-auth-test-context.ts     # withAuthTestContext(), testAudience, etc.
+  assert-auth-failure.ts        # assertAuthFailure()
+  call-tool.ts                  # callTool()
+  submit-message.ts             # submitMessage()
+  seed-message.ts               # seedMessage()
+  seed-sent-invitation.ts       # seedSentInvitation()
+  compute-hmac.ts               # computeHmac()
+  ...
+```
+
+Rules:
+
+- One helper (function, class, or closely related group) per file.
+- Export helpers with named exports; never use default exports for helpers.
+- Deduplicate — before creating a new helper, check if an equivalent already
+  exists in `src/requirements/helpers/`.
+- Import helpers in test files using relative paths, e.g.:
+  `import { withStartedServer } from "../helpers/with-started-server.ts";`
+
 ## Running tests
 
 All requirement tests run alongside unit tests via:

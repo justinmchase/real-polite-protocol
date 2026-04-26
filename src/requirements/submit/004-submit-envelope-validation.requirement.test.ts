@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
-import { computeHmac } from "./test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
+import { computeHmac } from "../helpers/compute-hmac.ts";
+import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
 
 const validMessageEnvelope = {
   message_id: crypto.randomUUID(),
@@ -16,7 +17,7 @@ const validMessageEnvelope = {
 
 Deno.test({
   name:
-    "req:submit-004 - Submit requests validate the base message envelope before acceptance",
+    "req:submit-004 - Envelope requests are validated against the kind-specific schema before acceptance",
   fn: async (t) => {
     await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
@@ -39,7 +40,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -75,7 +76,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -113,7 +114,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -150,7 +151,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -186,7 +187,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -205,14 +206,13 @@ Deno.test({
         await t.step(
           "Rejects invitation envelope missing the invitation block",
           async () => {
-            const message = {
+            const bodyJson = JSON.stringify({
               message_id: crypto.randomUUID(),
               sender_domain: "sender.example",
               category: "invitation",
               sent_at: "2026-04-20T00:00:00Z",
               // invitation block intentionally omitted
-            };
-            const bodyJson = JSON.stringify(message);
+            });
             const bodyBytes = new TextEncoder().encode(bodyJson);
             const timestamp = new Date().toISOString();
             const signature = await computeHmac(
@@ -221,7 +221,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -239,19 +239,23 @@ Deno.test({
         );
 
         await t.step(
-          "Rejects invitation envelope missing receptive_policy_id",
+          "Rejects invitation envelope missing both receptive_policy_id and receipt_id",
           async () => {
-            const message = {
+            const bodyJson = JSON.stringify({
               message_id: crypto.randomUUID(),
               sender_domain: "sender.example",
               category: "invitation",
               sent_at: "2026-04-20T00:00:00Z",
               invitation: {
-                // receptive_policy_id intentionally omitted
-                proposed_terms: {},
+                // neither receptive_policy_id nor receipt_id provided
+                invitation_id: crypto.randomUUID(),
+                proposed_terms: { category: "billing" },
+                delivery: {
+                  domain: "sender.example",
+                  token: crypto.randomUUID(),
+                },
               },
-            };
-            const bodyJson = JSON.stringify(message);
+            });
             const bodyBytes = new TextEncoder().encode(bodyJson);
             const timestamp = new Date().toISOString();
             const signature = await computeHmac(
@@ -260,7 +264,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -274,6 +278,161 @@ Deno.test({
             assertEquals(response.status, 400);
             const payload = await response.json();
             assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        await t.step(
+          "Rejects invitation envelope missing the delivery block",
+          async () => {
+            const policyId = crypto.randomUUID();
+            await kv.set(["receptive_policies", policyId], {
+              policy_id: policyId,
+              oid: crypto.randomUUID(),
+              mode: "all",
+              status: "active",
+              created_at: new Date(),
+            });
+
+            const bodyJson = JSON.stringify({
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "invitation",
+              sent_at: "2026-04-20T00:00:00Z",
+              invitation: {
+                invitation_id: crypto.randomUUID(),
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "billing" },
+                // delivery block intentionally omitted
+              },
+            });
+            const timestamp = new Date().toISOString();
+
+            // Policy-based invitation: no auth headers needed
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        // ---------------------------------------------------------------
+        // Receipt envelope validation
+        // ---------------------------------------------------------------
+
+        await t.step(
+          "Rejects receipt envelope missing invitation_id",
+          async () => {
+            const invitationId = crypto.randomUUID();
+            const deliveryToken = crypto.randomUUID();
+            await kv.set(["invitations", invitationId], {
+              invitation_id: invitationId,
+              status: "pending",
+              delivery: { domain: "partner.example", token: deliveryToken },
+              created_at: new Date().toISOString(),
+            });
+
+            const bodyJson = JSON.stringify({
+              category: "receipt",
+              // invitation_id intentionally omitted
+              decision: "accepted",
+              receipt: {
+                id: crypto.randomUUID(),
+                secret: crypto.randomUUID(),
+                category: "billing",
+                max_content_rating: "G",
+                usage_policy: "any-time",
+                issued_at: new Date().toISOString(),
+              },
+            });
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              deliveryToken,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-invitation-id": invitationId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_RECEIPT_ENVELOPE_INVALID");
+          },
+        );
+
+        await t.step(
+          "Rejects receipt envelope with decision=accepted but no receipt object",
+          async () => {
+            const invitationId = crypto.randomUUID();
+            const deliveryToken = crypto.randomUUID();
+            await kv.set(["invitations", invitationId], {
+              invitation_id: invitationId,
+              status: "pending",
+              delivery: { domain: "partner.example", token: deliveryToken },
+              created_at: new Date().toISOString(),
+            });
+
+            const response = await submitReceiptCallback({
+              invitationId,
+              deliveryToken,
+              decision: "accepted",
+              // receipt intentionally omitted
+              baseUrl,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_RECEIPT_ENVELOPE_INVALID");
+          },
+        );
+
+        await t.step(
+          "Rejects receipt envelope with decision=rejected but receipt object present",
+          async () => {
+            const invitationId = crypto.randomUUID();
+            const deliveryToken = crypto.randomUUID();
+            await kv.set(["invitations", invitationId], {
+              invitation_id: invitationId,
+              status: "pending",
+              delivery: { domain: "partner.example", token: deliveryToken },
+              created_at: new Date().toISOString(),
+            });
+
+            const response = await submitReceiptCallback({
+              invitationId,
+              deliveryToken,
+              decision: "rejected",
+              receipt: {
+                id: crypto.randomUUID(),
+                secret: crypto.randomUUID(),
+                category: "billing",
+                max_content_rating: "G",
+                usage_policy: "any-time",
+                issued_at: new Date().toISOString(),
+              },
+              baseUrl,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_RECEIPT_ENVELOPE_INVALID");
           },
         );
 
@@ -296,7 +455,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -318,9 +477,10 @@ Deno.test({
           async () => {
             const message = {
               ...validMessageEnvelope,
+              message_id: crypto.randomUUID(),
               message: {
                 ...validMessageEnvelope.message,
-                body: { content_type: "application/json", content: "Hello" },
+                body: { content_type: "text/html", content: "Hello" },
               },
             };
             const bodyJson = JSON.stringify(message);
@@ -332,7 +492,7 @@ Deno.test({
               bodyBytes,
             );
 
-            const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: {
                 "content-type": "application/json",
@@ -345,7 +505,7 @@ Deno.test({
 
             assertEquals(response.status, 400);
             const payload = await response.json();
-            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+            assertEquals(payload.code, "E_INVALID_CONTENT_TYPE");
           },
         );
 
@@ -371,7 +531,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -398,7 +558,7 @@ Deno.test({
             bodyBytes,
           );
 
-          const response = await fetch(`${baseUrl}/rpp/v1/messages`, {
+          const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
             method: "POST",
             headers: {
               "content-type": "application/json",

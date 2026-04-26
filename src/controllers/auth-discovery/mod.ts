@@ -15,7 +15,23 @@ export class AuthDiscoveryController extends Controller {
   async use<TContext extends IContext, TState extends IState<TContext>>(
     app: GroveApp<TContext, TState>,
   ): Promise<void> {
-    app.get("/.well-known/oauth-protected-resource", (ctx) => {
+    const domainIdentityHandler = (
+      ctx: { req: { url: string }; json: typeof Response.json },
+    ) => {
+      const origin = new URL(ctx.req.url).origin;
+      return ctx.json({
+        domain: this.config.domain,
+        display_name: this.config.domain,
+        envelope_endpoint: `${origin}/rpp/v1/envelopes`,
+        mcp_endpoint: `${origin}/mcp`,
+      });
+    };
+    app.get("/.well-known/rpp-domain-identity", domainIdentityHandler);
+    app.get("/.well-known/rpp-domain-identity/", domainIdentityHandler);
+
+    const protectedResourceHandler = (
+      ctx: { req: { url: string }; json: typeof Response.json },
+    ) => {
       const origin = new URL(ctx.req.url).origin;
       const apiScopePrefix = `api://${this.config.azureApiAppClientId}`;
 
@@ -28,9 +44,13 @@ export class AuthDiscoveryController extends Controller {
           `${apiScopePrefix}/rpp.messages.submit`,
         ],
       });
-    });
+    };
+    app.get("/.well-known/oauth-protected-resource", protectedResourceHandler);
+    app.get("/.well-known/oauth-protected-resource/", protectedResourceHandler);
 
-    app.get("/.well-known/oauth-authorization-server", (ctx) => {
+    const authServerHandler = (
+      ctx: { req: { url: string }; json: typeof Response.json },
+    ) => {
       const origin = new URL(ctx.req.url).origin;
       const tenantId = this.config.azureTenantId;
       const audience = this.config.audience ??
@@ -65,7 +85,9 @@ export class AuthDiscoveryController extends Controller {
           `${audience}/.default`,
         ],
       });
-    });
+    };
+    app.get("/.well-known/oauth-authorization-server", authServerHandler);
+    app.get("/.well-known/oauth-authorization-server/", authServerHandler);
 
     app.get("/authorize", (ctx) => {
       const tenantId = this.config.azureTenantId;

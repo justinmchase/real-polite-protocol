@@ -1,9 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
-} from "../mcp/auth/test-helpers.ts";
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name: "req:contacts-002 - Contact field accumulation from invitation claims",
@@ -60,7 +60,10 @@ Deno.test({
               contactId = contact.id;
               assertExists(contact.current_fields.name);
               assertEquals(contact.current_fields.name.value, "Alice");
-              assertEquals(contact.current_fields.name.source, "sender_verified");
+              assertEquals(
+                contact.current_fields.name.source,
+                "sender_verified",
+              );
               assertExists(contact.current_fields.note);
               assertEquals(
                 contact.current_fields.note.value,

@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
-import { withStartedServer } from "../../test-helpers.ts";
+import { withStartedServer } from "../../helpers/with-started-server.ts";
 import {
-  assertAuthFailure,
   requiredScopes,
   testBareAudience,
   withAuthTestContext,
-} from "./test-helpers.ts";
+} from "../../helpers/with-auth-test-context.ts";
+import { assertAuthFailure } from "../../helpers/assert-auth-failure.ts";
 
 Deno.test({
   name: "req:mcp-auth-012 - Azure AD/Entra ID v2.0 token compatibility",

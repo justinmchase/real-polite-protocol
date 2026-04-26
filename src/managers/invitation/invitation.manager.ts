@@ -9,6 +9,7 @@ import type { ContactManager } from "../contacts/contact.manager.ts";
 import type { ReceiptManager } from "../receipt/receipt.manager.ts";
 import type { ReceptivePolicyManager } from "../receptive-policy/receptive-policy.manager.ts";
 import {
+  InvitationNotCancellableError,
   InvitationNotFoundError,
   InvitationNotPendingError,
 } from "./invitation.error.ts";
@@ -27,8 +28,9 @@ export class InvitationManager {
     senderDomain: string,
     proposedTerms: ReceiptTerms,
     claims: InvitationClaims | undefined,
-    expiresAt: string | undefined,
+    expiresAt: Date | undefined,
     messageId?: string,
+    delivery?: { domain: string; token: string },
   ): Promise<Invitation> {
     const invitation: Invitation = {
       invitation_id: invitationId,
@@ -38,8 +40,9 @@ export class InvitationManager {
       proposed_terms: proposedTerms,
       ...(claims !== undefined && { claims }),
       ...(expiresAt !== undefined && { expires_at: expiresAt }),
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
       message_id: messageId,
+      ...(delivery !== undefined && { delivery }),
     };
     return await this.invitations.set(invitation);
   }
@@ -70,7 +73,7 @@ export class InvitationManager {
     }
 
     const acceptedTerms = negotiatedTerms ?? invitation.proposed_terms;
-    const acceptedAt = new Date().toISOString();
+    const acceptedAt = new Date();
 
     const updated: Invitation = {
       ...invitation,
@@ -135,7 +138,44 @@ export class InvitationManager {
     return await this.invitations.set(updated);
   }
 
-  async cancel(invitationId: string): Promise<Invitation> {
+  async cancel(
+    invitationId: string,
+    senderDomainId: string,
+  ): Promise<Invitation> {
+    const invitation = await this.invitations.get(invitationId);
+
+    // Return not-found for missing OR caller-is-not-sender (avoids leaking existence).
+    const invitationDomainId = invitation?.claims?.immutable?.["domain_id"];
+    if (!invitation || invitationDomainId !== senderDomainId) {
+      throw new InvitationNotFoundError(invitationId);
+    }
+
+    const cancellableStates = ["pending", "accepted"];
+    if (!cancellableStates.includes(invitation.status)) {
+      throw new InvitationNotCancellableError(invitationId, invitation.status);
+    }
+
+    // Revoke all receipts derived from this invitation.
+    if (
+      invitation.status === "accepted" &&
+      typeof invitationDomainId === "string"
+    ) {
+      await this.receiptManager.revokeSuperseded(
+        invitation.receiver_oid,
+        invitation.sender_domain,
+        invitationDomainId,
+        new Date(),
+      );
+    }
+
+    const updated: Invitation = {
+      ...invitation,
+      status: "cancelled",
+    };
+    return await this.invitations.set(updated);
+  }
+
+  async markUndelivered(invitationId: string): Promise<Invitation> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
       throw new InvitationNotFoundError(invitationId);
@@ -143,7 +183,7 @@ export class InvitationManager {
 
     const updated: Invitation = {
       ...invitation,
-      status: "cancelled",
+      status: "undelivered",
     };
     return await this.invitations.set(updated);
   }

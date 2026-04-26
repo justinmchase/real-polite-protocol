@@ -1,4 +1,7 @@
-import type { ReceptivePolicy } from "../../models/mod.ts";
+import {
+  type ReceptivePolicy,
+  ReceptivePolicySchema,
+} from "../../models/mod.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 
 // Primary index: look up any policy by its own ID (used by send_invitation).
@@ -58,16 +61,16 @@ export class ReceptivePolicyRepository {
 
   async getById(policyId: string): Promise<ReceptivePolicy | undefined> {
     const key: Deno.KvKey = [...POLICY_BY_ID_PREFIX, policyId];
-    const entry = await this.kv.store.get<ReceptivePolicy>(key);
-    return entry.value ?? undefined;
+    const entry = await this.kv.store.get<unknown>(key);
+    return entry.value ? ReceptivePolicySchema.parse(entry.value) : undefined;
   }
 
   async listByOid(oid: string): Promise<ReceptivePolicy[]> {
     const prefix: Deno.KvKey = [...POLICY_BY_OID_PREFIX, oid];
-    const iter = this.kv.store.list<ReceptivePolicy>({ prefix });
+    const iter = this.kv.store.list<unknown>({ prefix });
     const policies: ReceptivePolicy[] = [];
     for await (const entry of iter) {
-      if (entry.value) policies.push(entry.value);
+      if (entry.value) policies.push(ReceptivePolicySchema.parse(entry.value));
     }
     return policies;
   }

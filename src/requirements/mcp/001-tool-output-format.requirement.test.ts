@@ -1,6 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { withStartedServer } from "../test-helpers.ts";
-import { requiredScopes, withAuthTestContext } from "./auth/test-helpers.ts";
+import { withStartedServer } from "../helpers/with-started-server.ts";
+import {
+  requiredScopes,
+  withAuthTestContext,
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name: "req:mcp-001 - Tools use structured output with outputSchema",

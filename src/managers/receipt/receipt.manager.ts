@@ -1,3 +1,5 @@
+import { encodeHex } from "@std/encoding/hex";
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import type {
   Receipt,
   ReceiptTerms,
@@ -34,12 +36,10 @@ export class ReceiptManager {
   ): Promise<Receipt> {
     const secretBytes = new Uint8Array(32);
     crypto.getRandomValues(secretBytes);
-    const secret = Array.from(secretBytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    const secret = encodeHex(secretBytes);
 
     const receipt: Receipt = {
-      id: crypto.randomUUID(),
+      id: generateUUIDv7(),
       secret,
       oid,
       sender_domain: senderDomain,
@@ -49,7 +49,7 @@ export class ReceiptManager {
       usage_policy: terms.usage_policy ?? "any-time",
       status: "active",
       ...(invitationId !== undefined && { invitation_id: invitationId }),
-      issued_at: new Date().toISOString(),
+      issued_at: new Date(),
     };
 
     return await this.receipts.set(receipt);
@@ -63,7 +63,7 @@ export class ReceiptManager {
     oid: string,
     senderDomain: string,
     senderDomainId: string,
-    revokedAt: string,
+    revokedAt: Date,
   ): Promise<void> {
     const active = await this.receipts.listActiveBySender(
       oid,
@@ -118,7 +118,7 @@ export class ReceiptManager {
     const updated: Receipt = {
       ...receipt,
       status: "revoked",
-      revoked_at: new Date().toISOString(),
+      revoked_at: new Date(),
       revocation_reason: reason,
       ...(detail !== undefined && { revocation_detail: detail }),
     };

@@ -1,3 +1,4 @@
+import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import type {
   DomainIdentity,
   DomainVerificationKey,
@@ -86,7 +87,7 @@ export class DomainIdentityManager {
       const historical: HistoricalVerificationKey = {
         key_id: current.key_id,
         public_key: current.public_key,
-        archived_at: new Date().toISOString(),
+        archived_at: new Date(),
       };
       await this.domainIdentity.appendHistoricalVerificationKey(historical);
     }
@@ -140,13 +141,14 @@ export class DomainIdentityManager {
     );
 
     return {
-      key_id: `key_${crypto.randomUUID()}`,
+      key_id: `key_${generateUUIDv7()}`,
+
       public_key: {
         algorithm: "Ed25519",
         key: publicKeySpki.toBase64(),
       },
       private_key: privateKeyPkcs8.toBase64(),
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
     };
   }
 }
