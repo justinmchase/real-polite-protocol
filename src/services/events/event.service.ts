@@ -84,7 +84,9 @@ export class EventService {
           lastMsgVs = msg.versionstamp;
           lastInvVs = inv.versionstamp;
           firstTick = false;
-          console.log(`[EventService] watch baseline oid=${oid} msgVs=${lastMsgVs} invVs=${lastInvVs}`);
+          console.log(
+            `[EventService] watch baseline oid=${oid} msgVs=${lastMsgVs} invVs=${lastInvVs}`,
+          );
           continue;
         }
         if (msg.versionstamp !== lastMsgVs) {

@@ -48,14 +48,17 @@ const initResp = await fetch(`${server}/mcp`, {
 
 if (!initResp.ok) {
   console.error(
-    `[rpp-notify] Initialize failed: ${initResp.status} ${await initResp.text()}`,
+    `[rpp-notify] Initialize failed: ${initResp.status} ${await initResp
+      .text()}`,
   );
   Deno.exit(1);
 }
 
 const sessionId = initResp.headers.get("mcp-session-id");
 if (!sessionId) {
-  console.error("[rpp-notify] No Mcp-Session-Id header in initialize response.");
+  console.error(
+    "[rpp-notify] No Mcp-Session-Id header in initialize response.",
+  );
   Deno.exit(1);
 }
 
@@ -77,7 +80,8 @@ const sseResp = await fetch(`${server}/mcp`, {
 
 if (!sseResp.ok || !sseResp.body) {
   console.error(
-    `[rpp-notify] SSE channel failed: ${sseResp.status} ${await sseResp.text()}`,
+    `[rpp-notify] SSE channel failed: ${sseResp.status} ${await sseResp
+      .text()}`,
   );
   Deno.exit(1);
 }
@@ -179,21 +183,28 @@ async function buildAndNotify(
   let body: string;
 
   if (kind === "messages") {
-    const result = await callTool("list_messages", { read: false, page_size: 1 }, id) as
-      | { messages: Array<{
+    const result = await callTool("list_messages", {
+      read: false,
+      page_size: 1,
+    }, id) as
+      | {
+        messages: Array<{
           sender_domain: string;
           message: { body: { content: string } };
           sender_claims?: Record<string, { value: string }>;
-        }> }
+        }>;
+      }
       | null;
     const msg = result?.messages?.[0];
     if (msg) {
       const claims = msg.sender_claims ?? {};
-      const senderName =
-        claims.name?.value ??
+      const senderName = claims.name?.value ??
         claims.pseudonym?.value ??
         msg.sender_domain;
-      const snippet = msg.message.body.content.slice(0, 120).replace(/\n/g, " ");
+      const snippet = msg.message.body.content.slice(0, 120).replace(
+        /\n/g,
+        " ",
+      );
       title = `RPP: Message from ${senderName}`;
       body = snippet || "(no content)";
     } else {
@@ -201,16 +212,20 @@ async function buildAndNotify(
       body = "You have a new message in your RPP inbox.";
     }
   } else {
-    const result = await callTool("list_invitations", { status: "pending", page_size: 1 }, id) as
-      | { invitations: Array<{
+    const result = await callTool("list_invitations", {
+      status: "pending",
+      page_size: 1,
+    }, id) as
+      | {
+        invitations: Array<{
           sender_domain: string;
           claims?: Record<string, { value: string }>;
-        }> }
+        }>;
+      }
       | null;
     const inv = result?.invitations?.[0];
     if (inv) {
-      const senderName =
-        inv.claims?.pseudonym?.value ??
+      const senderName = inv.claims?.pseudonym?.value ??
         inv.claims?.name?.value ??
         inv.sender_domain;
       title = `RPP: Invitation from ${senderName}`;

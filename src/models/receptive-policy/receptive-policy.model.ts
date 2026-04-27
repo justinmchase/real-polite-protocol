@@ -47,6 +47,12 @@ export const ReceptivePolicySchema = z.object({
   receipt_id: z.string().optional(),
   /** If set, this policy expires at this timestamp (timed window). */
   receptive_until: z.coerce.date().optional(),
+  /**
+   * Short human-readable code (8 lowercase alphanumeric chars) generated for
+   * time-bounded windows. Allows senders to address the policy without knowing
+   * the full policy_id UUID.
+   */
+  shortcode: z.string().optional(),
   created_at: z.coerce.date(),
 });
 

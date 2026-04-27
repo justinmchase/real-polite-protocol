@@ -6,8 +6,8 @@ argument-hint: "Optional scope override (default: api://03c7765e-c8c3-462f-a155-
 
 # get-rpp-token
 
-Provides a reusable `getToken()` helper that resolves a bearer token for the
-RPP API. It prefers an explicit `RPP_TOKEN` env var (useful for non-Azure
+Provides a reusable `getToken()` helper that resolves a bearer token for the RPP
+API. It prefers an explicit `RPP_TOKEN` env var (useful for non-Azure
 deployments or CI), and falls back to the `az` CLI for interactive developer
 use.
 
@@ -33,18 +33,18 @@ const token: string = await getToken();
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `RPP_TOKEN` | Explicit bearer token. If set, skips `az` entirely. |
+| Variable       | Description                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| `RPP_TOKEN`    | Explicit bearer token. If set, skips `az` entirely.                                             |
 | `RPP_AZ_SCOPE` | Override the Azure AD scope. Defaults to `api://03c7765e-c8c3-462f-a155-d863f44ea1ed/.default`. |
 
 ## Error Cases
 
-| Condition | Message |
-|---|---|
-| `az` not on PATH | `az CLI not found. Install the Azure CLI or set RPP_TOKEN.` |
-| Not logged in / token expired | `az account get-access-token failed … Try: az login` |
-| Empty token returned | `az returned an empty token.` |
+| Condition                     | Message                                                     |
+| ----------------------------- | ----------------------------------------------------------- |
+| `az` not on PATH              | `az CLI not found. Install the Azure CLI or set RPP_TOKEN.` |
+| Not logged in / token expired | `az account get-access-token failed … Try: az login`        |
+| Empty token returned          | `az returned an empty token.`                               |
 
 ## Helper Source
 

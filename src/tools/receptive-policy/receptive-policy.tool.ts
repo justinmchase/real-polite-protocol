@@ -45,6 +45,9 @@ const ReceptivePolicyOutputSchema = {
   receptive_until: outputDate().optional().describe(
     "ISO 8601 expiry timestamp for time-bounded policies",
   ),
+  shortcode: z.string().optional().describe(
+    "Short 8-character alphanumeric code for time-bounded windows. Share this along with your domain so a sender can address you without knowing your policy_id UUID.",
+  ),
   created_at: outputDate().describe(
     "ISO 8601 timestamp when this policy was created",
   ),
@@ -167,7 +170,13 @@ export class ReceptivePolicyTool {
       "open_receptive_window",
       {
         description:
-          "Add a time-bounded receptive policy. Windows stack with other policies — opening a new window does not remove existing ones. Recommended for proximity pairing.",
+          "Open a time-bounded receptive window that stacks with existing policies. " +
+          "Returns a shortcode (8 lowercase alphanumeric characters) tied to this window. " +
+          "IMPORTANT: After calling this tool you MUST immediately display the shortcode and " +
+          "the server domain to the user in a clearly copyable format — for example:\n\n" +
+          "```\nShortcode: abc12xyz\nDomain:    real-polite-protocol.justinmchase.deno.net\n```\n\n" +
+          "The user needs to share BOTH values with the person who wants to send them an invitation. " +
+          "The shortcode expires when the window closes, so share it right away.",
         inputSchema: OpenReceptiveWindowInputSchema,
         outputSchema: ReceptivePolicyOutputSchema,
       },

@@ -237,7 +237,9 @@ export class McpService {
         const uri = kind === "messages"
           ? INBOX_MESSAGES_URI
           : PENDING_INVITATIONS_URI;
-        console.log(`[MCP] event kind=${kind} → sendResourceUpdated uri=${uri}`);
+        console.log(
+          `[MCP] event kind=${kind} → sendResourceUpdated uri=${uri}`,
+        );
         try {
           await server.server.sendResourceUpdated({ uri });
           console.log(`[MCP] sendResourceUpdated ok uri=${uri}`);
@@ -298,5 +300,3 @@ async function peekIsInitialize(
   });
   return { request: replayed, isInit };
 }
-
-

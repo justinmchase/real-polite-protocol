@@ -138,7 +138,10 @@ const RejectInvitationInputSchema = {
 const SendInvitationInputSchema = {
   receiver_domain: z.string().describe("RPP domain of the receiver's server"),
   receptive_policy_id: z.uuid().optional().describe(
-    "Policy ID obtained from the receiver (e.g. via QR code). Identifies both the receiver and confirms they are receptive. Provide either receptive_policy_id or receipt_id.",
+    "Policy ID UUID obtained from the receiver. Identifies the receiver and confirms they are receptive. Provide one of: receptive_policy_id, shortcode, or receipt_id.",
+  ),
+  shortcode: z.string().optional().describe(
+    "8-character shortcode shared by the receiver (e.g. 'abc12xyz'). Use this together with receiver_domain as a human-friendly alternative to receptive_policy_id. The receiver will resolve it to the underlying policy. Provide one of: receptive_policy_id, shortcode, or receipt_id.",
   ),
   receipt_id: z.uuid().optional().describe(
     "Receipt ID from a prior accepted invitation. Allows re-inviting an existing contact without a new receptive window.",
@@ -399,6 +402,7 @@ export class InvitationTool {
       {
         description:
           "Send an invitation to a receiver offering proposed receipt terms. Creates a public invitation or direct invitation. " +
+          "To address the receiver use one of: receptive_policy_id (UUID), shortcode + receiver_domain (when the receiver shared a shortcode from open_receptive_window), or receipt_id. " +
           "IMPORTANT: Before calling this tool, ask the user which verified claims they would like to include with the invitation. " +
           "Use get_user_verified_metadata to retrieve the available user-verified claims and get_domain_identity to retrieve admin-verified claims, " +
           "then present the available claim keys to the user and ask which ones to include via include_user_claims and include_admin_claims. " +
@@ -432,6 +436,8 @@ export class InvitationTool {
             invitation_id: invitationId,
             ...(params.receptive_policy_id !== undefined &&
               { receptive_policy_id: params.receptive_policy_id }),
+            ...(params.shortcode !== undefined &&
+              { shortcode: params.shortcode }),
             ...(params.receipt_id !== undefined &&
               { receipt_id: params.receipt_id }),
             proposed_terms: params.proposed_terms,

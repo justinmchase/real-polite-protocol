@@ -63,6 +63,7 @@ export const InvitationEnvelopeSchema = z.object({
   invitation: z.object({
     invitation_id: z.string(),
     receptive_policy_id: z.uuid().optional(),
+    shortcode: z.string().optional(),
     receipt_id: z.uuid().optional(),
     proposed_terms: ReceiptTermsSchema,
     claims: z.object({
@@ -74,8 +75,14 @@ export const InvitationEnvelopeSchema = z.object({
     expires_at: z.coerce.date().optional(),
     delivery: DeliverySchema,
   }).refine(
-    (d) => d.receptive_policy_id !== undefined || d.receipt_id !== undefined,
-    { message: "Either receptive_policy_id or receipt_id must be present" },
+    (d) =>
+      d.receptive_policy_id !== undefined ||
+      d.shortcode !== undefined ||
+      d.receipt_id !== undefined,
+    {
+      message:
+        "Either receptive_policy_id, shortcode, or receipt_id must be present",
+    },
   ),
 });
 
@@ -183,20 +190,29 @@ export class InvitationMessageHandler implements MessageHandler {
       }
       receiverOid = receipt.oid;
     } else {
-      // Policy-path: standard receptive_policy_id flow.
-      const policyId = invitation.receptive_policy_id!;
-      const policy = await this.receptivePolicyManager.getById(policyId);
+      // Policy-path: standard receptive_policy_id flow, or shortcode resolution.
+      let policyId = invitation.receptive_policy_id;
+      if (!policyId && invitation.shortcode) {
+        const byShortcode = await this.receptivePolicyManager.getByShortcode(
+          invitation.shortcode,
+        );
+        if (!byShortcode) {
+          throw new ReceptivePolicyNotFoundError(invitation.shortcode);
+        }
+        policyId = byShortcode.policy_id;
+      }
+      const policy = await this.receptivePolicyManager.getById(policyId!);
       if (!policy) {
-        throw new ReceptivePolicyNotFoundError(policyId);
+        throw new ReceptivePolicyNotFoundError(policyId!);
       }
       if (
         policy.receptive_until && policy.receptive_until < new Date()
       ) {
-        throw new ReceptivePolicyExpiredError(policyId);
+        throw new ReceptivePolicyExpiredError(policy.policy_id);
       }
       // Closed-mode: explicitly reject all senders.
       if (policy.mode === "closed") {
-        throw new ReceptivePolicyClosedError(policyId);
+        throw new ReceptivePolicyClosedError(policy.policy_id);
       }
       // Contact-mode check: verify (sender_domain, domain_id) pair is in contacts.
       if (policy.mode === "contact") {
@@ -209,7 +225,7 @@ export class InvitationMessageHandler implements MessageHandler {
               c.domain.toLowerCase() === senderDomain.toLowerCase(),
           );
         if (!allowed) {
-          throw new ReceptivePolicyClosedError(policyId);
+          throw new ReceptivePolicyClosedError(policy.policy_id);
         }
       }
       receiverOid = policy.oid;

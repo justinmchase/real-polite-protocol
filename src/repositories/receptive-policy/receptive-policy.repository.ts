@@ -12,6 +12,10 @@ const POLICY_BY_OID_PREFIX: Deno.KvKey = ["receptive_policies_by_oid"];
 const POLICY_BY_RECEIPT_ID_PREFIX: Deno.KvKey = [
   "receptive_policies_by_receipt_id",
 ];
+// Quaternary index: resolve a shortcode to a policy_id.
+const POLICY_BY_SHORTCODE_PREFIX: Deno.KvKey = [
+  "receptive_policies_by_shortcode",
+];
 
 export class ReceptivePolicyRepository {
   constructor(private readonly kv: KvService) {}
@@ -40,6 +44,14 @@ export class ReceptivePolicyRepository {
       );
     }
 
+    // Index shortcode → policy_id for time-bounded windows.
+    if (policy.shortcode) {
+      op = op.set(
+        [...POLICY_BY_SHORTCODE_PREFIX, policy.shortcode],
+        policy.policy_id,
+      );
+    }
+
     await op.commit();
     return policy;
   }
@@ -63,6 +75,23 @@ export class ReceptivePolicyRepository {
     const key: Deno.KvKey = [...POLICY_BY_ID_PREFIX, policyId];
     const entry = await this.kv.store.get<unknown>(key);
     return entry.value ? ReceptivePolicySchema.parse(entry.value) : undefined;
+  }
+
+  /** Resolve a shortcode to its policy. Returns undefined if not found. */
+  async getByShortcode(
+    shortcode: string,
+  ): Promise<ReceptivePolicy | undefined> {
+    const key: Deno.KvKey = [...POLICY_BY_SHORTCODE_PREFIX, shortcode];
+    const entry = await this.kv.store.get<string>(key);
+    if (!entry.value) return undefined;
+    return await this.getById(entry.value);
+  }
+
+  /** Check whether a shortcode is already taken. */
+  async shortcodeExists(shortcode: string): Promise<boolean> {
+    const key: Deno.KvKey = [...POLICY_BY_SHORTCODE_PREFIX, shortcode];
+    const entry = await this.kv.store.get(key);
+    return entry.value !== null;
   }
 
   async listByOid(oid: string): Promise<ReceptivePolicy[]> {
@@ -113,6 +142,10 @@ export class ReceptivePolicyRepository {
         policy.receipt_id,
         policyId,
       ]);
+    }
+
+    if (policy.shortcode) {
+      op = op.delete([...POLICY_BY_SHORTCODE_PREFIX, policy.shortcode]);
     }
 
     await op.commit();

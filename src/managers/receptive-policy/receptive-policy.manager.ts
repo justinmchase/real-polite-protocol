@@ -57,6 +57,7 @@ export class ReceptivePolicyManager {
     const receptiveUntil = new Date(
       Date.now() + durationSeconds * 1000,
     );
+    const shortcode = await this.generateShortcode();
     const policy: ReceptivePolicy = {
       policy_id: generateUUIDv7(),
       oid,
@@ -65,9 +66,35 @@ export class ReceptivePolicyManager {
         ? { domain_filter: windowDomainFilter }
         : {}),
       receptive_until: receptiveUntil,
+      shortcode,
       created_at: new Date(),
     };
     return await this.receptivePolicies.add(policy);
+  }
+
+  /**
+   * Generate a unique 8-character lowercase alphanumeric shortcode.
+   * Retries on collision (extremely unlikely for short-lived windows).
+   */
+  private async generateShortcode(maxAttempts = 10): Promise<string> {
+    const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+    for (let i = 0; i < maxAttempts; i++) {
+      const bytes = new Uint8Array(8);
+      crypto.getRandomValues(bytes);
+      const shortcode = Array.from(bytes)
+        .map((b) => alphabet[b % alphabet.length])
+        .join("");
+      const exists = await this.receptivePolicies.shortcodeExists(shortcode);
+      if (!exists) return shortcode;
+    }
+    throw new Error("Failed to generate a unique shortcode after max attempts");
+  }
+
+  /** Resolve a shortcode to its policy. Returns undefined if not found. */
+  async getByShortcode(
+    shortcode: string,
+  ): Promise<ReceptivePolicy | undefined> {
+    return await this.receptivePolicies.getByShortcode(shortcode);
   }
 
   /**
