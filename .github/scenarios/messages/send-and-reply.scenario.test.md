@@ -16,22 +16,23 @@ tags: [messages, smoke]
 3. Call `send_invitation` with:
    - `receiver_domain`: the local domain
    - `receptive_policy_id`: from step 2
-   - `proposed_terms`: `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
-   - `include_user_claims`: `["name", "email"]`
-   Capture `invitation_id`.
+   - `proposed_terms`:
+     `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
+   - `include_user_claims`: `["name", "email"]` Capture `invitation_id`.
 4. Call `accept_invitation` with the `invitation_id`. Capture the returned
-   `receipt.id` as `receipt_id_A` (this is the receipt the receiver will use
-   to send messages BACK to the original sender — but in a self-send both
-   sides are the same account, so we use it for the initial message too).
+   `receipt.id` as `receipt_id_A` (this is the receipt the receiver will use to
+   send messages BACK to the original sender — but in a self-send both sides are
+   the same account, so we use it for the initial message too).
 5. Call `send_message` with:
    - `receipt_id`: `receipt_id_A`
    - `category`: `correspondence`
    - `content_rating`: `G`
    - `subject`: `Original message`
-   - `body`: `{ "content_type": "text/markdown", "content": "This is the original message." }`
-   Capture the returned `message_id` as `original_message_id`.
-6. Call `list_messages` and locate the original message by `message_id`.
-   Capture its `id` (the inbox record id) and confirm
+   - `body`:
+     `{ "content_type": "text/markdown", "content": "This is the original message." }`
+     Capture the returned `message_id` as `original_message_id`.
+6. Call `list_messages` and locate the original message by `message_id`. Capture
+   its `id` (the inbox record id) and confirm
    `message.subject == "Original message"`.
 7. Call `mark_read` with `message_ids: [original_message_id]`.
 8. Call `send_message` again with:
@@ -39,9 +40,10 @@ tags: [messages, smoke]
    - `category`: `correspondence`
    - `content_rating`: `G`
    - `subject`: `Re: Original message`
-   - `body`: `{ "content_type": "text/markdown", "content": "This is the reply." }`
-   - `metadata`: `{ "in_reply_to": original_message_id }`
-   Capture `reply_message_id`.
+   - `body`:
+     `{ "content_type": "text/markdown", "content": "This is the reply." }`
+   - `metadata`: `{ "in_reply_to": original_message_id }` Capture
+     `reply_message_id`.
 9. Call `list_messages` and confirm both messages are present, ordered
    `received_at` descending (reply first).
 
@@ -57,7 +59,7 @@ tags: [messages, smoke]
 
 ## Notes
 
-- Validates: messages-001 (send), messages-002 (list), messages-004 (mark
-  read), messages-006 (sender_claims).
+- Validates: messages-001 (send), messages-002 (list), messages-004 (mark read),
+  messages-006 (sender_claims).
 - The `metadata.in_reply_to` field is sender-supplied free-form metadata; the
   server passes it through but does not interpret it.

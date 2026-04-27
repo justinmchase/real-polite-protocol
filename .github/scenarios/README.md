@@ -3,7 +3,8 @@
 End-to-end scenarios executed by an AI agent via the
 [/run-scenarios](../prompts/run-scenarios.prompt.md) prompt.
 
-See [scenario-testing.instructions.md](../instructions/scenario-testing.instructions.md)
+See
+[scenario-testing.instructions.md](../instructions/scenario-testing.instructions.md)
 for the full authoring spec.
 
 ## Layout

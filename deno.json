@@ -13,6 +13,7 @@
   },
   "tasks": {
     "start": "deno run -A main.ts",
+    "notify": "deno run -A scripts/notify-watcher.ts",
     "check": "deno fmt && deno lint && deno test -A"
   }
 }

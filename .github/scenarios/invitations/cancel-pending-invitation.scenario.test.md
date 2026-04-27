@@ -12,12 +12,13 @@ tags: [invitations, cancel]
 3. Call `send_invitation` with:
    - `receiver_domain`: the local domain
    - `receptive_policy_id`: from step 1
-   - `proposed_terms`: `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
-   Capture `invitation_id`.
+   - `proposed_terms`:
+     `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
+     Capture `invitation_id`.
 4. Call `cancel_invitation` with the `invitation_id` from step 3.
 5. Call `list_invitations` with `status: "cancelled"`.
-6. Attempt to `accept_invitation` with the cancelled `invitation_id`. Expect
-   the call to fail with code `E_INVITATION_NOT_PENDING`.
+6. Attempt to `accept_invitation` with the cancelled `invitation_id`. Expect the
+   call to fail with code `E_INVITATION_NOT_PENDING`.
 
 ## Expected Outcome
 

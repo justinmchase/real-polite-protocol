@@ -1,10 +1,14 @@
 import { type Invitation, InvitationSchema } from "../../models/mod.ts";
+import type { EventService } from "../../services/events/event.service.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 
 const INVITATION_PREFIX: Deno.KvKey = ["invitations"];
 
 export class InvitationRepository {
-  constructor(private readonly kv: KvService) {}
+  constructor(
+    private readonly kv: KvService,
+    private readonly events: EventService,
+  ) {}
 
   async get(invitationId: string): Promise<Invitation | undefined> {
     const key: Deno.KvKey = [...INVITATION_PREFIX, invitationId];
@@ -15,6 +19,7 @@ export class InvitationRepository {
   async set(invitation: Invitation): Promise<Invitation> {
     const key: Deno.KvKey = [...INVITATION_PREFIX, invitation.invitation_id];
     await this.kv.store.set(key, invitation);
+    await this.events.bumpInvitation(invitation.receiver_oid);
     return invitation;
   }
 

@@ -147,6 +147,10 @@ downstream with another coercion.
 - When the user asks to add, import, or update a module, use the
   `deno-add-module` skill.
 - When editing CI, keep the workflow fast and deterministic.
+- When writing any client-side script that calls the RPP server and needs
+  authentication, use the `get-rpp-token` skill and import from
+  `.github/skills/get-rpp-token/scripts/get-token.ts`. Do not inline the token
+  acquisition logic.
 
 ## Temporary Files
 

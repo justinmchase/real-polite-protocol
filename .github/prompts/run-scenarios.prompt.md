@@ -13,10 +13,10 @@ is governed by the rules in
 
 ## Goals
 
-1. Run every scenario file under `.github/scenarios/` from a clean,
-   reproducible state.
-2. Report PASS or FAIL for each scenario, with concrete cause and
-   recommendation on failure.
+1. Run every scenario file under `.github/scenarios/` from a clean, reproducible
+   state.
+2. Report PASS or FAIL for each scenario, with concrete cause and recommendation
+   on failure.
 3. Continue past failures and produce a final batch summary.
 
 ## Execution protocol
@@ -25,8 +25,8 @@ For **each** scenario file, in this exact order:
 
 ### 1. Stop the running server
 
-If a `deno task start` terminal exists, stop it. The server MUST NOT be
-running before the next step.
+If a `deno task start` terminal exists, stop it. The server MUST NOT be running
+before the next step.
 
 ### 2. Reset the database
 
@@ -44,8 +44,8 @@ indicate it is listening (e.g. `Listening on http://0.0.0.0:8000`).
 ### 4. Confirm MCP connection
 
 Verify the Copilot MCP client is connected to the local RPP MCP server. If the
-session is not connected, or if the bearer token has expired, **stop and ask
-the user** to:
+session is not connected, or if the bearer token has expired, **stop and ask the
+user** to:
 
 - log in (or refresh the token), or
 - restart the MCP client / VS Code window,
@@ -64,21 +64,21 @@ Record the result:
 
 - **PASS** if every step executed and the final state matches the expected
   outcome.
-- **FAIL** if any step could not be executed, raised an unexpected error, or
-  the final state deviates from the expected outcome.
+- **FAIL** if any step could not be executed, raised an unexpected error, or the
+  final state deviates from the expected outcome.
 
 For FAIL, capture: which step failed, observed state, expected state, and a
 recommended fix.
 
 ### 6. Continue to the next scenario
 
-Even if the current scenario failed, return to step 1 and run the next
-scenario. Do not abort the batch.
+Even if the current scenario failed, return to step 1 and run the next scenario.
+Do not abort the batch.
 
 ### 7. Final cleanup
 
-After the last scenario has been executed (whether it passed or failed),
-leave the workspace in a clean state:
+After the last scenario has been executed (whether it passed or failed), leave
+the workspace in a clean state:
 
 1. Stop any running `deno task start` terminal started by this batch.
 2. Delete the `.data/` directory:
@@ -115,7 +115,7 @@ multiple scenarios share a cause.
 - Do NOT modify scenario files to make them pass.
 - Do NOT skip the database reset between scenarios.
 - Do NOT run scenarios in parallel — they share the local server and KV store.
-- If the server fails to start (port in use, build error, etc.), report a
-  setup failure and stop the batch — scenarios cannot run without it.
+- If the server fails to start (port in use, build error, etc.), report a setup
+  failure and stop the batch — scenarios cannot run without it.
 - All non-trivial commands run in the terminal must be explained briefly before
   execution, per project conventions.

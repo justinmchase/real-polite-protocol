@@ -32,9 +32,9 @@ export function initRepositories(
   const contacts = new ContactRepository(services.kv);
   const domainIdentity = new DomainIdentityRepository(services.kv);
   const receptivePolicy = new ReceptivePolicyRepository(services.kv);
-  const invitations = new InvitationRepository(services.kv);
+  const invitations = new InvitationRepository(services.kv, services.events);
   const receipts = new ReceiptRepository(services.kv);
-  const messages = new MessageRepository(services.kv);
+  const messages = new MessageRepository(services.kv, services.events);
   return {
     accounts,
     contacts,

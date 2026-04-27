@@ -3,6 +3,7 @@ import {
   type StoredMessage,
   StoredMessageSchema,
 } from "../../models/messages/stored-message.model.ts";
+import type { EventService } from "../../services/events/event.service.ts";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import { nextResumeToken } from "../../utils/pagination.ts";
 
@@ -28,7 +29,10 @@ export interface ListMessagesResult {
 }
 
 export class MessageRepository {
-  constructor(private readonly kv: KvService) {}
+  constructor(
+    private readonly kv: KvService,
+    private readonly events: EventService,
+  ) {}
 
   async get(id: string): Promise<StoredMessage | undefined> {
     const entry = await this.kv.store.get<unknown>([
@@ -48,6 +52,7 @@ export class MessageRepository {
         message.id,
       )
       .commit();
+    await this.events.bumpMessage(message.oid);
     return message;
   }
 

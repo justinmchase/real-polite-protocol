@@ -6,9 +6,9 @@ applyTo: "**/*.scenario.test.md"
 # Scenario-Based Testing
 
 Scenarios are end-to-end tests **executed by an AI agent** using MCP tools and
-prompts, not by the Deno test runner. Each scenario is a Markdown document
-that defines a sequence of steps and expected outcomes. The agent executes the
-steps in order and reports pass or fail with diagnostic detail.
+prompts, not by the Deno test runner. Each scenario is a Markdown document that
+defines a sequence of steps and expected outcomes. The agent executes the steps
+in order and reports pass or fail with diagnostic detail.
 
 Scenarios complement (but do not replace) requirement tests:
 
@@ -67,15 +67,15 @@ The body MUST contain two sections in order:
 
 #### `## Steps`
 
-A numbered list of imperative steps the agent should perform. Each step
-should be concrete enough to execute via available MCP tools. Reference tool
-names, parameter values, and any context the agent needs.
+A numbered list of imperative steps the agent should perform. Each step should
+be concrete enough to execute via available MCP tools. Reference tool names,
+parameter values, and any context the agent needs.
 
 #### `## Expected Outcome`
 
-A description of the final state the system MUST be in after all steps
-complete. Include any specific field values, status transitions, or response
-shapes that must be observed.
+A description of the final state the system MUST be in after all steps complete.
+Include any specific field values, status transitions, or response shapes that
+must be observed.
 
 Optional sections (use as needed):
 
@@ -89,8 +89,8 @@ When the agent runs a scenario:
 
 1. **Each step is mandatory.** If a step cannot be executed (tool unavailable,
    missing parameter, etc.), the scenario FAILS at that step.
-2. **Errors during a step fail the scenario** unless the step explicitly
-   expects an error.
+2. **Errors during a step fail the scenario** unless the step explicitly expects
+   an error.
 3. **If the final state deviates from the expected outcome, the scenario
    FAILS.** Report the actual vs expected state.
 4. **Continue running remaining scenarios after a failure.** Do not abort the
@@ -125,10 +125,10 @@ Followed by a list of failed scenario ids with one-line cause summaries.
   language unless that is the behavior under test.
 - Prefer self-contained scenarios. Each scenario assumes a freshly-started
   server and a clean database (the runner enforces this).
-- If a scenario depends on data created by a prior step, state that
-  dependency explicitly within the scenario — never across scenarios.
-- Reference the relevant requirement id(s) in `## Notes` so reviewers can
-  trace scenario coverage back to normative behavior.
+- If a scenario depends on data created by a prior step, state that dependency
+  explicitly within the scenario — never across scenarios.
+- Reference the relevant requirement id(s) in `## Notes` so reviewers can trace
+  scenario coverage back to normative behavior.
 
 ## Avoiding tautological scenarios
 

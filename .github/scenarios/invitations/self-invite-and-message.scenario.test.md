@@ -11,8 +11,8 @@ tags: [smoke, invitations, messages]
 
 ## Steps
 
-1. Call `get_user_verified_metadata` for the authenticated user's `oid` and
-   note the available `user_verified_fields` keys (expect at least `name` and
+1. Call `get_user_verified_metadata` for the authenticated user's `oid` and note
+   the available `user_verified_fields` keys (expect at least `name` and
    `email`).
 2. Call `get_domain_identity` and note the local `domain` value.
 3. Call `open_receptive_window` with `duration_seconds: 120`. Capture the
@@ -20,9 +20,10 @@ tags: [smoke, invitations, messages]
 4. Call `send_invitation` with:
    - `receiver_domain`: the local domain from step 2
    - `receptive_policy_id`: the policy id from step 3
-   - `proposed_terms`: `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
-   - `include_user_claims`: `["name", "email"]`
-   Capture the returned `invitation_id`.
+   - `proposed_terms`:
+     `{ "category": "correspondence", "max_content_rating": "G", "usage_policy": "any-time" }`
+   - `include_user_claims`: `["name", "email"]` Capture the returned
+     `invitation_id`.
 5. Call `list_invitations` with `status: "pending"` and confirm the invitation
    from step 4 is present with the expected `claims.user.name` and
    `claims.user.email`.
@@ -33,7 +34,8 @@ tags: [smoke, invitations, messages]
    - `category`: `correspondence`
    - `content_rating`: `G`
    - `subject`: `Scenario test message`
-   - `body`: `{ "content_type": "text/markdown", "content": "Hello from a scenario." }`
+   - `body`:
+     `{ "content_type": "text/markdown", "content": "Hello from a scenario." }`
 8. Call `list_messages` and locate the delivered message by subject.
 
 ## Expected Outcome
@@ -50,5 +52,5 @@ tags: [smoke, invitations, messages]
 
 - Validates: invitations-005 (send), invitations-003 (accept), messages-001
   (send), messages-002 (list), messages-006 (sender_claims).
-- This is the canonical smoke scenario — if it fails, broad areas of the
-  system are likely broken.
+- This is the canonical smoke scenario — if it fails, broad areas of the system
+  are likely broken.

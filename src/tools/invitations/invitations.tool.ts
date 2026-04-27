@@ -364,8 +364,8 @@ export class InvitationTool {
         outputSchema: InvitationOutputSchema,
       },
       withToolErrorHandling(async (params: RejectInvitationArgs) => {
-        const rejectIdentity =
-          await this.domainIdentityManager.getDomainIdentity();
+        const rejectIdentity = await this.domainIdentityManager
+          .getDomainIdentity();
         const rejectLocalDomain = rejectIdentity.domain;
 
         const invitation = await this.invitationManager.reject(
