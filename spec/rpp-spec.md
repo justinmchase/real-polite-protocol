@@ -181,7 +181,13 @@ policy window. Such envelopes MAY be submitted without an identity header. A
 future revision MAY tighten this to require HMAC over a policy-scoped key; for
 v0.2-draft, policy-based invitations rely on the secrecy of the
 `receptive_policy_id` (which is shared out-of-band by the receiver, e.g., via QR
-code).
+code or as the human-readable `shortcode` alias described in Section 9.1.1.1).
+
+A sender MAY use a `shortcode` + `receiver_domain` pair in lieu of a full
+`receptive_policy_id`. When `shortcode` is supplied the receiving server MUST
+resolve it to the underlying `policy_id` before applying all standard policy
+validation. Only one of `receptive_policy_id`, `shortcode`, or `receipt_id` MUST
+be present in the invitation envelope.
 
 In addition, every HMAC-signed request MUST include:
 
@@ -848,7 +854,9 @@ A timed policy MUST include:
 - `policy_id`: a UUID identifying this policy,
 - `receptive_until`: an ISO 8601 timestamp after which the policy expires,
 - `mode`: the scope filter (`all` or `domain_filter`) that applies during the
-  window.
+  window,
+- `shortcode`: a human-readable 8-character alias for the policy (see Section
+  9.1.1.1).
 
 Opening a new window DOES NOT replace existing windows or base policies —
 windows stack. If the receiver wants to revoke a window early, they must
@@ -860,6 +868,49 @@ Servers MUST reject invitations targeting a `receptive_policy_id` whose
 
 Time-bounded receptivity is the RECOMMENDED mechanism for in-person exchanges
 where two parties agree to communicate and need a brief mutual discovery window.
+
+#### 9.1.1.1 Receptive Window Shortcode
+
+When `open_receptive_window` is called, the server MUST generate a **shortcode**
+— a human-readable alias for the `policy_id` that is easier to share verbally
+or display in a chat than a raw UUID.
+
+**Format.** The shortcode MUST be exactly 8 characters drawn from the lowercase
+alphanumeric alphabet (`[a-z0-9]`), randomly generated. At approximately 2.8
+trillion possibilities (36⁸), the collision probability within a single domain
+is negligible even with many concurrent windows.
+
+**Uniqueness.** The shortcode MUST be unique within the server at the time of
+creation. If a collision is detected the server MUST retry generation up to a
+reasonable maximum (RECOMMENDED: 10 attempts) before returning an error.
+
+**Sharing.** The `open_receptive_window` MCP tool response MUST include both
+`shortcode` and the server's `domain`. The AI agent MUST present both values to
+the listener in a clearly copyable form (e.g. a fenced code block or quoted
+string) immediately after the tool call completes, so the listener can share
+them with the sender.
+
+**Sender usage.** A sender MAY supply `shortcode` + `receiver_domain` as an
+alternative to `receptive_policy_id` in both the `send_invitation` MCP tool and
+the raw invitation envelope. The receiving server MUST resolve the shortcode to
+the underlying `policy_id` before applying all standard policy checks (expiry,
+mode, domain-filter, etc.).
+
+If the shortcode cannot be resolved (not found or already deleted), the server
+MUST reject the invitation with `E_RECEPTIVE_POLICY_NOT_FOUND`. If the
+shortcode resolves to an expired policy, the normal `E_RECEPTIVE_POLICY_EXPIRED`
+error applies.
+
+**Lifecycle.** The shortcode index entry MUST be written atomically with the
+policy record so the shortcode is usable immediately upon a successful
+`open_receptive_window` call. When a receptive policy is deleted — whether by
+explicit `remove_receptive_policy` or any server-side expiry cleanup — the
+corresponding shortcode index entry MUST also be removed in the same atomic
+operation.
+
+**Scope.** Shortcodes are ONLY generated for time-bounded windows created via
+`open_receptive_window`. Standing policies created via `add_receptive_policy`
+do NOT receive shortcodes; they are referenced by their UUID `policy_id`.
 
 #### 9.1.2 Proximity Pairing
 
@@ -1957,9 +2008,10 @@ invitations.
 |                            | `cancelled`. Valid from `pending` or `accepted` state. All receipts     |
 |                            | derived from the invitation are immediately revoked (Section 9.2).      |
 | `send_invitation`          | Send an invitation to a receiver identified by `receiver_domain`        |
-|                            | and `receptive_policy_id`. The invitation envelope is delivered to the  |
-|                            | **receiver's** submit endpoint, where the receiver's server resolves    |
-|                            | the policy, validates receptivity, and creates the invitation record.   |
+|                            | and either `receptive_policy_id`, `shortcode` (Section 9.1.1.1), or    |
+|                            | `receipt_id`. The invitation envelope is delivered to the **receiver's**|
+|                            | submit endpoint, where the receiver's server resolves the policy,       |
+|                            | validates receptivity, and creates the invitation record.               |
 |                            | Optionally attaches sender claims (Section 9.6): `include_user_claims`  |
 |                            | and `include_admin_claims` select keys from the sending server's stored |
 |                            | verified metadata; `custom_claims` passes caller-supplied unverified    |
@@ -1989,8 +2041,10 @@ These tools manage the listener's receptive policy for incoming invitations
 | `add_receptive_policy`    | Add a new receptive policy. Supports modes: receptive to all,         |
 |                           | by domain filter (Section 9.1.4), or by contact list. Policies stack. |
 | `open_receptive_window`   | Create a time-bounded receptive policy (Section 9.1.1) with a         |
-|                           | specified duration and scope. Returns the new policy's `policy_id`.   |
-|                           | RECOMMENDED for proximity pairing.                                    |
+|                           | specified duration and scope. Returns the new policy's `policy_id`    |
+|                           | and an 8-character alphanumeric `shortcode` (Section 9.1.1.1) that    |
+|                           | the listener can share in place of the UUID. RECOMMENDED for          |
+|                           | proximity pairing and AI-agent-mediated first-contact flows.           |
 | `remove_receptive_policy` | Permanently delete a receptive policy. Closes a time-bounded window   |
 |                           | early or removes a standing policy. Invitations referencing the       |
 |                           | deleted `policy_id` are rejected with `E_RECEPTIVE_POLICY_NOT_FOUND`. |
@@ -2397,7 +2451,7 @@ The `Category` column groups codes by the subsystem that raises them:
 | E_RECEIPT_REVOKED                         | 403  | submit           | Receipt has been revoked                                                                                |
 | E_RECEPTIVE_POLICY_CLOSED                 | 403  | receptive-policy | Receptive policy is closed to the supplied sender                                                       |
 | E_RECEPTIVE_POLICY_EXPIRED                | 403  | receptive-policy | Receptive policy's `receptive_until` has passed                                                         |
-| E_RECEPTIVE_POLICY_NOT_FOUND              | 403  | receptive-policy | Receptive policy not found for the supplied `receptive_policy_id`                                       |
+| E_RECEPTIVE_POLICY_NOT_FOUND              | 403  | receptive-policy | Receptive policy not found for the supplied `receptive_policy_id` or `shortcode`                        |
 | E_REQUEST_STALE                           | 400  | submit           | Timestamp outside the freshness window (Section 5.1.1)                                                  |
 | E_SIGNATURE_VERIFICATION_FAILED           | 401  | mcp-auth         | Signature verification process failed                                                                   |
 | E_UNSUPPORTED_ALGORITHM                   | 400  | mcp-auth         | JWT signing algorithm is not supported                                                                  |

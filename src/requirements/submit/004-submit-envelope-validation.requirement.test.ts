@@ -282,6 +282,51 @@ Deno.test({
         );
 
         await t.step(
+          "Rejects invitation envelope with both receptive_policy_id and receipt_id",
+          async () => {
+            const bodyJson = JSON.stringify({
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "invitation",
+              sent_at: "2026-04-20T00:00:00Z",
+              invitation: {
+                // both receptive_policy_id and receipt_id provided — only one is allowed
+                invitation_id: crypto.randomUUID(),
+                receptive_policy_id: crypto.randomUUID(),
+                receipt_id: crypto.randomUUID(),
+                proposed_terms: { category: "billing" },
+                delivery: {
+                  domain: "sender.example",
+                  token: crypto.randomUUID(),
+                },
+              },
+            });
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_MESSAGE_ENVELOPE");
+          },
+        );
+
+        await t.step(
           "Rejects invitation envelope missing the delivery block",
           async () => {
             const policyId = crypto.randomUUID();
@@ -506,6 +551,43 @@ Deno.test({
             assertEquals(response.status, 400);
             const payload = await response.json();
             assertEquals(payload.code, "E_INVALID_CONTENT_TYPE");
+          },
+        );
+
+        await t.step(
+          "Rejects application/json message body with malformed JSON content",
+          async () => {
+            const message = {
+              ...validMessageEnvelope,
+              message_id: crypto.randomUUID(),
+              message: {
+                ...validMessageEnvelope.message,
+                body: { content_type: "application/json", content: "not json {{{" },
+              },
+            };
+            const bodyJson = JSON.stringify(message);
+            const bodyBytes = new TextEncoder().encode(bodyJson);
+            const timestamp = new Date().toISOString();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const payload = await response.json();
+            assertEquals(payload.code, "E_INVALID_BODY");
           },
         );
 

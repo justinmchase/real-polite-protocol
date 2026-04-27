@@ -75,13 +75,17 @@ export const InvitationEnvelopeSchema = z.object({
     expires_at: z.coerce.date().optional(),
     delivery: DeliverySchema,
   }).refine(
-    (d) =>
-      d.receptive_policy_id !== undefined ||
-      d.shortcode !== undefined ||
-      d.receipt_id !== undefined,
+    (d) => {
+      const count = [
+        d.receptive_policy_id,
+        d.shortcode,
+        d.receipt_id,
+      ].filter((v) => v !== undefined).length;
+      return count === 1;
+    },
     {
       message:
-        "Either receptive_policy_id, shortcode, or receipt_id must be present",
+        "Exactly one of receptive_policy_id, shortcode, or receipt_id must be present",
     },
   ),
 });

@@ -12,6 +12,9 @@ export interface SeedMessageOptions {
   baseUrl: string;
   accountOid: string;
   token: string;
+  senderDomain?: string;
+  senderDomainId?: string;
+  invitationClaims?: Record<string, unknown>;
 }
 
 /**
@@ -22,15 +25,25 @@ export interface SeedMessageOptions {
 export async function seedMessage(
   opts: SeedMessageOptions,
 ): Promise<string> {
-  const { kv, callTool, baseUrl, accountOid, token } = opts;
+  const {
+    kv,
+    callTool,
+    baseUrl,
+    accountOid,
+    token,
+    senderDomain = "sender.example",
+    senderDomainId,
+    invitationClaims,
+  } = opts;
 
   const invId = crypto.randomUUID();
   await kv.set(["invitations", invId], {
     invitation_id: invId,
     receiver_oid: accountOid,
-    sender_domain: "sender.example",
+    sender_domain: senderDomain,
     status: "pending",
     proposed_terms: { category: "billing", max_content_rating: "G" },
+    ...(invitationClaims !== undefined ? { claims: invitationClaims } : {}),
     created_at: new Date().toISOString(),
   });
 
@@ -46,7 +59,8 @@ export async function seedMessage(
     receiptId,
     receiptSecret,
     messageId,
-    senderDomain: "sender.example",
+    senderDomain,
+    senderDomainId,
     baseUrl,
   });
   assertEquals(resp.status, 202);

@@ -6,6 +6,7 @@ export interface SubmitMessageOptions {
   messageId?: string;
   timestamp?: string;
   senderDomain?: string;
+  senderDomainId?: string;
   category?: string;
   baseUrl?: string;
 }
@@ -18,12 +19,14 @@ export async function submitMessage(
     receiptSecret,
     messageId = crypto.randomUUID(),
     senderDomain = "sender.example",
+    senderDomainId,
     category = "message",
   } = opts;
 
   const bodyJson = JSON.stringify({
     message_id: messageId,
     sender_domain: senderDomain,
+    ...(senderDomainId !== undefined ? { sender_domain_id: senderDomainId } : {}),
     category,
     sent_at: "2026-04-20T00:00:00Z",
     message: {

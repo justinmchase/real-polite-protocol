@@ -19,6 +19,7 @@ import {
   DeliveryTokenInvalidError,
   DuplicateMessageError,
   InvalidAuthHeadersError,
+  InvalidBodyError,
   InvalidContentTypeError,
   InvalidMessageEnvelopeError,
   InvalidReceiptEnvelopeError,
@@ -175,6 +176,20 @@ export class SubmitController extends Controller {
           const ct = envelope.message.body.content_type;
           if (!ALLOWED_CONTENT_TYPES.has(ct)) {
             throw new InvalidContentTypeError(ct);
+          }
+        }
+
+        // JSON well-formedness check for application/json message content
+        if (
+          envelope.category === "message" &&
+          envelope.message.body.content_type === "application/json"
+        ) {
+          try {
+            JSON.parse(envelope.message.body.content);
+          } catch {
+            throw new InvalidBodyError(
+              "message body content is not valid JSON",
+            );
           }
         }
 
