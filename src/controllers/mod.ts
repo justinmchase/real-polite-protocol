@@ -9,6 +9,7 @@ import {
 import type { Context, State } from "../context.ts";
 import { AuthDiscoveryController } from "./auth-discovery/mod.ts";
 import { AuthMiddleware } from "./middleware/auth.middleware.ts";
+import { LandingController } from "./landing/landing.controller.ts";
 import { McpController } from "./mcp/mcp.controller.ts";
 import { SubmitController } from "./submit/mod.ts";
 
@@ -20,6 +21,7 @@ export async function initControllers(
   await new HealthController().use(app);
   await new IsHtmlController().use(app);
   await new LogController().use(app);
+  await new LandingController().use(app);
   await new SubmitController(
     context.services.kv,
     context.managers.invitations,
