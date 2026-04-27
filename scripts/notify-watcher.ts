@@ -13,14 +13,36 @@
  *   RPP_SERVER=https://my-rpp.deno.dev deno task notify
  *
  * Environment variables:
- *   RPP_SERVER   Base URL of the RPP server (default: http://localhost:8000)
+ *   RPP_SERVER   Base URL of the RPP server (default: read from .vscode/mcp.json,
+ *                fallback to http://localhost:8000)
  *   RPP_TOKEN    Bearer token (optional — if omitted, fetched via `az` CLI)
  *   RPP_AZ_SCOPE Azure AD scope override (optional)
  */
 
 import { getToken } from "../.github/skills/get-rpp-token/scripts/get-token.ts";
 
-const server = Deno.env.get("RPP_SERVER") ?? "http://localhost:8000";
+function readServerFromMcpJson(): string | undefined {
+  try {
+    const raw = Deno.readTextFileSync(
+      new URL("../.vscode/mcp.json", import.meta.url),
+    );
+    const cfg = JSON.parse(raw) as {
+      servers?: Record<string, { url?: string }>;
+    };
+    const url = cfg.servers?.rpp?.url;
+    if (typeof url === "string") {
+      // url points to the MCP endpoint; strip the trailing /mcp to get the base.
+      return url.replace(/\/mcp$/, "");
+    }
+  } catch {
+    // File missing or unparseable — fall through to default.
+  }
+  return undefined;
+}
+
+const server = Deno.env.get("RPP_SERVER") ??
+  readServerFromMcpJson() ??
+  "http://localhost:8000";
 const token = await getToken();
 console.log(`[rpp-notify] Connecting to ${server} …`);
 
