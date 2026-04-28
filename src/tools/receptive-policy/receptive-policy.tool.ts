@@ -48,6 +48,9 @@ const ReceptivePolicyOutputSchema = {
   shortcode: z.string().optional().describe(
     "Short 8-character alphanumeric code for time-bounded windows. Share this along with your domain so a sender can address you without knowing your policy_id UUID.",
   ),
+  domain: z.string().optional().describe(
+    "The server's RPP domain. Present on open_receptive_window responses so the caller can share it with the sender alongside the shortcode.",
+  ),
   created_at: outputDate().describe(
     "ISO 8601 timestamp when this policy was created",
   ),
@@ -124,6 +127,7 @@ type RemoveReceptivePolicyArgs = z.infer<
 export class ReceptivePolicyTool {
   constructor(
     private readonly receptivePolicyManager: ReceptivePolicyManager,
+    private readonly domain: string,
   ) {}
 
   register(server: McpServer, auth: AuthInfo): void {
@@ -187,7 +191,7 @@ export class ReceptivePolicyTool {
           params.scope ?? "all",
           params.domain_filter,
         );
-        return toolResult(policy);
+        return toolResult({ ...policy, domain: this.domain });
       }),
     );
 

@@ -35,6 +35,7 @@ Deno.test({
         const { result: windowResult } = await callTool<{
           policy_id: string;
           shortcode?: string;
+          domain?: string;
           receptive_until?: string;
           mode: string;
         }>(listenerToken, "open_receptive_window", { duration_seconds: 120 });
@@ -46,6 +47,26 @@ Deno.test({
             assertExists(
               windowResult.shortcode,
               "shortcode must be present in the open_receptive_window response",
+            );
+          },
+        );
+
+        await t.step(
+          "open_receptive_window response includes a domain field",
+          () => {
+            assertExists(
+              windowResult.domain,
+              "domain must be present in the open_receptive_window response",
+            );
+            assertEquals(
+              typeof windowResult.domain,
+              "string",
+              "domain must be a string",
+            );
+            assertEquals(
+              (windowResult.domain ?? "").length > 0,
+              true,
+              "domain must be non-empty",
             );
           },
         );
@@ -75,6 +96,29 @@ Deno.test({
               second.shortcode !== windowResult.shortcode,
               true,
               "consecutive windows must have distinct shortcodes",
+            );
+          },
+        );
+
+        await t.step(
+          "five concurrent windows each receive a unique shortcode (uniqueness/retry invariant)",
+          async () => {
+            const shortcodes: string[] = [];
+            for (let i = 0; i < 5; i++) {
+              const { result: w } = await callTool<{ shortcode?: string }>(
+                listenerToken,
+                "open_receptive_window",
+                { duration_seconds: 120 },
+              );
+              assertExists(w);
+              assertExists(w.shortcode);
+              shortcodes.push(w.shortcode!);
+            }
+            const unique = new Set(shortcodes);
+            assertEquals(
+              unique.size,
+              shortcodes.length,
+              `All shortcodes must be unique; got: ${shortcodes.join(", ")}`,
             );
           },
         );

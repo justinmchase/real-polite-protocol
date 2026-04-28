@@ -29,7 +29,10 @@ export async function initControllers(
     context.managers.receipts,
     context.managers.messages,
   ).use(app);
-  await new AuthDiscoveryController(context.services.config).use(app);
+  await new AuthDiscoveryController(
+    context.services.config,
+    context.managers.domainIdentity,
+  ).use(app);
   await new AuthMiddleware(context.services.auth).use(app);
   await new McpController(
     context.services.mcp,

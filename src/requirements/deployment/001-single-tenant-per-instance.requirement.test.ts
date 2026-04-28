@@ -1,5 +1,9 @@
 import { assertEquals } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
+import {
+  requiredScopes,
+  withAuthTestContext,
+} from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
   name: "req:deployment-001 - Single-Tenant-Per-Instance Deployment",
@@ -81,6 +85,44 @@ Deno.test({
           const res = await fetch(`${baseUrl}/health`);
           assertEquals(res.status, 200);
           await res.body?.cancel();
+        },
+      );
+    });
+
+    await withAuthTestContext(async ({ issueToken }) => {
+      await t.step(
+        "two server instances have isolated KV storage",
+        async () => {
+          // Start two independent servers, each with their own temp KV directory.
+          // Writing a receptive policy to server A must not be visible on server B.
+          await withStartedServer(async ({ callTool: callToolA }) => {
+            await withStartedServer(async ({ callTool: callToolB }) => {
+              const token = await issueToken({
+                oid: "oid-domain-admin",
+                roles: ["domain.admin"],
+                scope: requiredScopes.join(" "),
+              });
+
+              // Create a receptive policy on server A.
+              const { status, result } = await callToolA<{
+                policy_id?: string;
+              }>(token, "open_receptive_window", { duration_seconds: 300 });
+              assertEquals(status, 200);
+              assertEquals(typeof result?.policy_id, "string");
+
+              // Server B must have no policies — its KV is completely separate.
+              const { status: statusB, result: resultB } = await callToolB<{
+                policies?: unknown[];
+              }>(token, "list_receptive_policies", {});
+              assertEquals(statusB, 200);
+              const policies = resultB?.policies ?? [];
+              assertEquals(
+                policies.length,
+                0,
+                "server B must have an empty KV — no data from server A must leak across",
+              );
+            });
+          });
         },
       );
     });

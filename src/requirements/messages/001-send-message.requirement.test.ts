@@ -239,6 +239,79 @@ Deno.test({
           );
 
           await t.step(
+            "send_message generates a UUIDv7 message_id that is unique across calls",
+            async () => {
+              await withCallbackServer(async (receiverDomain, getCaptures) => {
+                // Seed a pending invitation to produce a receipt pointing at the callback server.
+                const invId = crypto.randomUUID();
+                await kv.set(["invitations", invId], {
+                  invitation_id: invId,
+                  receiver_oid: accountOid,
+                  sender_domain: receiverDomain,
+                  status: "pending",
+                  proposed_terms: {
+                    category: "billing",
+                    max_content_rating: "G",
+                  },
+                  created_at: new Date().toISOString(),
+                });
+
+                const { result: acceptResult } = await callTool<{
+                  receipt?: { id: string };
+                }>(token, "accept_invitation", { invitation_id: invId });
+                assertExists(acceptResult?.receipt?.id);
+                const receiptId = acceptResult!.receipt!.id;
+
+                const sendOpts = {
+                  receipt_id: receiptId,
+                  category: "billing",
+                  content_rating: "G",
+                  body: { content_type: "text/markdown", content: "ping" },
+                };
+
+                const { result: r1 } = await callTool<{ message_id?: string }>(
+                  token,
+                  "send_message",
+                  sendOpts,
+                );
+                const { result: r2 } = await callTool<{ message_id?: string }>(
+                  token,
+                  "send_message",
+                  sendOpts,
+                );
+
+                const id1 = r1?.message_id ?? "";
+                const id2 = r2?.message_id ?? "";
+                assertExists(id1);
+                assertExists(id2);
+
+                // UUIDv7: the version nibble is the first character of the 3rd
+                // group in xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx (index 14).
+                assertEquals(
+                  id1[14],
+                  "7",
+                  `message_id "${id1}" is not UUIDv7 (version nibble must be 7)`,
+                );
+                assertEquals(
+                  id2[14],
+                  "7",
+                  `message_id "${id2}" is not UUIDv7 (version nibble must be 7)`,
+                );
+
+                // Each call must produce a distinct ID.
+                assertEquals(
+                  id1 === id2,
+                  false,
+                  "consecutive send_message calls must produce unique message_ids",
+                );
+
+                // Drain captured bodies.
+                getCaptures();
+              });
+            },
+          );
+
+          await t.step(
             "send_message rejects a message body exceeding 256 KB",
             async () => {
               const receiptId = crypto.randomUUID();

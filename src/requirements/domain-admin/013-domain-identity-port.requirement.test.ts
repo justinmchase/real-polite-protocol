@@ -4,6 +4,7 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { ConfigService } from "../../services/config/config.service.ts";
 
 Deno.test({
   name:
@@ -69,5 +70,55 @@ Deno.test({
         );
       });
     });
+  },
+});
+
+// Unit test for ConfigService domain derivation — specifically the port-443 case
+// where no port suffix should be appended.
+Deno.test({
+  name:
+    "req:domain-admin-013 (unit) - Domain identity omits port suffix when port is 443",
+  fn: async (t) => {
+    await t.step(
+      "non-localhost host on port 443 uses hostname only (no :443 suffix)",
+      () => {
+        const config = new ConfigService(
+          "example.com",
+          443,
+          undefined, // kvPath
+          "tenant-id",
+          "api-app-client-id",
+          "client-app-client-id",
+          undefined, // issuer
+          undefined, // audience
+          false, // authDebugLogTokenPayload
+          false, // authDebugLogRawAccessToken
+        );
+        assertEquals(
+          config.domain,
+          "example.com",
+          "Standard HTTPS port (443) must be omitted from domain",
+        );
+      },
+    );
+
+    await t.step(
+      "non-localhost host on non-standard port includes port suffix",
+      () => {
+        const config = new ConfigService(
+          "example.com",
+          8080,
+          undefined,
+          "tenant-id",
+          "api-app-client-id",
+          "client-app-client-id",
+          undefined,
+          undefined,
+          false,
+          false,
+        );
+        assertEquals(config.domain, "example.com:8080");
+      },
+    );
   },
 });

@@ -195,7 +195,7 @@ Deno.test({
           await t.step(
             "accept_invitation can apply negotiated terms",
             async () => {
-              await withCallbackServer(async (callbackDomain) => {
+              await withCallbackServer(async (callbackDomain, getCaptures) => {
                 const invitationId = crypto.randomUUID();
                 const deliveryToken = crypto.randomUUID();
 
@@ -227,6 +227,20 @@ Deno.test({
                 assertEquals(status, 200);
                 assertExists(result);
                 assertEquals(result.status, "accepted");
+
+                // The receipt delivered to the callback must carry the negotiated
+                // (narrowed) terms so the sender knows the exact agreed terms.
+                const callbacks = getCaptures();
+                assertEquals(callbacks.length, 1);
+                const receipt = callbacks[0].body.receipt as
+                  | Record<string, unknown>
+                  | undefined;
+                assertExists(receipt);
+                assertEquals(
+                  receipt.category,
+                  "correspondence",
+                  "issued receipt must carry the negotiated category",
+                );
               });
             },
           );

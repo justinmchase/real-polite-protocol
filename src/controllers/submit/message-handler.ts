@@ -11,6 +11,7 @@ import type {
 import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
 import type { MessageCategory } from "../../models/message-category.ts";
 import { CONTENT_RATINGS } from "../../models/content-rating.ts";
+import { MessageMetadataSchema } from "../../models/messages/stored-message.model.ts";
 import {
   InvitationNotFoundError,
   InvitationNotPendingError,
@@ -104,6 +105,7 @@ export const MessageEnvelopeSchema = z.object({
       content: z.string(),
     }),
   }),
+  metadata: MessageMetadataSchema.optional(),
 });
 
 const ReceiptObjectSchema = z.object({

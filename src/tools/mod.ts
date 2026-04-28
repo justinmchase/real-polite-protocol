@@ -53,7 +53,7 @@ export function initTools(
       config,
     ),
     new DomainAdminTool(managers.accounts, managers.domainIdentity),
-    new ReceptivePolicyTool(managers.receptivePolicy),
+    new ReceptivePolicyTool(managers.receptivePolicy, config.domain),
     new InvitationTool(
       managers.invitations,
       managers.accounts,

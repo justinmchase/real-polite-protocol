@@ -5,9 +5,13 @@ import {
   type IState,
 } from "@justinmchase/grove";
 import type { ConfigService } from "../../services/config/config.service.ts";
+import type { DomainIdentityManager } from "../../managers/mod.ts";
 
 export class AuthDiscoveryController extends Controller {
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly domainIdentityManager: DomainIdentityManager,
+  ) {
     super();
   }
 
@@ -15,15 +19,24 @@ export class AuthDiscoveryController extends Controller {
   async use<TContext extends IContext, TState extends IState<TContext>>(
     app: GroveApp<TContext, TState>,
   ): Promise<void> {
-    const domainIdentityHandler = (
+    const domainIdentityHandler = async (
       ctx: { req: { url: string }; json: typeof Response.json },
     ) => {
       const origin = new URL(ctx.req.url).origin;
+
+      // Include the active public key; auto-creates one on first access.
+      const activeKey = await this.domainIdentityManager.getVerificationKey();
+      const public_key = {
+        algorithm: activeKey.public_key.algorithm,
+        key: activeKey.public_key.key,
+      };
+
       return ctx.json({
         domain: this.config.domain,
         display_name: this.config.domain,
         envelope_endpoint: `${origin}/rpp/v1/envelopes`,
         mcp_endpoint: `${origin}/mcp`,
+        public_key,
       });
     };
     app.get("/.well-known/rpp-domain-identity", domainIdentityHandler);

@@ -11,6 +11,7 @@ import type {
 } from "../../managers/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
+import { MessageMetadataSchema } from "../../models/messages/stored-message.model.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { inputDate, outputDate } from "../date-schema.ts";
@@ -92,6 +93,9 @@ const StoredMessageSchema = z.object({
       content: z.string(),
     }),
   }),
+  metadata: MessageMetadataSchema.optional().describe(
+    "Free-form sub-protocol metadata attached by the sender (Section 7.1.3)",
+  ),
   sender_claims: SenderClaimsSchema.describe(
     "Current flat-merged contact fields for the message sender (all sources: custom, verified, admin, owner notes). Empty object when no contact exists.",
   ),
@@ -168,8 +172,8 @@ const SendMessageInputSchema = {
   sender_display_name: z.string().max(256).optional().describe(
     "Optional display name for the sender (Section 3A.2)",
   ),
-  metadata: z.record(z.string(), z.unknown()).optional().describe(
-    "Free-form metadata passed through to the receiver",
+  metadata: MessageMetadataSchema.optional().describe(
+    "Free-form metadata passed through to the receiver (Section 7.1.3)",
   ),
 };
 

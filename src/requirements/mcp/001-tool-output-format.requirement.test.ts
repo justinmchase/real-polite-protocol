@@ -72,6 +72,39 @@ Deno.test({
             );
           },
         );
+        await t.step(
+          "structuredContent is present across tools from different modules",
+          async () => {
+            // Verify that the toolResult() helper pattern is consistently
+            // applied across modules by calling one representative tool from
+            // each of several different tool modules and asserting that every
+            // response includes structuredContent.
+            const token = await issueToken({
+              oid: crypto.randomUUID(),
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            const toolNames = [
+              "get_permissions", // account module
+              "list_contacts", // contacts module
+              "get_domain_identity", // domain-admin module
+            ];
+
+            for (const toolName of toolNames) {
+              const { status, body } = await callTool(token, toolName);
+              assertEquals(status, 200, `${toolName} returned non-200 status`);
+              assertExists(body.result, `${toolName} response missing result`);
+              const result = body.result as {
+                structuredContent?: Record<string, unknown>;
+              };
+              assertExists(
+                result.structuredContent,
+                `${toolName} result missing structuredContent — toolResult() helper must be used`,
+              );
+            }
+          },
+        );
       });
     });
   },

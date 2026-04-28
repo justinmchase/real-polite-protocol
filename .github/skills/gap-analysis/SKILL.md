@@ -83,11 +83,11 @@ Supported `--scope` values:
 ## Output conventions
 
 - Coverage score format: `X/Y requirements covered by tests (Z%)`
-- The report MUST be written to `spec/reports/gap-analysis-report.md`,
-  replacing any prior contents (per `general.instructions.md` § Analysis
-  Reports). Each run overwrites the file; do not append or version the name.
-- `.tmp/` is reserved for intermediate script output (e.g. `--json`) only,
-  never the report itself.
+- The report MUST be written to `spec/reports/gap-analysis-report.md`, replacing
+  any prior contents (per `general.instructions.md` § Analysis Reports). Each
+  run overwrites the file; do not append or version the name.
+- `.tmp/` is reserved for intermediate script output (e.g. `--json`) only, never
+  the report itself.
 
 ### Report layout
 
@@ -110,18 +110,23 @@ unit, expressed as a single `- [ ]` task. Group by gap kind, in this order:
 Item template (one per missing test file):
 
 ```markdown
-- [ ] **Missing test file**: `invitations-009` — Senders can cancel a direct invitation
-      **Doc**: [.github/requirements/invitations/009-cancel-invitation.requirement.md](.github/requirements/invitations/009-cancel-invitation.requirement.md)
-      **Create**: `src/requirements/invitations/009-cancel-invitation.requirement.test.ts`
-      **Top-level test name**: `req:invitations-009 - Senders can cancel a direct invitation`
+- [ ] **Missing test file**: `invitations-009` — Senders can cancel a direct
+      invitation **Doc**:
+      [.github/requirements/invitations/009-cancel-invitation.requirement.md](.github/requirements/invitations/009-cancel-invitation.requirement.md)
+      **Create**:
+      `src/requirements/invitations/009-cancel-invitation.requirement.test.ts`
+      **Top-level test name**:
+      `req:invitations-009 - Senders can cancel a direct invitation`
 ```
 
 Item template (one per uncovered RFC tool):
 
 ```markdown
-- [ ] **Missing requirement doc**: RFC tool `cancel_invitation` (Section 10B.3) is not represented in `.github/requirements/`
-      **Action**: ask the user whether to add a requirement doc; if yes, create
-      `.github/requirements/<category>/<NNN>-<slug>.requirement.md` with frontmatter `id` and `title`, then re-run gap-analysis.
+- [ ] **Missing requirement doc**: RFC tool `cancel_invitation` (Section 10B.3)
+      is not represented in `.github/requirements/` **Action**: ask the user
+      whether to add a requirement doc; if yes, create
+      `.github/requirements/<category>/<NNN>-<slug>.requirement.md` with
+      frontmatter `id` and `title`, then re-run gap-analysis.
 ```
 
 Wording rules:

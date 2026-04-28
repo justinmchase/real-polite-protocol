@@ -1,6 +1,7 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
 import { computeHmac } from "../helpers/compute-hmac.ts";
+import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
 
 Deno.test({
   name:
@@ -142,6 +143,110 @@ Deno.test({
             assertEquals(second.status, 202);
             await first.text();
             await second.text();
+          },
+        );
+
+        await t.step(
+          "envelope endpoint is accessible at POST /rpp/v1/envelopes",
+          async () => {
+            // Explicit assertion that the exact path /rpp/v1/envelopes is wired up.
+            // A missing or misspelled path would produce 404, not 4xx auth error.
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: "{}",
+            });
+            // Any response other than 404 confirms the handler is reachable.
+            assertEquals(
+              response.status === 404,
+              false,
+              "POST /rpp/v1/envelopes must not return 404",
+            );
+            await response.body?.cancel();
+          },
+        );
+
+        await t.step(
+          "invitation envelope response has shape { ok, accepted, invitation_id }",
+          async () => {
+            // Seed a receptive policy so the invitation is accepted.
+            const policyId = crypto.randomUUID();
+            const accountOid = crypto.randomUUID();
+            await kv.set(["receptive_policies", policyId], {
+              policy_id: policyId,
+              oid: accountOid,
+              mode: "all",
+              status: "active",
+              created_at: new Date(),
+            });
+
+            const invitationId = crypto.randomUUID();
+            const bodyJson = JSON.stringify({
+              message_id: crypto.randomUUID(),
+              sender_domain: "sender.example",
+              category: "invitation",
+              sent_at: new Date().toISOString(),
+              invitation: {
+                invitation_id: invitationId,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "billing" },
+                delivery: {
+                  domain: "sender.example",
+                  token: crypto.randomUUID(),
+                },
+              },
+            });
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 202);
+            const payload = await response.json() as Record<string, unknown>;
+            assertEquals(payload.ok, true);
+            assertEquals(typeof payload.accepted, "boolean");
+            assertExists(payload.invitation_id);
+          },
+        );
+
+        await t.step(
+          "receipt callback envelope response has shape { ok, accepted, invitation_id }",
+          async () => {
+            // Seed an invitation in pending state.
+            const invitationId = crypto.randomUUID();
+            const deliveryToken = crypto.randomUUID();
+            await kv.set(["invitations", invitationId], {
+              invitation_id: invitationId,
+              receiver_oid: crypto.randomUUID(),
+              sender_domain: "partner.example",
+              status: "pending",
+              delivery: { domain: "partner.example", token: deliveryToken },
+              proposed_terms: { category: "billing" },
+              created_at: new Date(),
+            });
+
+            const response = await submitReceiptCallback({
+              invitationId,
+              deliveryToken,
+              decision: "accepted",
+              receipt: {
+                id: crypto.randomUUID(),
+                secret: crypto.randomUUID(),
+                category: "billing",
+                max_content_rating: "G",
+                usage_policy: "any-time",
+                issued_at: new Date().toISOString(),
+              },
+              baseUrl,
+            });
+
+            assertEquals(response.status, 202);
+            const payload = await response.json() as Record<string, unknown>;
+            assertEquals(payload.ok, true);
+            assertEquals(typeof payload.accepted, "boolean");
+            assertExists(payload.invitation_id);
           },
         );
       } finally {

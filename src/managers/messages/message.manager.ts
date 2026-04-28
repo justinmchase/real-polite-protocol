@@ -36,6 +36,7 @@ export class MessageManager {
           content: envelope.message.body.content,
         },
       },
+      ...(envelope.metadata !== undefined && { metadata: envelope.metadata }),
     };
     return await this.messages.set(msg);
   }

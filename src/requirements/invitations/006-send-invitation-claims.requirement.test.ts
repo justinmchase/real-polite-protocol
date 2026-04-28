@@ -10,7 +10,7 @@ Deno.test({
     "req:invitations-006 - Senders can attach verified and custom claims to outgoing invitations",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ baseUrl, callTool }) => {
+      await withStartedServer(async ({ baseUrl, callTool, kvPath }) => {
         const accountOid = crypto.randomUUID();
         const token = await issueToken({
           oid: accountOid,
@@ -136,6 +136,53 @@ Deno.test({
 
             assertEquals(status, 200);
             assertExists(result?.invitation_id);
+          },
+        );
+
+        await t.step(
+          "invitation envelope has absent or empty claims when no claim inputs provided",
+          async () => {
+            const { result: inv } = await callTool<{ invitation_id?: string }>(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                // No include_user_claims, include_admin_claims, or custom_claims
+              },
+            );
+            assertExists(inv?.invitation_id);
+
+            // The invitation was delivered to the local server's envelope endpoint
+            // and stored in KV. Read it back and inspect the claims field.
+            const kv = await Deno.openKv(kvPath);
+            try {
+              const entry = await kv.get<Record<string, unknown>>(
+                ["invitations", inv.invitation_id],
+              );
+              assertExists(entry.value, "invitation must be stored in KV");
+              const stored = entry.value;
+
+              // claims.user and claims.custom must be absent when no inputs given.
+              // claims.immutable will contain domain_id (always injected), which is OK.
+              const claims = stored.claims as
+                | { user?: unknown; custom?: unknown }
+                | undefined;
+
+              assertEquals(
+                claims?.user,
+                undefined,
+                "claims.user must be absent when no user claims requested",
+              );
+              assertEquals(
+                claims?.custom,
+                undefined,
+                "claims.custom must be absent when no custom claims provided",
+              );
+            } finally {
+              kv.close();
+            }
           },
         );
       });

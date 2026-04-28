@@ -10,7 +10,7 @@ Deno.test({
     "req:domain-admin-010 - Domain administrators can remove admin verified metadata",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath, callTool }) => {
+      await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         await t.step(
           "domain admin can remove one admin verified metadata field",
           async () => {
@@ -186,6 +186,59 @@ Deno.test({
                 JSON.stringify(body)
               }`,
             );
+          },
+        );
+
+        await t.step(
+          "subsequent invitation does not carry the removed admin-verified field",
+          async () => {
+            // After step 1 removed display_name from oid-target-user's admin_verified_fields,
+            // a new invitation sent by oid-target-user requesting that field should NOT
+            // include it in claims.admin.
+            const userToken = await issueToken({
+              oid: "oid-target-user",
+              scope: requiredScopes.join(" "),
+            });
+
+            // Open a receptive window so there is a valid policy to deliver to.
+            const { result: windowResult } = await callTool<{
+              policy_id: string;
+            }>(userToken, "open_receptive_window", { duration_seconds: 300 });
+            assertExists(windowResult?.policy_id);
+
+            const receiverDomain = new URL(baseUrl).host;
+
+            // Send an invitation requesting the (now-removed) display_name admin claim.
+            const { result: invResult } = await callTool<{
+              invitation_id?: string;
+            }>(userToken, "send_invitation", {
+              receiver_domain: receiverDomain,
+              receptive_policy_id: windowResult.policy_id,
+              proposed_terms: { category: "correspondence" },
+              include_admin_claims: ["display_name"],
+            });
+            assertExists(invResult?.invitation_id);
+
+            // Read the stored invitation from KV and verify claims.admin is absent
+            // or does not include display_name.
+            const kv = await Deno.openKv(kvPath);
+            try {
+              const entry = await kv.get<Record<string, unknown>>(
+                ["invitations", invResult.invitation_id],
+              );
+              assertExists(entry.value, "invitation must be stored in KV");
+              const claims = entry.value.claims as
+                | { admin?: Record<string, unknown> }
+                | undefined;
+
+              assertEquals(
+                claims?.admin?.display_name,
+                undefined,
+                "removed admin field must not appear in subsequent invitation claims",
+              );
+            } finally {
+              kv.close();
+            }
           },
         );
       });

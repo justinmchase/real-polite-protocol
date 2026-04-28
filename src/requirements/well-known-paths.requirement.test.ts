@@ -60,6 +60,34 @@ Deno.test({
           );
         },
       );
+
+      await t.step(
+        "response body includes public_key with algorithm and key fields",
+        async () => {
+          const response = await fetch(url, { method: "GET" });
+          const body = await response.json() as Record<string, unknown>;
+
+          // REQUIRED: public_key — the domain's active Ed25519 verification key
+          assertExists(body.public_key, "public_key must be present");
+          const pk = body.public_key as Record<string, unknown>;
+          assertEquals(
+            pk.algorithm,
+            "Ed25519",
+            "public_key.algorithm must be Ed25519",
+          );
+          assertExists(pk.key, "public_key.key must be present");
+          assertEquals(
+            typeof pk.key,
+            "string",
+            "public_key.key must be a base64 string",
+          );
+          assertEquals(
+            (pk.key as string).length > 0,
+            true,
+            "public_key.key must be non-empty",
+          );
+        },
+      );
     });
   },
 });

@@ -28,11 +28,11 @@ Two principles:
    uncovered statements behind a single bullet. Every statement that scores
    `0.0` or `0.5` becomes its own checkbox.
 2. **Framing describes sub-areas, not whole requirements.** Even when a
-   requirement scores 0.0 overall, the report MUST describe the missing
-   coverage as "statements within this requirement that have no exercising
-   test step", NOT as "the entire requirement is untested" or "completely
-   untested". The sole exception is when the test file itself does not exist
-   on disk (handled separately, see § Missing test files).
+   requirement scores 0.0 overall, the report MUST describe the missing coverage
+   as "statements within this requirement that have no exercising test step",
+   NOT as "the entire requirement is untested" or "completely untested". The
+   sole exception is when the test file itself does not exist on disk (handled
+   separately, see § Missing test files).
 
 ## When to Use
 
@@ -133,20 +133,19 @@ The report has these sections in this order:
 ```markdown
 # Semantic Closure Evaluation Report
 
-**Scope**: all
-**Methodology**: Statement-level semantic scoring — 1.0 covered · 0.5 partial · 0.0 uncovered
-**How to use this report**: Each unchecked box in § Action Items represents one
-missing or weak test step. Work top-to-bottom; mark `[x]` when the
-corresponding test step has been added and is passing.
+**Scope**: all **Methodology**: Statement-level semantic scoring — 1.0 covered ·
+0.5 partial · 0.0 uncovered **How to use this report**: Each unchecked box in §
+Action Items represents one missing or weak test step. Work top-to-bottom; mark
+`[x]` when the corresponding test step has been added and is passing.
 
 ## Overall
 
-| Metric                              | Score              |
-| ----------------------------------- | ------------------ |
-| Requirements fully covered (≥ 0.80) | A / N (P%)         |
-| Requirements partially covered      | B / N (P%)         |
-| Requirements with no covered steps  | C / N (P%)         |
-| **Statement-weighted coverage**     | **S / T = P%**     |
+| Metric                              | Score          |
+| ----------------------------------- | -------------- |
+| Requirements fully covered (≥ 0.80) | A / N (P%)     |
+| Requirements partially covered      | B / N (P%)     |
+| Requirements with no covered steps  | C / N (P%)     |
+| **Statement-weighted coverage**     | **S / T = P%** |
 
 ## By Category
 
@@ -156,10 +155,10 @@ corresponding test step has been added and is passing.
 
 ## By Requirement
 
-| ID  | Title | Score | Stmts (✓ / ⚠ / ✗) | Notes                                  |
-| --- | ----- | ----- | ------------------ | -------------------------------------- |
-| ... | ...   | 0.63  | 5 / 2 / 1          | 3 statements need additional coverage  |
-| ... | ...   | 0.00  | 0 / 0 / 6          | 6 statements need test coverage        |
+| ID  | Title | Score | Stmts (✓ / ⚠ / ✗) | Notes                                 |
+| --- | ----- | ----- | ----------------- | ------------------------------------- |
+| ... | ...   | 0.63  | 5 / 2 / 1         | 3 statements need additional coverage |
+| ... | ...   | 0.00  | 0 / 0 / 6         | 6 statements need test coverage       |
 ```
 
 **Wording rules for the By-Requirement Notes column**:
@@ -169,9 +168,9 @@ corresponding test step has been added and is passing.
   `"test file missing — see § Missing test files"`.
 - ❌ Never use: `"completely untested"`, `"NO TEST FILE"` (in the table —
   reserved for the dedicated section), `"entire requirement"`,
-  `"all behavior missing"`. These mislead readers into thinking the
-  requirement itself is unrepresented when in fact it has a test file with
-  partial steps, or its statements simply aren't fully exercised yet.
+  `"all behavior missing"`. These mislead readers into thinking the requirement
+  itself is unrepresented when in fact it has a test file with partial steps, or
+  its statements simply aren't fully exercised yet.
 
 #### 4b. Action Items (checkbox list — primary output)
 
@@ -188,18 +187,27 @@ sub-section with the following template:
 ```markdown
 ### messages-001 — Listeners can send messages using a held receipt
 
-File: [src/requirements/messages/001-send-message.requirement.test.ts](src/requirements/messages/001-send-message.requirement.test.ts)
+File:
+[src/requirements/messages/001-send-message.requirement.test.ts](src/requirements/messages/001-send-message.requirement.test.ts)
 Score: 0.50 · Statements: 5 ✓ / 2 ⚠ / 1 ✗
 
-- [ ] **Statement** (✗ uncovered): "The server MUST generate a UUIDv7 `message_id` and ensure `(sender_domain, message_id)` is unique per the local sender domain."
-      **Add step**: `await t.step("send_message generates a UUIDv7 message_id unique per sender_domain", ...)`
-      **Assert**: returned `message_id` parses as UUIDv7 (timestamp prefix decodes to a value within ±5s of `Date.now()`); a second `send_message` with the same args returns a distinct `message_id`.
-      **Spec ref**: requirement bullet 6 (Section 7.1).
+- [ ] **Statement** (✗ uncovered): "The server MUST generate a UUIDv7
+      `message_id` and ensure `(sender_domain, message_id)` is unique per the
+      local sender domain." **Add step**:
+      `await t.step("send_message generates a UUIDv7 message_id unique per sender_domain", ...)`
+      **Assert**: returned `message_id` parses as UUIDv7 (timestamp prefix
+      decodes to a value within ±5s of `Date.now()`); a second `send_message`
+      with the same args returns a distinct `message_id`. **Spec ref**:
+      requirement bullet 6 (Section 7.1).
 
-- [ ] **Statement** (⚠ partial — happy path only): "If the receiver returns a non-2xx response, the tool MUST surface a structured error to the caller including the receiver's error code when available."
-      **Add step**: `await t.step("send_message surfaces receiver error code on 4xx response", ...)`
-      **Assert**: with `withFailingCallbackServer` returning 422 + `{ error: { code: "E_RECEIVER_REJECTED" } }`, tool result has `ok: false`, `error.code === "E_RECEIVER_REJECTED"`.
-      **Spec ref**: requirement bullet 9.
+- [ ] **Statement** (⚠ partial — happy path only): "If the receiver returns a
+      non-2xx response, the tool MUST surface a structured error to the caller
+      including the receiver's error code when available." **Add step**:
+      `await t.step("send_message surfaces receiver error code on 4xx response", ...)`
+      **Assert**: with `withFailingCallbackServer` returning 422 +
+      `{ error: { code: "E_RECEIVER_REJECTED" } }`, tool result has `ok: false`,
+      `error.code === "E_RECEIVER_REJECTED"`. **Spec ref**: requirement
+      bullet 9.
 ```
 
 Wording rules for action items:
@@ -215,17 +223,17 @@ Wording rules for action items:
   the agent can confirm against higher authority.
 - ❌ Never aggregate two statements into one bullet, even if they live next to
   each other in the doc.
-- ❌ Never use vague phrasing like "test more cases" or
-  "improve coverage of error paths" — every checkbox is a single concrete step.
+- ❌ Never use vague phrasing like "test more cases" or "improve coverage of
+  error paths" — every checkbox is a single concrete step.
 - ❌ Never frame an item as "the requirement is untested" — the item is about
   one specific statement within a requirement that already has (or should have)
   a test file.
 
 #### 4c. Missing test files
 
-Reserved exclusively for requirements whose paired `*.requirement.test.ts`
-file does not exist on disk. This is the only place where a whole-requirement
-framing is correct.
+Reserved exclusively for requirements whose paired `*.requirement.test.ts` file
+does not exist on disk. This is the only place where a whole-requirement framing
+is correct.
 
 ```markdown
 ## Missing test files
@@ -235,7 +243,8 @@ the action items listed for this requirement above (if any), or — when no
 statements have been scored because the doc was unreachable — see
 `gap-analysis-report.md`.
 
-- [ ] `invitations-009` — create `src/requirements/invitations/009-cancel-invitation.requirement.test.ts`
+- [ ] `invitations-009` — create
+      `src/requirements/invitations/009-cancel-invitation.requirement.test.ts`
 - [ ] ...
 ```
 
@@ -297,12 +306,12 @@ behavior, run `gap-analysis` instead — that's the lower-authority gap.
 - **Over-counting MAY statements.** `MAY` clauses describe optional behavior; if
   no test exercises the option, that's _partial_, not uncovered, since the spec
   does not require the behavior to be implemented.
-- **Whole-requirement framing.** Phrases like "completely untested",
-  "no tests for this requirement", or bullet lists summarising several missing
-  behaviors under a single item defeat the report's purpose. The report exists
-  to enumerate atomic, checkbox-sized tasks. The only valid place to talk about
-  a whole requirement having no tests is § Missing test files, and only when
-  the test file genuinely does not exist on disk.
+- **Whole-requirement framing.** Phrases like "completely untested", "no tests
+  for this requirement", or bullet lists summarising several missing behaviors
+  under a single item defeat the report's purpose. The report exists to
+  enumerate atomic, checkbox-sized tasks. The only valid place to talk about a
+  whole requirement having no tests is § Missing test files, and only when the
+  test file genuinely does not exist on disk.
 - **Checkboxes outside § Action Items.** Do not add `- [ ]` to the by-category
   or by-requirement tables. Checkboxes are reserved for atomic, executable
   tasks; the tables are summaries, not work items.

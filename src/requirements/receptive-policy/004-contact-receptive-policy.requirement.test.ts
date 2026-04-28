@@ -111,6 +111,161 @@ Deno.test({
               assertEquals((result as { ok?: boolean }).ok, false);
             },
           );
+
+          await t.step(
+            "domain matching is case-insensitive (uppercase domain in contacts matches lowercase sender)",
+            async () => {
+              // Add a new policy where the contact entry uses an uppercase domain.
+              const upperHost = serverHost.toUpperCase();
+              const { status: addStatus, result: ciPolicy } = await callTool<{
+                policy_id: string;
+              }>(receiverToken, "add_receptive_policy", {
+                mode: "contact",
+                contacts: [{ domain: upperHost, domain_id: senderDomainId }],
+              });
+              assertEquals(addStatus, 200);
+              assertExists(ciPolicy);
+              assertExists(ciPolicy?.policy_id);
+
+              // Sender's envelope will have sender_domain === lowercase serverHost;
+              // the server MUST still match the uppercase contact entry.
+              const { status, result: inv } = await callTool<{
+                invitation_id?: string;
+                ok?: boolean;
+              }>(senderToken, "send_invitation", {
+                receiver_domain: serverHost,
+                receptive_policy_id: ciPolicy!.policy_id,
+                proposed_terms: { category: "billing" },
+              });
+              assertEquals(status, 200);
+              assertExists(inv);
+              assertExists(
+                inv?.invitation_id,
+                "invitation must succeed when domain differs only in case",
+              );
+            },
+          );
+
+          await t.step(
+            "same domain_id from a different domain does not satisfy the contact entry",
+            async () => {
+              // Create a policy whose contact entry uses senderDomainId but with a
+              // different domain.  The sender's actual domain is serverHost, so the
+              // composite pair will not match and the invitation must be rejected.
+              const { status: addStatus, result: diffPolicy } = await callTool<{
+                policy_id: string;
+              }>(receiverToken, "add_receptive_policy", {
+                mode: "contact",
+                contacts: [
+                  { domain: "other.example.test", domain_id: senderDomainId },
+                ],
+              });
+              assertEquals(addStatus, 200);
+              assertExists(diffPolicy);
+              assertExists(diffPolicy?.policy_id);
+
+              const { result: inv } = await callTool<{
+                ok?: boolean;
+                code?: string;
+              }>(senderToken, "send_invitation", {
+                receiver_domain: serverHost,
+                receptive_policy_id: diffPolicy!.policy_id,
+                proposed_terms: { category: "billing" },
+              });
+              assertExists(inv);
+              assertEquals(
+                (inv as { ok?: boolean }).ok,
+                false,
+                "invitation from a different domain must be rejected even when domain_id matches",
+              );
+            },
+          );
+
+          await t.step(
+            "domain_id matching is exact (one-character difference is rejected)",
+            async () => {
+              assertExists(senderDomainId);
+              // Produce a domain_id that differs from the sender's by exactly one character.
+              const lastChar = senderDomainId[senderDomainId.length - 1];
+              const altChar = lastChar === "a" ? "b" : "a";
+              const wrongDomainId = senderDomainId.slice(0, -1) + altChar;
+
+              const { status: addStatus, result: exactPolicy } = await callTool<
+                { policy_id: string }
+              >(receiverToken, "add_receptive_policy", {
+                mode: "contact",
+                contacts: [{ domain: serverHost, domain_id: wrongDomainId }],
+              });
+              assertEquals(addStatus, 200);
+              assertExists(exactPolicy);
+              assertExists(exactPolicy?.policy_id);
+
+              // senderToken carries the original senderDomainId, which does NOT match wrongDomainId.
+              const { result: inv } = await callTool<{ ok?: boolean }>(
+                senderToken,
+                "send_invitation",
+                {
+                  receiver_domain: serverHost,
+                  receptive_policy_id: exactPolicy!.policy_id,
+                  proposed_terms: { category: "billing" },
+                },
+              );
+              assertExists(inv);
+              assertEquals(
+                (inv as { ok?: boolean }).ok,
+                false,
+                "invitation must be rejected when domain_id differs by a single character",
+              );
+            },
+          );
+
+          await t.step(
+            "contacts list is immutable: removing and recreating yields a new policy_id",
+            async () => {
+              assertExists(policyId);
+              // Remove the original policy — the only way to change contacts.
+              const { status: removeStatus } = await callTool(
+                receiverToken,
+                "remove_receptive_policy",
+                { policy_id: policyId },
+              );
+              assertEquals(removeStatus, 200);
+
+              // Recreate with the same contacts list — the replacement MUST have a new policy_id.
+              const { status: addStatus, result: newPolicy } = await callTool<{
+                policy_id: string;
+              }>(receiverToken, "add_receptive_policy", {
+                mode: "contact",
+                contacts: [
+                  { domain: serverHost, domain_id: senderDomainId },
+                ],
+              });
+              assertEquals(addStatus, 200);
+              assertExists(newPolicy);
+              assertExists(newPolicy?.policy_id);
+              assertEquals(
+                newPolicy!.policy_id !== policyId,
+                true,
+                "replacement contact policy must receive a new policy_id",
+              );
+              // Original policy_id is now gone; using it must fail.
+              const { result: staleInv } = await callTool<{ ok?: boolean }>(
+                senderToken,
+                "send_invitation",
+                {
+                  receiver_domain: serverHost,
+                  receptive_policy_id: policyId,
+                  proposed_terms: { category: "billing" },
+                },
+              );
+              assertExists(staleInv);
+              assertEquals(
+                (staleInv as { ok?: boolean }).ok,
+                false,
+                "old policy_id must be rejected after delete-and-recreate",
+              );
+            },
+          );
         } finally {
           kv.close();
         }

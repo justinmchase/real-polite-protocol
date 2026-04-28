@@ -195,6 +195,8 @@ export class SubmitController extends Controller {
 
         // Auth per category
         if (envelope.category === "message") {
+          // x-rpp-invitation-id on a message envelope is a header-kind mismatch
+          if (invitationIdHeader) throw new InvalidAuthHeadersError();
           if (!receiptIdHeader) throw new MissingReceiptIdError();
           if (!signature) throw new MissingSignatureError();
           if (!timestamp) throw new MissingTimestampError();

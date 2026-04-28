@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertNotEquals } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
 import { computeHmac } from "../helpers/compute-hmac.ts";
 import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
@@ -245,6 +245,65 @@ Deno.test({
             const payload = await response.json();
             assertEquals(payload.ok, true);
             assertEquals(payload.accepted, true);
+          },
+        );
+
+        await t.step(
+          "rejects message envelope with x-rpp-invitation-id header (wrong kind) with E_INVALID_AUTH_HEADERS",
+          async () => {
+            // Sending only x-rpp-invitation-id (no x-rpp-receipt-id) on a
+            // message envelope is a header-kind mismatch and must be rejected.
+            const invitationId = crypto.randomUUID();
+            const signature = await computeHmac(
+              receiptSecret,
+              timestamp,
+              bodyBytes,
+            );
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-invitation-id": invitationId,
+                "x-rpp-signature": signature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 400);
+            const body = await response.json();
+            assertEquals(body.code, "E_INVALID_AUTH_HEADERS");
+          },
+        );
+
+        await t.step(
+          "envelope authentication failures return HTTP 403 not HTTP 401",
+          async () => {
+            // Credential-based failures (wrong HMAC) must use 403 Forbidden,
+            // never 401 Unauthorized (which would require a WWW-Authenticate header
+            // and a different auth flow).
+            const invalidSignature = "f".repeat(64);
+
+            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-rpp-receipt-id": receiptId,
+                "x-rpp-signature": invalidSignature,
+                "x-rpp-timestamp": timestamp,
+              },
+              body: bodyJson,
+            });
+
+            assertEquals(response.status, 403);
+            assertNotEquals(
+              response.status,
+              401,
+              "envelope endpoint must use 403, not 401, for credential failures",
+            );
+            const body = await response.json();
+            assertEquals(body.code, "E_RECEIPT_INVALID_SIGNATURE");
           },
         );
       } finally {

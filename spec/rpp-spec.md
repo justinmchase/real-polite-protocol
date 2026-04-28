@@ -525,6 +525,7 @@ body MUST be JSON with this base shape:
 - category MUST be one value from the category registry.
 - content_rating MUST be one value from the content rating registry.
 - reply_invite MAY be omitted or null.
+- metadata is OPTIONAL. See Section 7.1.3.
 
 ### 7.1.1 Maximum Message Size
 
@@ -585,6 +586,41 @@ SHOULD treat JSON bodies as opaque structured data intended for programmatic
 consumption.
 
 The 256 KB envelope limit (Section 7.1.1) applies regardless of `content_type`.
+
+### 7.1.3 Message Metadata
+
+> **Sub-protocol extension point.** The `metadata` field is intentionally left
+> open for higher-level protocols, tooling, and integrations to attach
+> pass-through data. It is NOT part of the core RPP message contract. Core
+> conformance does not require senders to include it or receivers to act on it.
+
+The `metadata` field is OPTIONAL on a message envelope. When present it MUST be
+a JSON object. When absent or null it is treated as an empty object `{}`.
+
+Servers MUST pass the `metadata` object through to the recipient unmodified —
+they MUST NOT strip, transform, or interpret its contents. Servers MUST surface
+`metadata` in the stored message record returned by read and list endpoints.
+
+To keep the total envelope size bounded and values reliably serializable,
+`metadata` values MUST conform to the same constraints as unverified custom
+claims (Section 9.6.1):
+
+| Constraint          | Limit                                                             |
+| ------------------- | ----------------------------------------------------------------- |
+| Allowed value types | `string`, `number`, `boolean`, `null`, or a flat array of those   |
+| String max length   | 512 characters per string value (including strings inside arrays) |
+| Array max items     | 20 items per array value                                          |
+| Nested objects      | NOT allowed — only scalars and flat arrays of scalars             |
+| Max keys            | 20 keys                                                           |
+| Key max length      | 64 characters per key name                                        |
+
+Servers MUST validate these constraints on inbound envelopes and MUST reject
+violating values with `E_INVALID_MESSAGE_ENVELOPE` (HTTP 400; see Section 11.2).
+
+Receivers MUST treat all `metadata` values as unverified, caller-supplied data.
+They MUST NOT make protocol-level routing or authorization decisions based on
+`metadata` content. Sub-protocols that define specific keys SHOULD namespace
+their keys (e.g., `"rpp.threading.in_reply_to"`) to avoid collisions.
 
 ### 7.2 Category Registry (Initial)
 
@@ -872,8 +908,8 @@ where two parties agree to communicate and need a brief mutual discovery window.
 #### 9.1.1.1 Receptive Window Shortcode
 
 When `open_receptive_window` is called, the server MUST generate a **shortcode**
-— a human-readable alias for the `policy_id` that is easier to share verbally
-or display in a chat than a raw UUID.
+— a human-readable alias for the `policy_id` that is easier to share verbally or
+display in a chat than a raw UUID.
 
 **Format.** The shortcode MUST be exactly 8 characters drawn from the lowercase
 alphanumeric alphabet (`[a-z0-9]`), randomly generated. At approximately 2.8
@@ -897,9 +933,9 @@ the underlying `policy_id` before applying all standard policy checks (expiry,
 mode, domain-filter, etc.).
 
 If the shortcode cannot be resolved (not found or already deleted), the server
-MUST reject the invitation with `E_RECEPTIVE_POLICY_NOT_FOUND`. If the
-shortcode resolves to an expired policy, the normal `E_RECEPTIVE_POLICY_EXPIRED`
-error applies.
+MUST reject the invitation with `E_RECEPTIVE_POLICY_NOT_FOUND`. If the shortcode
+resolves to an expired policy, the normal `E_RECEPTIVE_POLICY_EXPIRED` error
+applies.
 
 **Lifecycle.** The shortcode index entry MUST be written atomically with the
 policy record so the shortcode is usable immediately upon a successful
@@ -909,8 +945,8 @@ corresponding shortcode index entry MUST also be removed in the same atomic
 operation.
 
 **Scope.** Shortcodes are ONLY generated for time-bounded windows created via
-`open_receptive_window`. Standing policies created via `add_receptive_policy`
-do NOT receive shortcodes; they are referenced by their UUID `policy_id`.
+`open_receptive_window`. Standing policies created via `add_receptive_policy` do
+NOT receive shortcodes; they are referenced by their UUID `policy_id`.
 
 #### 9.1.2 Proximity Pairing
 
@@ -1996,38 +2032,38 @@ the listener holds (as sender).
 These tools manage the invitation lifecycle for both direct and public
 invitations.
 
-| Tool                       | Description                                                             |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `list_invitations`         | List pending, accepted, rejected, and expired invitations the listener  |
-|                            | has received, with filters for sender domain and status.                |
-| `review_invitation`        | Retrieve full details of a pending invitation including proposed terms. |
-| `accept_invitation`        | Accept a pending invitation, optionally with narrower terms per         |
-|                            | Section 9.3. Issues a receipt to the inviting domain.                   |
-| `reject_invitation`        | Reject a pending invitation.                                            |
-| `cancel_invitation`        | Cancel a direct invitation the listener sent, transitioning it to       |
-|                            | `cancelled`. Valid from `pending` or `accepted` state. All receipts     |
-|                            | derived from the invitation are immediately revoked (Section 9.2).      |
-| `send_invitation`          | Send an invitation to a receiver identified by `receiver_domain`        |
-|                            | and either `receptive_policy_id`, `shortcode` (Section 9.1.1.1), or    |
-|                            | `receipt_id`. The invitation envelope is delivered to the **receiver's**|
-|                            | submit endpoint, where the receiver's server resolves the policy,       |
-|                            | validates receptivity, and creates the invitation record.               |
-|                            | Optionally attaches sender claims (Section 9.6): `include_user_claims`  |
-|                            | and `include_admin_claims` select keys from the sending server's stored |
-|                            | verified metadata; `custom_claims` passes caller-supplied unverified    |
-|                            | data subject to the value constraints of Section 9.6.1.                 |
-| `create_public_invitation` | Create a public invitation (Section 9.4) with proposed terms,           |
-|                            | optional display name, description, trust gate, and expiration.         |
-| `update_public_invitation` | Update mutable fields on a public invitation (display_name,             |
-|                            | description, domain_filter) per Section 9.4.4.                          |
-| `cancel_public_invitation` | Cancel a public invitation. Receipts from prior acceptances remain      |
-|                            | valid unless individually revoked.                                      |
-| `list_public_invitations`  | List the listener's own public invitations, with filters for status.    |
-| `fetch_public_invitation`  | Fetch a remote public invitation by domain and invitation_id. Returns   |
-|                            | the invitation object including any verification attestation.           |
-| `accept_public_invitation` | Accept a remote public invitation, optionally with narrower terms.      |
-|                            | The server validates any domain_filter and issues a receipt to the      |
-|                            | hosting domain.                                                         |
+| Tool                       | Description                                                              |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `list_invitations`         | List pending, accepted, rejected, and expired invitations the listener   |
+|                            | has received, with filters for sender domain and status.                 |
+| `review_invitation`        | Retrieve full details of a pending invitation including proposed terms.  |
+| `accept_invitation`        | Accept a pending invitation, optionally with narrower terms per          |
+|                            | Section 9.3. Issues a receipt to the inviting domain.                    |
+| `reject_invitation`        | Reject a pending invitation.                                             |
+| `cancel_invitation`        | Cancel a direct invitation the listener sent, transitioning it to        |
+|                            | `cancelled`. Valid from `pending` or `accepted` state. All receipts      |
+|                            | derived from the invitation are immediately revoked (Section 9.2).       |
+| `send_invitation`          | Send an invitation to a receiver identified by `receiver_domain`         |
+|                            | and either `receptive_policy_id`, `shortcode` (Section 9.1.1.1), or      |
+|                            | `receipt_id`. The invitation envelope is delivered to the **receiver's** |
+|                            | submit endpoint, where the receiver's server resolves the policy,        |
+|                            | validates receptivity, and creates the invitation record.                |
+|                            | Optionally attaches sender claims (Section 9.6): `include_user_claims`   |
+|                            | and `include_admin_claims` select keys from the sending server's stored  |
+|                            | verified metadata; `custom_claims` passes caller-supplied unverified     |
+|                            | data subject to the value constraints of Section 9.6.1.                  |
+| `create_public_invitation` | Create a public invitation (Section 9.4) with proposed terms,            |
+|                            | optional display name, description, trust gate, and expiration.          |
+| `update_public_invitation` | Update mutable fields on a public invitation (display_name,              |
+|                            | description, domain_filter) per Section 9.4.4.                           |
+| `cancel_public_invitation` | Cancel a public invitation. Receipts from prior acceptances remain       |
+|                            | valid unless individually revoked.                                       |
+| `list_public_invitations`  | List the listener's own public invitations, with filters for status.     |
+| `fetch_public_invitation`  | Fetch a remote public invitation by domain and invitation_id. Returns    |
+|                            | the invitation object including any verification attestation.            |
+| `accept_public_invitation` | Accept a remote public invitation, optionally with narrower terms.       |
+|                            | The server validates any domain_filter and issues a receipt to the       |
+|                            | hosting domain.                                                          |
 
 ### 10B.5 Receptive Policy Tools
 
@@ -2044,7 +2080,7 @@ These tools manage the listener's receptive policy for incoming invitations
 |                           | specified duration and scope. Returns the new policy's `policy_id`    |
 |                           | and an 8-character alphanumeric `shortcode` (Section 9.1.1.1) that    |
 |                           | the listener can share in place of the UUID. RECOMMENDED for          |
-|                           | proximity pairing and AI-agent-mediated first-contact flows.           |
+|                           | proximity pairing and AI-agent-mediated first-contact flows.          |
 | `remove_receptive_policy` | Permanently delete a receptive policy. Closes a time-bounded window   |
 |                           | early or removes a standing policy. Invitations referencing the       |
 |                           | deleted `policy_id` are rejected with `E_RECEPTIVE_POLICY_NOT_FOUND`. |

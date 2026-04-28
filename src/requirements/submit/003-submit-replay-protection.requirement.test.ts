@@ -1,4 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
+import { FakeTime } from "@std/testing/time";
 import { withStartedServer } from "../helpers/with-started-server.ts";
 import { submitMessage } from "../helpers/submit-message.ts";
 import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
@@ -203,6 +204,49 @@ Deno.test({
           assertEquals(second.status, 400);
           const body = await second.json() as { code?: string };
           assertEquals(body.code, "E_INVITATION_NOT_PENDING");
+        },
+      );
+
+      await t.step(
+        "duplicate message is still rejected at 59 seconds (cache persists through freshness window)",
+        async () => {
+          // Freeze the clock so the server's timestamp validation uses fake time.
+          // Both the x-rpp-timestamp we send and the server's Date.now() check
+          // will use the same fake clock, keeping them in sync as we advance.
+          using fakeTime = new FakeTime();
+
+          const messageId = crypto.randomUUID();
+
+          // Submit at fake t = 0.
+          const first = await submitMessage({
+            receiptId,
+            receiptSecret,
+            messageId,
+            timestamp: new Date().toISOString(),
+            baseUrl,
+          });
+          assertEquals(first.status, 202);
+          await first.body?.cancel();
+
+          // Advance fake clock to t = 59s — still within the 60-second freshness
+          // window. The dedup cache MUST still reject the duplicate here, proving
+          // the cache entry outlives the full freshness period.
+          fakeTime.tick(59_000);
+
+          const second = await submitMessage({
+            receiptId,
+            receiptSecret,
+            messageId,
+            timestamp: new Date().toISOString(), // t + 59s, within freshness window
+            baseUrl,
+          });
+          assertEquals(second.status, 400);
+          const body = await second.json() as { code?: string };
+          assertEquals(
+            body.code,
+            "E_DUPLICATE_MESSAGE",
+            "cache entry must still be active at the 59-second mark",
+          );
         },
       );
     });

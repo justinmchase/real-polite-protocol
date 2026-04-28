@@ -17,8 +17,9 @@ enumerate messages addressed to their account (Section 10B.1).
   visible.
 - Each returned message includes at minimum: `message_id`, `sender_domain`,
   `category`, `content_rating`, `sent_at`, `received_at`, `subject`, `read`
-  (boolean), a snippet or full `body` per the tool's response shape, and
-  `sender_claims` (see `messages-006`).
+  (boolean), a snippet or full `body` per the tool's response shape, `metadata`
+  (when present on the stored message; see `messages-007`), and `sender_claims`
+  (see `messages-006`).
 - The tool MUST support filtering by:
   - `category` — one or more category registry values.
   - `sender_domain` — exact match (case-insensitive).

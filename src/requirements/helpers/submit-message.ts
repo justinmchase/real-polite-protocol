@@ -9,6 +9,7 @@ export interface SubmitMessageOptions {
   senderDomainId?: string;
   category?: string;
   baseUrl?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export async function submitMessage(
@@ -26,7 +27,9 @@ export async function submitMessage(
   const bodyJson = JSON.stringify({
     message_id: messageId,
     sender_domain: senderDomain,
-    ...(senderDomainId !== undefined ? { sender_domain_id: senderDomainId } : {}),
+    ...(senderDomainId !== undefined
+      ? { sender_domain_id: senderDomainId }
+      : {}),
     category,
     sent_at: "2026-04-20T00:00:00Z",
     message: {
@@ -34,6 +37,7 @@ export async function submitMessage(
       subject: "Test",
       body: { content_type: "text/markdown", content: "Hello." },
     },
+    ...(opts.metadata !== undefined ? { metadata: opts.metadata } : {}),
   });
   const bodyBytes = new TextEncoder().encode(bodyJson);
   const timestamp = opts.timestamp ?? new Date().toISOString();

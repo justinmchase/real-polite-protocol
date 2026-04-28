@@ -8,6 +8,7 @@ import type {
 import type { DomainIdentityRepository } from "../../repositories/mod.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
 import type { PaginatedResult, PaginationInput } from "../../utils/mod.ts";
+import { ActiveKeyDeletionError } from "./domain-identity.error.ts";
 
 export type DomainIdentityUpdate = Partial<Omit<DomainIdentity, "domain">>;
 
@@ -111,6 +112,11 @@ export class DomainIdentityManager {
   async deleteHistoricalVerificationKey(
     keyId: string,
   ): Promise<DeleteHistoricalKeyResult> {
+    // Protect against deleting the active (in-use) key.
+    const activeKey = await this.domainIdentity.getActiveVerificationKey();
+    if (activeKey?.key_id === keyId) {
+      throw new ActiveKeyDeletionError(keyId);
+    }
     await this.domainIdentity.deleteHistoricalVerificationKey(keyId);
     return {
       key_id: keyId,

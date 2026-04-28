@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { MESSAGE_CATEGORIES } from "../message-category.ts";
 
+const MetadataValueSchema = z.union([
+  z.string().max(512),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(
+    z.union([z.string().max(512), z.number(), z.boolean(), z.null()]),
+  ).max(20),
+]);
+
+export const MessageMetadataSchema = z
+  .record(z.string().max(64), MetadataValueSchema)
+  .refine((v) => Object.keys(v).length <= 20, {
+    message: "metadata exceeds 20 key limit",
+  });
+
+export type MessageMetadata = z.infer<typeof MessageMetadataSchema>;
+
 export const StoredMessageSchema = z.object({
   /** Internal DB ID (UUIDv7). Used as the KV primary key. */
   id: z.string(),
@@ -25,6 +43,7 @@ export const StoredMessageSchema = z.object({
       content: z.string(),
     }),
   }),
+  metadata: MessageMetadataSchema.optional(),
 });
 
 export type StoredMessage = z.infer<typeof StoredMessageSchema>;

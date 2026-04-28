@@ -562,7 +562,10 @@ Deno.test({
               message_id: crypto.randomUUID(),
               message: {
                 ...validMessageEnvelope.message,
-                body: { content_type: "application/json", content: "not json {{{" },
+                body: {
+                  content_type: "application/json",
+                  content: "not json {{{",
+                },
               },
             };
             const bodyJson = JSON.stringify(message);
