@@ -60,6 +60,12 @@ export class AuthDiscoveryController extends Controller {
     };
     app.get("/.well-known/oauth-protected-resource", protectedResourceHandler);
     app.get("/.well-known/oauth-protected-resource/", protectedResourceHandler);
+    // RFC 9728: when the resource URL has a path component, clients may
+    // look up metadata at `/.well-known/oauth-protected-resource{path}`.
+    app.get(
+      "/.well-known/oauth-protected-resource/mcp",
+      protectedResourceHandler,
+    );
 
     const authServerHandler = (
       ctx: { req: { url: string }; json: typeof Response.json },
@@ -73,6 +79,7 @@ export class AuthDiscoveryController extends Controller {
         issuer: origin,
         authorization_endpoint: `${origin}/authorize`,
         token_endpoint: `${origin}/token`,
+        registration_endpoint: `${origin}/register`,
         jwks_uri:
           `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
         response_types_supported: ["code"],
@@ -101,6 +108,12 @@ export class AuthDiscoveryController extends Controller {
     };
     app.get("/.well-known/oauth-authorization-server", authServerHandler);
     app.get("/.well-known/oauth-authorization-server/", authServerHandler);
+    // Resource-path-suffixed location for clients that derive AS metadata URL
+    // from the protected resource path (RFC 8414 / RFC 9728 compatibility).
+    app.get("/.well-known/oauth-authorization-server/mcp", authServerHandler);
+    // OpenID Provider Configuration (some MCP clients probe this path).
+    app.get("/.well-known/openid-configuration", authServerHandler);
+    app.get("/.well-known/openid-configuration/mcp", authServerHandler);
 
     app.get("/authorize", (ctx) => {
       const tenantId = this.config.azureTenantId;
@@ -160,6 +173,58 @@ export class AuthDiscoveryController extends Controller {
         status: upstream.status,
         headers,
       });
+    });
+
+    // RFC 7591 Dynamic Client Registration shim.
+    //
+    // Azure AD does not implement RFC 7591, but several MCP clients (e.g.
+    // Codex CLI) require dynamic registration and have no way to be given a
+    // pre-configured client_id. To support those clients without per-user
+    // configuration, this endpoint accepts any registration request and
+    // returns the pre-configured Azure public client app's client_id. The
+    // public client must already be configured in Azure AD with loopback
+    // redirect URIs and "Allow public client flows" enabled.
+    app.post("/register", async (ctx) => {
+      let body: Record<string, unknown> = {};
+      try {
+        const text = await ctx.req.text();
+        if (text.trim()) {
+          body = JSON.parse(text) as Record<string, unknown>;
+        }
+      } catch {
+        // ignore malformed body; we still return the static client_id
+      }
+
+      const clientId = this.config.azureClientAppClientId;
+      const issuedAt = Math.floor(Date.now() / 1000);
+      const redirectUris = Array.isArray(body.redirect_uris)
+        ? body.redirect_uris
+        : [];
+      const grantTypes = Array.isArray(body.grant_types)
+        ? body.grant_types
+        : ["authorization_code", "refresh_token"];
+      const responseTypes = Array.isArray(body.response_types)
+        ? body.response_types
+        : ["code"];
+      const clientName = typeof body.client_name === "string"
+        ? body.client_name
+        : "MCP Client";
+      const scope = typeof body.scope === "string" ? body.scope : undefined;
+
+      return ctx.json(
+        {
+          client_id: clientId,
+          client_id_issued_at: issuedAt,
+          // No secret — this is a public client (PKCE only).
+          token_endpoint_auth_method: "none",
+          grant_types: grantTypes,
+          response_types: responseTypes,
+          redirect_uris: redirectUris,
+          client_name: clientName,
+          ...(scope ? { scope } : {}),
+        },
+        201,
+      );
     });
   }
 }
