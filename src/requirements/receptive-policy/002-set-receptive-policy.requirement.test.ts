@@ -111,8 +111,7 @@ Deno.test({
               mode: "receipt",
             });
             // Either a tool-level error (result.isError) or a protocol error (body.error).
-            const isError =
-              body.isError === true ||
+            const isError = body.isError === true ||
               (body.result as { isError?: unknown } | undefined)?.isError ===
                 true ||
               body.error != null;
@@ -173,8 +172,14 @@ Deno.test({
             const stored = list.policies.find(
               (p) => p.policy_id === result.policy_id,
             );
-            assertExists(stored, "policy must appear in get_receptive_policies");
-            assertEquals(stored.domain_filter?.rules?.[0].pattern, "*.university.edu");
+            assertExists(
+              stored,
+              "policy must appear in get_receptive_policies",
+            );
+            assertEquals(
+              stored.domain_filter?.rules?.[0].pattern,
+              "*.university.edu",
+            );
           },
         );
       });

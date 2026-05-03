@@ -13,8 +13,7 @@ Deno.test({
             headers: {
               origin: "https://browser.example",
               "access-control-request-method": "POST",
-              "access-control-request-headers":
-                "authorization, content-type",
+              "access-control-request-headers": "authorization, content-type",
             },
           });
 

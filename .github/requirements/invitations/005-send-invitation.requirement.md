@@ -55,3 +55,17 @@ both or neither is invalid.
   delivery to the receiver's domain.
 - If the receiver's server rejects the submission (non-2xx), the tool MUST
   surface an error to the caller.
+
+## Same-domain (local) delivery
+
+When `receiver_domain` equals the sender's own domain the envelope MUST be
+delivered by calling the local invitation manager directly, **without** making
+an outbound HTTP request. This bypasses the edge-runtime self-loop restriction
+(HTTP 508 "Loop Detected" returned by Deno Deploy when a deployment fetches its
+own domain) and allows two users on the same server to exchange invitations.
+
+- The local delivery path MUST produce the same observable result as the remote
+  HTTP path: the invitation is stored as `pending`, the `delivery` block is
+  present, and the tool returns `invitation_id` and `created_at`.
+- The `delivery.token` MUST still be generated and persisted so receipt
+  callbacks remain authenticatable when the invitation is later accepted.

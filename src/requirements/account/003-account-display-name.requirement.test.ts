@@ -79,7 +79,9 @@ Deno.test("req:account-003 - Account display_name is optional and not required f
           assertEquals(r3?.display_name, null);
 
           // Verify cleared.
-          const { result: r4 } = await callTool<{ display_name: string | null }>(
+          const { result: r4 } = await callTool<
+            { display_name: string | null }
+          >(
             token,
             "get_display_name",
             {},

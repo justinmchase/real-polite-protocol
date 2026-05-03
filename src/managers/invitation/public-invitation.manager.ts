@@ -12,7 +12,11 @@ import type { ReceiptManager } from "../receipt/receipt.manager.ts";
 
 export class PublicInvitationNotFoundError extends ApplicationError {
   constructor(invitationId: string) {
-    super(404, "E_PUBLIC_INVITATION_NOT_FOUND", `Public invitation ${invitationId} not found`);
+    super(
+      404,
+      "E_PUBLIC_INVITATION_NOT_FOUND",
+      `Public invitation ${invitationId} not found`,
+    );
   }
 }
 
@@ -219,7 +223,10 @@ export class PublicInvitationManager {
 
     if (inv.domain_filter) {
       if (!evaluateDomainFilter(inv.domain_filter, acceptorDomain)) {
-        throw new PublicInvitationDomainFilterError(invitationId, acceptorDomain);
+        throw new PublicInvitationDomainFilterError(
+          invitationId,
+          acceptorDomain,
+        );
       }
     }
 

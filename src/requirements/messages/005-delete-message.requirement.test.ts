@@ -239,7 +239,10 @@ Deno.test({
                 receiver_oid: accountOid,
                 sender_domain: senderDomainForReceipt,
                 status: "pending",
-                proposed_terms: { category: "billing", max_content_rating: "G" },
+                proposed_terms: {
+                  category: "billing",
+                  max_content_rating: "G",
+                },
                 created_at: new Date().toISOString(),
               });
 

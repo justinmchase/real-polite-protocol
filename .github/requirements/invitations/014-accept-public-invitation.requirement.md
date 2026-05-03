@@ -37,5 +37,5 @@ When the hosting domain receives an acceptance:
 ## Expected outcomes
 
 - On success, the tool returns a receipt enabling future communication.
-- If the invitation does not exist, has expired, or has reached `max_acceptances`,
-  the tool MUST surface a structured error to the caller.
+- If the invitation does not exist, has expired, or has reached
+  `max_acceptances`, the tool MUST surface a structured error to the caller.

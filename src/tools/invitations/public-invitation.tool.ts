@@ -43,7 +43,9 @@ const PublicInvitationOutputSchema = {
 };
 
 const CreatePublicInvitationInputSchema = {
-  proposed_terms: ProposedTermsSchema.describe("Receipt terms offered to acceptors"),
+  proposed_terms: ProposedTermsSchema.describe(
+    "Receipt terms offered to acceptors",
+  ),
   display_name: z.string().optional().describe(
     "Optional Unicode display name for human presentation",
   ),
@@ -190,7 +192,9 @@ export class PublicInvitationTool {
         let invitations = await this.publicInvitationManager.list(auth.oid);
 
         if (params.status) {
-          invitations = invitations.filter((inv) => inv.status === params.status);
+          invitations = invitations.filter((inv) =>
+            inv.status === params.status
+          );
         }
 
         const pageSize = params.page_size ?? 50;
@@ -290,8 +294,8 @@ export class PublicInvitationTool {
 
         if (isLocal) {
           const acceptorDomain = localDomain;
-          const { invitation, receipt } =
-            await this.publicInvitationManager.accept(
+          const { invitation, receipt } = await this.publicInvitationManager
+            .accept(
               params.invitation_id,
               auth.oid,
               acceptorDomain,

@@ -14,9 +14,9 @@ listener can retrieve a public invitation from a remote (or local) RPP domain by
 
 - The tool is available to any authenticated account.
 - The tool requires `domain` and `invitation_id`.
-- The server fetches the public invitation from the hosting domain's unauthenticated
-  endpoint (`GET /rpp/v1/invitations/{invitation_id}`); the request MUST NOT
-  include the caller's credentials to the remote server.
+- The server fetches the public invitation from the hosting domain's
+  unauthenticated endpoint (`GET /rpp/v1/invitations/{invitation_id}`); the
+  request MUST NOT include the caller's credentials to the remote server.
 - The tool returns the full public invitation object, including any
   `verification` attestation if present (Section 9.5).
 - If the remote invitation does not exist or the hosting domain is unreachable,

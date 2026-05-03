@@ -6,8 +6,7 @@ import {
 } from "../helpers/with-auth-test-context.ts";
 
 Deno.test({
-  name:
-    "req:invitations-010 - Listeners can create a public invitation",
+  name: "req:invitations-010 - Listeners can create a public invitation",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ callTool }) => {

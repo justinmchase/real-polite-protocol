@@ -74,8 +74,8 @@ export class PublicInvitationController extends Controller {
         parseResult.data;
 
       try {
-        const { invitation, receipt } =
-          await this.publicInvitationManager.accept(
+        const { invitation, receipt } = await this.publicInvitationManager
+          .accept(
             invitationId,
             acceptor_oid,
             acceptor_domain,
@@ -87,10 +87,17 @@ export class PublicInvitationController extends Controller {
           issued_at: receipt.issued_at,
         });
       } catch (err) {
-        const e = err as { statusCode?: number; code?: string; message?: string };
+        const e = err as {
+          statusCode?: number;
+          code?: string;
+          message?: string;
+        };
         const status = e.statusCode ?? 400;
         return ctx.json(
-          { ok: false, error: { code: e.code ?? "E_UNKNOWN", message: e.message } },
+          {
+            ok: false,
+            error: { code: e.code ?? "E_UNKNOWN", message: e.message },
+          },
           status as 400 | 403 | 404,
         );
       }

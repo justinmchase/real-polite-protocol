@@ -13,8 +13,8 @@ legitimate browser clients.
 
 ## Expected behavior
 
-- `OPTIONS /mcp` (CORS preflight) MUST succeed without authentication and
-  return appropriate `Access-Control-Allow-*` headers.
+- `OPTIONS /mcp` (CORS preflight) MUST succeed without authentication and return
+  appropriate `Access-Control-Allow-*` headers.
 - Non-preflight `/mcp` responses MUST include `Access-Control-Allow-Origin`
   (echoing the request `Origin` when present, otherwise `*`) and `Vary: Origin`.
 - Responses MUST expose `WWW-Authenticate` and `Mcp-Session-Id` via

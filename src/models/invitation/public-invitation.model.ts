@@ -7,7 +7,9 @@ export const PublicInvitationStatusSchema = z.enum([
   "expired",
 ]);
 
-export type PublicInvitationStatus = z.infer<typeof PublicInvitationStatusSchema>;
+export type PublicInvitationStatus = z.infer<
+  typeof PublicInvitationStatusSchema
+>;
 
 export const PublicInvitationSchema = z.object({
   invitation_id: z.string(),

@@ -154,6 +154,41 @@ Deno.test({
               assertEquals(mcpResult?.isError, true);
             },
           );
+
+          await t.step(
+            "same-domain delivery stores invitation without outbound HTTP",
+            async () => {
+              // receiverDomain is the same server as the sender — this exercises
+              // the local delivery path (no HTTP round-trip) that avoids the
+              // Deno Deploy 508 self-loop restriction.
+              const { status, result } = await callTool<
+                { invitation_id?: string; created_at?: string }
+              >(token, "send_invitation", {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "support" },
+              });
+
+              assertEquals(status, 200);
+              assertExists(result);
+              assertExists(result.invitation_id);
+              assertExists(result.created_at);
+
+              // Invitation must be stored locally with a delivery block.
+              const stored = await kv.get([
+                "invitations",
+                result.invitation_id,
+              ]);
+              assertExists(stored.value);
+              const invitation = stored.value as Record<string, unknown>;
+              assertEquals(invitation.status, "pending");
+              const delivery = invitation.delivery as
+                | Record<string, unknown>
+                | undefined;
+              assertExists(delivery);
+              assertExists(delivery.token); // delivery token persisted for callback auth
+            },
+          );
         } finally {
           kv.close();
         }

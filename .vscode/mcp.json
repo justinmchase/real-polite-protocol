@@ -6,7 +6,7 @@
     //   }
     "rpp": {
       "url": "https://real-polite-protocol.justinmchase.deno.net/mcp",
-      "type": "http",
+      "type": "http"
     }
   },
   "inputs": []
