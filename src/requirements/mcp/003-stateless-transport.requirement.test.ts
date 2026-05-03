@@ -113,16 +113,25 @@ Deno.test({
                 "authorization": `Bearer ${token}`,
               },
             });
-            await response.body?.cancel();
+            const body = await response.text();
             assertEquals(
               response.status,
               200,
               "GET /mcp MUST return 200 so SSE clients do not enter a tight retry loop",
             );
             assertEquals(
+              response.headers.get("content-type"),
+              "text/event-stream",
+              "GET /mcp MUST return Content-Type: text/event-stream",
+            );
+            assertEquals(
               response.headers.get("mcp-session-id"),
               null,
               "GET /mcp MUST NOT assign a session ID in stateless mode",
+            );
+            assert(
+              body.includes("retry:"),
+              "GET /mcp SSE body MUST include a retry: directive to throttle client reconnects",
             );
           },
         );
