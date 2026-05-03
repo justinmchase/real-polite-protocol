@@ -16,6 +16,11 @@ import type { Tool } from "../../tools/mod.ts";
  *   - No `Deno.Kv.watch` loop → isolates are not kept alive indefinitely.
  *   - No `Mcp-Session-Id` header returned → clients never enter a reconnect
  *     cascade caused by stale session IDs across isolate evictions.
+ *
+ * GET requests (SSE channel open) are passed through to the transport, which
+ * returns 200 text/event-stream. This prevents SSE clients (e.g. VS Code)
+ * from entering a tight 1/s retry loop that would occur if the server
+ * returned 405.
  */
 export class McpService {
   private constructor() {}
@@ -29,12 +34,6 @@ export class McpService {
     tools: Tool[],
     auth: AuthInfo,
   ): Promise<Response> {
-    // GET is only used for the SSE push channel in stateful mode. In
-    // stateless mode there is no push channel, so we reject it explicitly.
-    if (request.method === "GET") {
-      return new Response(null, { status: 405 });
-    }
-
     const server = this.buildServer(tools, auth);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
