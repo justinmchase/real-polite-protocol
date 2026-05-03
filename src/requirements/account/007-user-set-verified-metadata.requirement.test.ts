@@ -145,6 +145,62 @@ Deno.test({
             assertEquals(record.verified_fields?.arbitrary_field, undefined);
           },
         );
+
+        await t.step(
+          "set_user_verified_metadata does not modify admin_verified_fields even for overlapping keys",
+          async () => {
+            const adminToken = await issueToken({
+              oid: "oid-admin-guard",
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            // The target account must exist before the admin can set metadata on it.
+            const userToken = await issueToken({
+              oid: "oid-admin-guard-user",
+              scope: requiredScopes.join(" "),
+              name: "User Set Name",
+            });
+            await callTool(userToken, "set_user_verified_metadata");
+
+            // Seed admin-verified fields for the target account.
+            await callTool(adminToken, "set_admin_verified_metadata", {
+              oid: "oid-admin-guard-user",
+              verified_fields: {
+                name: "Admin Set Name",
+                title: "Director",
+              },
+            });
+
+            // User refreshes their own metadata with the same key — admin fields must survive.
+            const { status, body } = await callTool(
+              userToken,
+              "set_user_verified_metadata",
+            );
+            assertEquals(status, 200);
+
+            const text = (
+              body.result as { content?: Array<{ text?: string }> }
+            ).content?.[0]?.text;
+            assertExists(text);
+
+            const record = JSON.parse(text) as {
+              admin_verified_fields?: Record<string, string>;
+            };
+
+            // Admin fields must be unchanged — user refresh cannot overwrite them.
+            assertEquals(
+              record.admin_verified_fields?.name,
+              "Admin Set Name",
+              "admin_verified_fields.name must not be overwritten by user refresh",
+            );
+            assertEquals(
+              record.admin_verified_fields?.title,
+              "Director",
+              "admin_verified_fields.title must not be touched by user refresh",
+            );
+          },
+        );
       });
     });
   },

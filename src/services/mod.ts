@@ -25,7 +25,7 @@ export async function initServices(
   const config = await ConfigService.create(options.port);
   const kv = await KvService.create(logger, options.kvPath ?? config.kvPath);
   const events = EventService.create(kv);
-  const mcp = McpService.create(events, kv);
+  const mcp = McpService.create();
   const auth = AuthService.create(logger, config);
   return { config, kv, events, mcp, auth };
 }

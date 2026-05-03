@@ -44,6 +44,30 @@ Deno.test("req:account-006 - MCP exposes get_permissions for current account", a
           assertExists(permissions.account_id);
         },
       );
+
+      await t.step(
+        "get_permissions result is always scoped to calling account regardless of extra identifier arguments",
+        async () => {
+          const token = await issueToken({
+            oid: "oid-scoped-caller",
+            scope: requiredScopes.join(" "),
+          });
+
+          // Passing a foreign oid as an argument must not affect which account is returned.
+          const permissions = await callGetPermissions(
+            token,
+            { oid: "oid-foreign-account" },
+            baseUrl,
+          );
+
+          assertEquals(
+            permissions.oid,
+            "oid-scoped-caller",
+            "result oid must be the caller's own oid, not the argument",
+          );
+          assertExists(permissions.account_id);
+        },
+      );
     });
   });
 });

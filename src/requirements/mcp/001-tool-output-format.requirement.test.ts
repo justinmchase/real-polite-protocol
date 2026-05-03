@@ -4,6 +4,10 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import {
+  callToolsList,
+  type ToolsListResult,
+} from "../helpers/call-tools-list.ts";
 
 Deno.test({
   name: "req:mcp-001 - Tools use structured output with outputSchema",
@@ -102,6 +106,106 @@ Deno.test({
                 result.structuredContent,
                 `${toolName} result missing structuredContent — toolResult() helper must be used`,
               );
+            }
+          },
+        );
+
+        await t.step(
+          "tools/list response includes outputSchema for every registered tool",
+          async () => {
+            const token = await issueToken({
+              oid: crypto.randomUUID(),
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            const { status, body } = await callToolsList(baseUrl, token);
+            assertEquals(status, 200);
+            const result = body.result as ToolsListResult | undefined;
+            assertExists(result, "tools/list response missing result");
+
+            for (const tool of result.tools) {
+              assertExists(
+                tool.outputSchema,
+                `tool "${tool.name}" must declare an outputSchema`,
+              );
+            }
+          },
+        );
+
+        await t.step(
+          "tool registration uses registerTool — no deprecated .tool() calls in src/tools/",
+          async () => {
+            // Scan every .ts file under src/tools/ and assert there are no
+            // calls to the deprecated .tool() method (only registerTool is allowed).
+            const toolsDir = new URL("../../tools/", import.meta.url)
+              .pathname;
+
+            let deprecatedCount = 0;
+            const violations: string[] = [];
+
+            async function scanDir(dir: string): Promise<void> {
+              for await (const entry of Deno.readDir(dir)) {
+                const fullPath = `${dir}/${entry.name}`;
+                if (entry.isDirectory) {
+                  await scanDir(fullPath);
+                } else if (entry.name.endsWith(".ts")) {
+                  const source = await Deno.readTextFile(fullPath);
+                  // Match server.tool( or .tool( patterns (not registerTool)
+                  const matches = source.match(/\bserver\.tool\s*\(/g) ?? [];
+                  if (matches.length > 0) {
+                    deprecatedCount += matches.length;
+                    violations.push(
+                      `${entry.name}: ${matches.length} deprecated .tool() call(s)`,
+                    );
+                  }
+                }
+              }
+            }
+
+            await scanDir(toolsDir);
+            assertEquals(
+              deprecatedCount,
+              0,
+              `Deprecated server.tool() calls found:\n${violations.join("\n")}`,
+            );
+          },
+        );
+
+        await t.step(
+          "tool result content array is never text-only without a structuredContent field",
+          async () => {
+            const token = await issueToken({
+              oid: crypto.randomUUID(),
+              roles: ["domain.admin"],
+              scope: requiredScopes.join(" "),
+            });
+
+            const toolNames = [
+              "get_permissions",
+              "list_contacts",
+              "get_domain_identity",
+              "list_invitations",
+              "list_messages",
+              "get_receptive_policies",
+            ];
+
+            for (const toolName of toolNames) {
+              const { status, body } = await callTool(token, toolName);
+              assertEquals(status, 200, `${toolName} returned non-200 status`);
+              assertExists(body.result, `${toolName} response missing result`);
+              const result = body.result as {
+                content?: Array<{ type?: string }>;
+                structuredContent?: unknown;
+              };
+
+              // If content is present, structuredContent MUST also be present.
+              if (result.content && result.content.length > 0) {
+                assertExists(
+                  result.structuredContent,
+                  `${toolName}: content present but structuredContent is absent`,
+                );
+              }
             }
           },
         );

@@ -238,6 +238,53 @@ Deno.test({
               );
             },
           );
+          await t.step(
+            "delivery token is rejected on second use after successful 202 acceptance",
+            async () => {
+              await withCallbackServer(async (callbackDomain, getCaptures) => {
+                const invitationId = crypto.randomUUID();
+                const deliveryToken = crypto.randomUUID();
+
+                await kv.set(["invitations", invitationId], {
+                  invitation_id: invitationId,
+                  receiver_oid: accountOid,
+                  sender_domain: "sender.example",
+                  status: "pending",
+                  proposed_terms: { category: "billing" },
+                  delivery: { domain: callbackDomain, token: deliveryToken },
+                  created_at: new Date().toISOString(),
+                });
+
+                // First acceptance should succeed.
+                await callTool(token, "accept_invitation", {
+                  invitation_id: invitationId,
+                });
+                assertEquals(getCaptures().length, 1);
+
+                // Second acceptance on the same now-accepted invitation must fail.
+                const { status, body } = await callTool(
+                  token,
+                  "accept_invitation",
+                  { invitation_id: invitationId },
+                );
+                assertEquals(
+                  status,
+                  200,
+                  "tool call itself should return 200 (tool-level error)",
+                );
+                // The tool should return a structured error — not a second success.
+                const bodyUnknown = body as unknown as {
+                  isError?: boolean;
+                  result?: { isError?: boolean };
+                };
+                assertEquals(
+                  bodyUnknown.isError ?? bodyUnknown.result?.isError,
+                  true,
+                  "second accept must return a tool-level error",
+                );
+              });
+            },
+          );
         } finally {
           kv.close();
         }

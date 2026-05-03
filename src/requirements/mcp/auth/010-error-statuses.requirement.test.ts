@@ -57,6 +57,32 @@ Deno.test({
             assertEquals(typeof body.error, "string");
           },
         );
+
+        await t.step(
+          "auth error response body contains a machine-readable E_-prefixed error code",
+          async () => {
+            // Verify the contract that ALL auth errors use E_ prefix codes.
+            const response = await fetch(`${baseUrl}/mcp`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({}),
+            });
+
+            assertEquals(response.status, 401);
+            const body = await response.json();
+            assertEquals(body.ok, false);
+            assertEquals(
+              typeof body.code,
+              "string",
+              "error body must have a string code field",
+            );
+            assertEquals(
+              (body.code as string).startsWith("E_"),
+              true,
+              `error code "${body.code}" must start with "E_"`,
+            );
+          },
+        );
       });
     });
   },

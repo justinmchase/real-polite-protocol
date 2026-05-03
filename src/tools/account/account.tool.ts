@@ -37,6 +37,12 @@ const VerifiedMetadataOutputSchema = {
   updated_at: outputDate().describe("ISO 8601 timestamp of last update"),
 };
 
+const DisplayNameOutputSchema = {
+  display_name: z.string().nullable().describe(
+    "The account's display name, or null if not set",
+  ),
+};
+
 export class AccountTool {
   constructor(private readonly accountManager: AccountManager) {}
 
@@ -80,6 +86,42 @@ export class AccountTool {
         outputSchema: VerifiedMetadataOutputSchema,
       },
       setUserVerifiedMetadata,
+    );
+
+    server.registerTool(
+      "set_display_name",
+      {
+        description:
+          "Set or clear the display name for the authenticated account. Pass null to clear.",
+        inputSchema: {
+          display_name: z.string().max(256).nullable().describe(
+            "Display name (≤256 chars) to set, or null to clear",
+          ),
+        },
+        outputSchema: DisplayNameOutputSchema,
+      },
+      withToolErrorHandling(
+        async ({ display_name }: { display_name: string | null }) => {
+          const result = await this.accountManager.setDisplayName(
+            auth,
+            display_name,
+          );
+          return toolResult(result);
+        },
+      ),
+    );
+
+    server.registerTool(
+      "get_display_name",
+      {
+        description: "Get the display name for the authenticated account.",
+        inputSchema: {},
+        outputSchema: DisplayNameOutputSchema,
+      },
+      withToolErrorHandling(async () => {
+        const result = await this.accountManager.getDisplayName(auth);
+        return toolResult(result);
+      }),
     );
   }
 }

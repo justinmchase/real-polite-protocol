@@ -173,4 +173,23 @@ export class AccountManager {
       next_resume_token: page.next_resume_token,
     };
   }
+
+  async setDisplayName(
+    auth: AuthInfo,
+    displayName: string | null,
+  ): Promise<{ display_name: string | null }> {
+    const account = await this.ensureAccount(auth);
+    const updated = await this.accounts.setDisplayName(
+      account.oid,
+      displayName,
+    );
+    return { display_name: updated.display_name ?? null };
+  }
+
+  async getDisplayName(
+    auth: AuthInfo,
+  ): Promise<{ display_name: string | null }> {
+    const account = await this.ensureAccount(auth);
+    return { display_name: account.display_name ?? null };
+  }
 }

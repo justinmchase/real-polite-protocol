@@ -202,6 +202,23 @@ export class AccountRepository {
     return await this.writeVerifiedMetadata(record);
   }
 
+  async setDisplayName(
+    oid: string,
+    displayName: string | null,
+  ): Promise<Account> {
+    const key: Deno.KvKey = ["accounts", "by_oid", oid];
+    const existing = await this.kv.store.get<unknown>(key);
+    if (!existing.value) {
+      throw new AccountNotFoundError(oid);
+    }
+    const { display_name: _dn, ...base } = AccountSchema.parse(existing.value);
+    const updated: Account = displayName !== null
+      ? { ...base, display_name: displayName, updated_at: new Date() }
+      : { ...base, updated_at: new Date() };
+    await this.kv.store.set(key, updated);
+    return updated;
+  }
+
   async listVerifiedMetadata(): Promise<UserVerifiedMetadataRecord[]> {
     const entries = this.kv.store.list<StoredVerifiedMetadataRecord>({
       prefix: VERIFIED_METADATA_PREFIX,

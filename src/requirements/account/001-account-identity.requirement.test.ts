@@ -48,6 +48,28 @@ Deno.test("req:account-001 - Account identity maps uniquely and stably to oid", 
           assertEquals(accountB.oid, "account-identity-oid-b");
         },
       );
+
+      await t.step(
+        "account creation succeeds and returns a stable account id when no display name is provided",
+        async () => {
+          // Token has no name or display_name field — account must still be created.
+          const token = await issueToken({
+            oid: "account-identity-oid-no-name",
+            scope: requiredScopes.join(" "),
+            // Intentionally omit name / preferred_username
+          });
+
+          const result = await callGetPermissions(token, {}, baseUrl);
+          assertExists(
+            result.account_id,
+            "account_id must be returned even without a display name",
+          );
+          assertEquals(
+            result.oid,
+            "account-identity-oid-no-name",
+          );
+        },
+      );
     });
   });
 });

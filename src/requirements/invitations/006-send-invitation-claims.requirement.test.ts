@@ -185,6 +185,164 @@ Deno.test({
             }
           },
         );
+
+        await t.step(
+          "custom claims are placed under the distinct claims.custom key, separate from user and admin",
+          async () => {
+            const { result: inv } = await callTool<{ invitation_id?: string }>(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                custom_claims: { greeting: "hello", score: 42 },
+              },
+            );
+            assertExists(inv?.invitation_id);
+
+            const kv = await Deno.openKv(kvPath);
+            try {
+              const entry = await kv.get<Record<string, unknown>>(
+                ["invitations", inv.invitation_id],
+              );
+              assertExists(entry.value, "invitation must be stored in KV");
+              const claims = entry.value.claims as
+                | {
+                  custom?: Record<string, unknown>;
+                  user?: Record<string, unknown>;
+                  admin?: Record<string, unknown>;
+                }
+                | undefined;
+
+              // Custom claims go under claims.custom, not under claims.user or claims.admin.
+              assertEquals(
+                claims?.custom?.greeting,
+                "hello",
+                "claims.custom.greeting must equal the provided value",
+              );
+              assertEquals(
+                claims?.custom?.score,
+                42,
+                "claims.custom.score must equal the provided value",
+              );
+              assertEquals(
+                claims?.user?.greeting,
+                undefined,
+                "claims.user must not contain the custom greeting key",
+              );
+              assertEquals(
+                claims?.admin?.greeting,
+                undefined,
+                "claims.admin must not contain the custom greeting key",
+              );
+            } finally {
+              kv.close();
+            }
+          },
+        );
+
+        await t.step(
+          "send_invitation does not allow injecting user or admin claim values directly as arguments",
+          async () => {
+            // The schema only accepts include_user_claims as an array of keys.
+            // Attempting to pass raw user/admin value maps must not affect the
+            // resolved claims — the server is the sole source of those values.
+            const { status, result: inv } = await callTool<
+              { invitation_id?: string }
+            >(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                // These extra fields are not part of the input schema.
+                user: { name: "Injected Name" },
+                admin: { title: "Fake Title" },
+              },
+            );
+
+            assertEquals(
+              status,
+              200,
+              "send_invitation must succeed even if unknown fields are passed",
+            );
+            assertExists(inv?.invitation_id);
+
+            // The stored invitation must NOT contain user/admin claims with injected values.
+            const kv = await Deno.openKv(kvPath);
+            try {
+              const entry = await kv.get<Record<string, unknown>>(
+                ["invitations", inv.invitation_id],
+              );
+              assertExists(entry.value);
+              const claims = entry.value.claims as
+                | {
+                  user?: Record<string, unknown>;
+                  admin?: Record<string, unknown>;
+                }
+                | undefined;
+
+              assertEquals(
+                claims?.user?.name,
+                undefined,
+                "injected user.name must not appear in claims.user",
+              );
+              assertEquals(
+                claims?.admin?.title,
+                undefined,
+                "injected admin.title must not appear in claims.admin",
+              );
+            } finally {
+              kv.close();
+            }
+          },
+        );
+
+        await t.step(
+          "invitation envelope user claim values match stored user_verified_fields, not caller-supplied data",
+          async () => {
+            // Alice's token has name="Alice Smith"; set_user_verified_metadata
+            // was called at test setup, so name is already in the store.
+            const { result: inv } = await callTool<{ invitation_id?: string }>(
+              token,
+              "send_invitation",
+              {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: policyId,
+                proposed_terms: { category: "correspondence" },
+                include_user_claims: ["name", "email"],
+              },
+            );
+            assertExists(inv?.invitation_id);
+
+            const kv = await Deno.openKv(kvPath);
+            try {
+              const entry = await kv.get<Record<string, unknown>>(
+                ["invitations", inv.invitation_id],
+              );
+              assertExists(entry.value);
+              const claims = entry.value.claims as
+                | { user?: Record<string, unknown> }
+                | undefined;
+
+              // Values must originate from the server's verified metadata store.
+              assertEquals(
+                claims?.user?.name,
+                "Alice Smith",
+                "claims.user.name must equal the value stored by set_user_verified_metadata",
+              );
+              assertEquals(
+                claims?.user?.email,
+                "alice@sender.example",
+                "claims.user.email must equal the value stored by set_user_verified_metadata",
+              );
+            } finally {
+              kv.close();
+            }
+          },
+        );
       });
     });
   },
