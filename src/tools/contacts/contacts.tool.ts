@@ -161,7 +161,7 @@ type InviteContactArgs = z.infer<z.ZodObject<typeof InviteContactInputSchema>>;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-import type { Contact } from "../../models/mod.ts";
+import type { Contact, InvitationClaims, ReceiptTerms } from "../../models/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 
 function toContactOutput(c: Contact) {
@@ -328,26 +328,42 @@ export class ContactTool {
           },
         };
 
-        const receiverIsLocalhost = contact.domain === "localhost" ||
-          contact.domain.startsWith("localhost:");
-        const scheme = receiverIsLocalhost ? "http" : "https";
-        const url = `${scheme}://${contact.domain}/rpp/v1/envelopes`;
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(envelope),
-        });
-
-        if (!response.ok) {
-          const body = await response.text();
-          throw new Error(
-            `Failed to deliver invitation to ${contact.domain}: HTTP ${response.status} — ${body}`,
+        if (contact.domain === senderDomain) {
+          // Same-domain: bypass HTTP to avoid Deno Deploy 508 self-loop.
+          await this.invitationManager.deliverLocally(
+            invitationId,
+            messageId,
+            senderDomain,
+            claims as InvitationClaims,
+            params.receptive_policy_id,
+            undefined, // shortcode
+            params.receipt_id,
+            params.proposed_terms as ReceiptTerms,
+            params.expires_at,
+            { domain: senderDomain, token: deliveryToken },
           );
-        }
+        } else {
+          const receiverIsLocalhost = contact.domain === "localhost" ||
+            contact.domain.startsWith("localhost:");
+          const scheme = receiverIsLocalhost ? "http" : "https";
+          const url = `${scheme}://${contact.domain}/rpp/v1/envelopes`;
 
-        // Consume the response body to avoid leaks
-        await response.text();
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(envelope),
+          });
+
+          if (!response.ok) {
+            const body = await response.text();
+            throw new Error(
+              `Failed to deliver invitation to ${contact.domain}: HTTP ${response.status} — ${body}`,
+            );
+          }
+
+          // Consume the response body to avoid leaks
+          await response.text();
+        }
 
         return toolResult({
           invitation_id: invitationId,
