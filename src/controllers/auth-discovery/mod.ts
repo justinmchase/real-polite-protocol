@@ -100,9 +100,9 @@ export class AuthDiscoveryController extends Controller {
           "openid",
           "profile",
           "email",
+          "offline_access",
           `${audience}/rpp.tools.read`,
           `${audience}/rpp.messages.submit`,
-          `${audience}/.default`,
         ],
       });
     };
