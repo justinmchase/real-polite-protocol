@@ -12,6 +12,8 @@ export async function seedSentInvitation(
   await kv.set(["invitations", invitationId], {
     invitation_id: invitationId,
     receiver_oid: accountOid,
+    sender_oid: accountOid,
+    receiver_domain: "receiver.example",
     sender_domain: "sender.example",
     status: opts?.status ?? "pending",
     proposed_terms: { category: "billing" },

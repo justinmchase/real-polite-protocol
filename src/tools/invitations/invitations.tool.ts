@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type {
   AccountManager,
+  ContactManager,
   DomainIdentityManager,
   InvitationManager,
 } from "../../managers/mod.ts";
@@ -217,6 +218,7 @@ export class InvitationTool {
     private readonly accountManager: AccountManager,
     private readonly domainIdentityManager: DomainIdentityManager,
     private readonly config: ConfigService,
+    private readonly contactManager: ContactManager,
   ) {}
 
   /**
@@ -338,21 +340,50 @@ export class InvitationTool {
           params.reason,
         );
 
+        // Get the acceptor's domain_id to include in the callback so the
+        // sender's server can create a symmetric contact.
+        const acceptorMetadata = await this.accountManager
+          .getUserVerifiedMetadata(auth.oid);
+        const acceptorDomainId = typeof acceptorMetadata
+            ?.immutable_fields?.["domain_id"] === "string"
+          ? acceptorMetadata.immutable_fields["domain_id"] as string
+          : undefined;
+
         if (
           invitation.delivery &&
           invitation.delivery.domain !== localDomain
         ) {
+          // Cross-domain: deliver receipt callback with acceptor's domain_id.
           const result = await deliverReceiptCallback(
             invitation.delivery,
             invitation.invitation_id,
             "accepted",
             receipt,
             params.reason,
+            acceptorDomainId,
           );
           if (result.permanentFailure) {
             await this.invitationManager.markUndelivered(
               invitation.invitation_id,
             );
+          }
+        } else {
+          // Same-domain: create a symmetric contact for the acceptor on the
+          // sender's account. The sender's oid is resolved via domain_id lookup.
+          const senderDomainId = invitation.claims?.immutable?.["domain_id"];
+          if (typeof senderDomainId === "string" && acceptorDomainId) {
+            const senderOid = await this.accountManager.findOidByDomainId(
+              senderDomainId,
+            );
+            if (senderOid) {
+              await this.contactManager.upsertFromInvitation(
+                senderOid,
+                localDomain,
+                acceptorDomainId,
+                undefined,
+                new Date(),
+              );
+            }
           }
         }
 
@@ -481,6 +512,19 @@ export class InvitationTool {
             { domain: senderDomain, token: deliveryToken },
           );
         } else {
+          // Cross-domain: store a sender-side invitation record locally BEFORE
+          // delivering so that when the receipt callback arrives it can find the
+          // invitation, verify the delivery HMAC, and store the issued receipt.
+          await this.invitationManager.createSenderRecord(
+            invitationId,
+            auth.oid,
+            senderDomain,
+            params.receiver_domain,
+            params.proposed_terms as ReceiptTerms,
+            deliveryToken,
+            createdAt,
+          );
+
           const receiverIsLocalhost = params.receiver_domain === "localhost" ||
             params.receiver_domain.startsWith("localhost:");
           const scheme = receiverIsLocalhost ? "http" : "https";

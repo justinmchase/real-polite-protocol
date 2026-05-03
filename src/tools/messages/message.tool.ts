@@ -100,6 +100,14 @@ const StoredMessageSchema = z.object({
   sender_claims: SenderClaimsSchema.describe(
     "Current flat-merged contact fields for the message sender (all sources: custom, verified, admin, owner notes). Empty object when no contact exists.",
   ),
+  reply_invite: z.object({
+    receptive_policy_id: z.string(),
+    receiver_domain: z.string(),
+    proposed_terms: z.record(z.string(), z.unknown()).optional(),
+    expires_at: outputDate().optional(),
+  }).optional().describe(
+    "Embedded reply invite (Section 8). When present, use receptive_policy_id and receiver_domain to send a reply invitation.",
+  ),
 });
 
 const ListMessagesOutputSchema = {
@@ -175,6 +183,24 @@ const SendMessageInputSchema = {
   ),
   metadata: MessageMetadataSchema.optional().describe(
     "Free-form metadata passed through to the receiver (Section 7.1.3)",
+  ),
+  reply_invite: z.object({
+    receptive_policy_id: z.uuid().describe(
+      "UUID of an active receptive policy the receiver may use to reply",
+    ),
+    proposed_terms: z.object({
+      category: z.enum(MESSAGE_CATEGORIES),
+      max_content_rating: z.enum(CONTENT_RATINGS).optional(),
+      usage_policy: z.enum(["one-time", "multiple-time", "any-time"])
+        .optional(),
+    }).passthrough().optional().describe(
+      "Suggested receipt terms informational only; sender is not bound by them",
+    ),
+    expires_at: inputDate().optional().describe(
+      "Hint: when the receptive policy window is expected to close",
+    ),
+  }).optional().describe(
+    "Embedded reply invite (Section 8). Offers the receiver a path to reply without a prior receipt.",
   ),
 };
 
@@ -314,6 +340,18 @@ export class MessageTool {
             },
           },
           ...(params.metadata !== undefined && { metadata: params.metadata }),
+          ...(params.reply_invite !== undefined && {
+            reply_invite: {
+              receptive_policy_id: params.reply_invite.receptive_policy_id,
+              receiver_domain: this.config.domain, // always the sender's domain
+              ...(params.reply_invite.proposed_terms !== undefined && {
+                proposed_terms: params.reply_invite.proposed_terms,
+              }),
+              ...(params.reply_invite.expires_at !== undefined && {
+                expires_at: params.reply_invite.expires_at,
+              }),
+            },
+          }),
         };
 
         // 7. Serialize and check size

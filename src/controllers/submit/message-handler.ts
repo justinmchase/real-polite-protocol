@@ -3,6 +3,7 @@ import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import { z } from "zod";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type {
+  ContactManager,
   InvitationManager,
   MessageManager,
   ReceiptManager,
@@ -91,6 +92,13 @@ export const InvitationEnvelopeSchema = z.object({
   ),
 });
 
+const ReplyInviteSchema = z.object({
+  receptive_policy_id: z.string(),
+  receiver_domain: z.string(),
+  proposed_terms: z.record(z.string(), z.unknown()).optional(),
+  expires_at: z.coerce.date().optional(),
+});
+
 export const MessageEnvelopeSchema = z.object({
   message_id: z.string(),
   sender_domain: z.string(),
@@ -106,6 +114,7 @@ export const MessageEnvelopeSchema = z.object({
     }),
   }),
   metadata: MessageMetadataSchema.optional(),
+  reply_invite: ReplyInviteSchema.optional(),
 });
 
 const ReceiptObjectSchema = z.object({
@@ -123,6 +132,8 @@ export const ReceiptCallbackEnvelopeSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
   receipt: ReceiptObjectSchema.optional(),
   reason: z.string().optional(),
+  /** domain_id of the acceptor — included by same-spec receivers so the sender can create a symmetric contact. */
+  acceptor_domain_id: z.string().optional(),
 }).superRefine((d, ctx) => {
   if (d.decision === "accepted" && d.receipt === undefined) {
     ctx.addIssue({
@@ -367,12 +378,15 @@ export class ReceiptMessageHandler implements MessageHandler {
 }
 
 export class ReceiptCallbackHandler {
-  constructor(private readonly kv: KvService) {}
+  constructor(
+    private readonly kv: KvService,
+    private readonly contactManager?: ContactManager,
+  ) {}
 
   async handle(
     envelope: ReceiptCallbackEnvelope,
   ): Promise<{ messageId: string }> {
-    const { invitation_id, decision, receipt } = envelope;
+    const { invitation_id, decision, receipt, acceptor_domain_id } = envelope;
 
     // Look up invitation to check status
     const entry = await this.kv.store.get(["invitations", invitation_id]);
@@ -382,6 +396,10 @@ export class ReceiptCallbackHandler {
 
     const invitation = entry.value as {
       status: string;
+      sender_oid?: string;
+      receiver_oid?: string;
+      receiver_domain?: string;
+      sender_domain?: string;
       [key: string]: unknown;
     };
 
@@ -396,6 +414,47 @@ export class ReceiptCallbackHandler {
       ...(decision === "accepted" && receipt && { receipt }),
     };
     await this.kv.store.set(["invitations", invitation_id], updated);
+
+    // §9.7.3 step 5: store the issued receipt locally so the sender can sign
+    // future outbound messages with it (HMAC verification uses the secret).
+    // The local OID for this receipt is the sender's local user oid captured
+    // on the sender-side invitation record.
+    if (decision === "accepted" && receipt) {
+      const senderOid = invitation.sender_oid ?? invitation.receiver_oid;
+      // receiver_domain is the domain the sender will send TO (the acceptor's domain).
+      const receiverDomain = invitation.receiver_domain ??
+        invitation.sender_domain;
+      if (senderOid && receiverDomain) {
+        await this.kv.store.set(["receipts", receipt.id], {
+          id: receipt.id,
+          secret: receipt.secret,
+          oid: senderOid,
+          sender_domain: receiverDomain,
+          category: receipt.category,
+          max_content_rating: receipt.max_content_rating ?? "G",
+          usage_policy: receipt.usage_policy ?? "any-time",
+          status: "active",
+          issued_at: receipt.issued_at,
+        });
+      }
+    }
+
+    // Symmetric contact: if the callback includes the acceptor's domain_id,
+    // upsert a contact for the acceptor on the sender's account.
+    if (decision === "accepted" && acceptor_domain_id && this.contactManager) {
+      const senderOid = invitation.sender_oid ?? invitation.receiver_oid;
+      const receiverDomain = invitation.receiver_domain ??
+        invitation.sender_domain;
+      if (senderOid && receiverDomain) {
+        await this.contactManager.upsertFromInvitation(
+          senderOid,
+          receiverDomain,
+          acceptor_domain_id,
+          undefined,
+          new Date(),
+        );
+      }
+    }
 
     return { messageId: invitation_id };
   }

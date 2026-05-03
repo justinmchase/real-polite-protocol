@@ -69,6 +69,18 @@ Deno.test({
               assertExists(stored.value);
               const inv = stored.value as Record<string, unknown>;
               assertEquals(inv.status, "accepted");
+
+              // Section 9.7.3 step 5: issued receipt MUST be stored locally
+              // under ["receipts", receipt.id] so the sender can sign future
+              // outbound messages with the HMAC secret.
+              const storedReceipt = await kv.get(["receipts", mockReceipt.id]);
+              assertExists(storedReceipt.value);
+              const r = storedReceipt.value as Record<string, unknown>;
+              assertEquals(r.id, mockReceipt.id);
+              assertEquals(r.oid, accountOid); // sender's local oid
+              assertEquals(r.sender_domain, "receiver.example"); // destination domain
+              assertEquals(r.category, mockReceipt.category);
+              assertEquals(r.status, "active");
             },
           );
 

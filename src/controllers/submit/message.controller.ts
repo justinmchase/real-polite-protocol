@@ -7,6 +7,7 @@ import {
 import { encodeHex } from "@std/encoding/hex";
 import type { KvService } from "../../services/kv/kv.service.ts";
 import type {
+  ContactManager,
   InvitationManager,
   MessageManager,
   ReceiptManager,
@@ -56,6 +57,7 @@ export class SubmitController extends Controller {
     receptivePolicyManager: ReceptivePolicyManager,
     receiptManager: ReceiptManager,
     messageManager: MessageManager,
+    contactManager?: ContactManager,
   ) {
     super();
     this.invitationHandler = new InvitationMessageHandler(
@@ -65,7 +67,7 @@ export class SubmitController extends Controller {
       receiptManager,
     );
     this.messageHandler = new ReceiptMessageHandler(kv, messageManager);
-    this.callbackHandler = new ReceiptCallbackHandler(kv);
+    this.callbackHandler = new ReceiptCallbackHandler(kv, contactManager);
   }
 
   // deno-lint-ignore require-await

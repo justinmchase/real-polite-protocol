@@ -91,6 +91,10 @@ export const InvitationReceiptSummarySchema = z.object({
 export const InvitationSchema = z.object({
   invitation_id: z.string(),
   receiver_oid: z.string(),
+  /** For cross-domain sender-side records: OID of the local user who sent the invitation. Never serialized to wire. */
+  sender_oid: z.string().optional(),
+  /** For cross-domain sender-side records: domain of the receiver (used to construct the stored receipt). Never serialized to wire. */
+  receiver_domain: z.string().optional(),
   sender_domain: z.string(),
   status: InvitationStatusSchema,
   proposed_terms: ReceiptTermsSchema,

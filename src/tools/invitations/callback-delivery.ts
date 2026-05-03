@@ -14,6 +14,8 @@ export interface CallbackEnvelope {
     issued_at: Date;
   };
   reason?: string;
+  /** domain_id of the acceptor. Allows the sender to create a symmetric contact. */
+  acceptor_domain_id?: string;
 }
 
 async function signHmac(
@@ -58,6 +60,7 @@ export async function deliverReceiptCallback(
   decision: "accepted" | "rejected",
   receipt: Receipt | undefined,
   reason: string | undefined,
+  acceptorDomainId?: string,
 ): Promise<CallbackDeliveryResult> {
   const envelope: CallbackEnvelope = {
     category: "receipt",
@@ -76,6 +79,8 @@ export async function deliverReceiptCallback(
       },
     }),
     ...(reason !== undefined && { reason }),
+    ...(acceptorDomainId !== undefined &&
+      { acceptor_domain_id: acceptorDomainId }),
   };
 
   const bodyBytes = new TextEncoder().encode(JSON.stringify(envelope));

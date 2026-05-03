@@ -56,8 +56,39 @@ export class InvitationManager {
   }
 
   /**
-   * Accept a pending invitation and issue a receipt to the sender domain.
-   * Returns both the updated invitation and the newly issued receipt.
+   * Create a sender-side invitation record for a cross-domain outbound
+   * invitation. This allows the receipt callback handler to find the invitation
+   * when the remote server POSTs back, verify the delivery HMAC, and store the
+   * issued receipt under the sender's local OID.
+   *
+   * The record uses `receiver_oid = senderOid` (the local sender) so that
+   * `ReceiptCallbackHandler` can retrieve the correct local oid for receipt
+   * storage. The separate `sender_oid` field is also set explicitly.
+   */
+  async createSenderRecord(
+    invitationId: string,
+    senderOid: string,
+    senderDomain: string,
+    receiverDomain: string,
+    proposedTerms: ReceiptTerms,
+    deliveryToken: string,
+    createdAt: Date,
+  ): Promise<Invitation> {
+    const invitation: Invitation = {
+      invitation_id: invitationId,
+      receiver_oid: senderOid, // sender's local oid stored in receiver_oid by convention
+      sender_oid: senderOid,
+      receiver_domain: receiverDomain,
+      sender_domain: senderDomain,
+      status: "pending",
+      proposed_terms: proposedTerms,
+      delivery: { domain: senderDomain, token: deliveryToken },
+      created_at: createdAt,
+    };
+    return await this.invitations.set(invitation);
+  }
+
+  /** Returns both the updated invitation and the newly issued receipt.
    */
   async accept(
     invitationId: string,

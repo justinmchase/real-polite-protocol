@@ -37,6 +37,8 @@ export class MessageManager {
         },
       },
       ...(envelope.metadata !== undefined && { metadata: envelope.metadata }),
+      ...(envelope.reply_invite !== undefined &&
+        { reply_invite: envelope.reply_invite }),
     };
     return await this.messages.set(msg);
   }

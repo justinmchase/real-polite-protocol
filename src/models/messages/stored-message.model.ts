@@ -44,6 +44,16 @@ export const StoredMessageSchema = z.object({
     }),
   }),
   metadata: MessageMetadataSchema.optional(),
+  /**
+   * Optional embedded reply invite from the sender (Section 8). When present,
+   * the listener MAY use it to initiate a reply invitation flow.
+   */
+  reply_invite: z.object({
+    receptive_policy_id: z.string(),
+    receiver_domain: z.string(),
+    proposed_terms: z.record(z.string(), z.unknown()).optional(),
+    expires_at: z.coerce.date().optional(),
+  }).optional(),
 });
 
 export type StoredMessage = z.infer<typeof StoredMessageSchema>;

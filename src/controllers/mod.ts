@@ -29,6 +29,7 @@ export async function initControllers(
     context.managers.receptivePolicy,
     context.managers.receipts,
     context.managers.messages,
+    context.managers.contacts,
   ).use(app);
   await new AuthDiscoveryController(
     context.services.config,

@@ -62,6 +62,7 @@ export function initTools(
       managers.accounts,
       managers.domainIdentity,
       config,
+      managers.contacts,
     ),
     new PublicInvitationTool(
       managers.publicInvitations,
