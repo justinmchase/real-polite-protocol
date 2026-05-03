@@ -362,7 +362,6 @@ Deno.test({
               const invId = crypto.randomUUID();
               await withStartedServer(
                 async ({ baseUrl: bu, callTool: ct, kvPath: kp }) => {
-                  const localKv = await Deno.openKv(kp);
                   try {
                     const localHost = new URL(bu).host;
                     await localKv.set(["invitations", invId], {
@@ -415,9 +414,12 @@ Deno.test({
                       "same-domain message must be locally retrievable",
                     );
 
+                    return { baseUrl: bu };
                   } finally {
                     localKv.close();
-                  }
+                    // return { baseUrl: bu };
+                },
+              ) as { baseUrl: string });
               });
             },
           );

@@ -51,6 +51,20 @@ caller never handles the receipt secret directly.
 - On success the tool returns the new `message_id`, `sent_at` timestamp, and the
   receiver's accepted-response payload.
 
+## Same-domain (local) delivery
+
+When the receipt's `sender_domain` equals the sending server's own domain, the
+message MUST be delivered by calling the local message manager directly,
+**without** making an outbound HTTP request. This avoids the edge-runtime
+self-loop restriction (HTTP 508 "Loop Detected" returned by Deno Deploy when a
+deployment fetches its own domain).
+
+- The local delivery path MUST produce the same observable result as the remote
+  HTTP path: the message is stored and retrievable via `list_messages` /
+  `get_message`.
+- HMAC signing and verification are skipped on the local path because no
+  untrusted network boundary is crossed.
+
 ## Out of scope
 
 - Group fan-out (`send_group_message` is a separate tool, Section 10B.2).

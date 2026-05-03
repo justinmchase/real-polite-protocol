@@ -13,6 +13,7 @@ import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
 import { MessageMetadataSchema } from "../../models/messages/stored-message.model.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
+import type { MessageEnvelope } from "../../controllers/submit/message-handler.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { inputDate, outputDate } from "../date-schema.ts";
 import {
@@ -326,43 +327,55 @@ export class MessageTool {
         const timestamp = new Date().toISOString();
         const signature = await signHmac(receipt.secret, timestamp, bodyBytes);
 
-        // 9. Determine receiver URL
+        // 9. Determine delivery path
         const receiverDomain = receipt.sender_domain;
-        const isLocalhost = receiverDomain === "localhost" ||
-          receiverDomain.startsWith("localhost:");
-        const scheme = isLocalhost ? "http" : "https";
-        const url = `${scheme}://${receiverDomain}/rpp/v1/envelopes`;
 
-        // 10. POST to receiver's submit endpoint
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-rpp-receipt-id": receipt.id,
-            "x-rpp-signature": signature,
-            "x-rpp-timestamp": timestamp,
-          },
-          body: bodyJson,
-        });
-
-        if (!response.ok) {
-          let receiverCode: string | undefined;
-          try {
-            const errorBody = await response.json() as Record<string, unknown>;
-            receiverCode = typeof errorBody.code === "string"
-              ? errorBody.code
-              : undefined;
-          } catch {
-            // ignore parse failure
-          }
-          throw new MessageDeliveryError(
-            receiverDomain,
-            response.status,
-            receiverCode,
+        // 10. Deliver the message
+        if (receiverDomain === this.config.domain) {
+          // Same-domain: bypass HTTP to avoid Deno Deploy 508 self-loop.
+          // Store the message directly — identical to ReceiptMessageHandler.
+          await this.messageManager.store(
+            receipt.oid,
+            receipt.id,
+            receipt.category,
+            envelope as MessageEnvelope,
           );
-        }
+        } else {
+          const isLocalhost = receiverDomain === "localhost" ||
+            receiverDomain.startsWith("localhost:");
+          const scheme = isLocalhost ? "http" : "https";
+          const url = `${scheme}://${receiverDomain}/rpp/v1/envelopes`;
 
-        await response.body?.cancel();
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-rpp-receipt-id": receipt.id,
+              "x-rpp-signature": signature,
+              "x-rpp-timestamp": timestamp,
+            },
+            body: bodyJson,
+          });
+
+          if (!response.ok) {
+            let receiverCode: string | undefined;
+            try {
+              const errorBody = await response.json() as Record<string, unknown>;
+              receiverCode = typeof errorBody.code === "string"
+                ? errorBody.code
+                : undefined;
+            } catch {
+              // ignore parse failure
+            }
+            throw new MessageDeliveryError(
+              receiverDomain,
+              response.status,
+              receiverCode,
+            );
+          }
+
+          await response.body?.cancel();
+        }
 
         return toolResult({
           message_id: messageId,
