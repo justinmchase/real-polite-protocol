@@ -354,32 +354,72 @@ Deno.test({
           await t.step(
             "same-domain delivery stores message without outbound HTTP",
             async () => {
-              // This test uses the local server as both sender and receiver.
-              // The receipt's sender_domain must equal the running server's
-              // domain, which in tests is derived from baseUrl (localhost:PORT).
-              // We seed a pending invitation from the local server so that
-              // accept_invitation creates a receipt with sender_domain = local.
-              const invId = crypto.randomUUID();
+              // Same-domain scenario: two distinct accounts (BEAU and USER)
+              // share the local server. BEAU sends an invitation, USER accepts,
+              // USER sends a message back. The message must land in BEAU's
+              // inbox, not USER's. This exercises domain_id → OID resolution
+              // (the OID is never serialized over the wire; we use the
+              // sender_domain_id captured on the receipt to route storage).
               await withStartedServer(
                 async ({ baseUrl: bu, callTool: ct, kvPath: kp }) => {
                   const localKv = await Deno.openKv(kp);
                   try {
                     const localHost = new URL(bu).host;
+
+                    // Provision BEAU (the invitation sender).
+                    const beauOid = crypto.randomUUID();
+                    const beauToken = await issueToken({
+                      oid: beauOid,
+                      scope: requiredScopes.join(" "),
+                      name: "Beau",
+                    });
+                    await ct(beauToken, "set_user_verified_metadata");
+                    const { result: beauPerms } = await ct<{
+                      account_id?: string;
+                    }>(beauToken, "get_permissions", {});
+                    assertExists(beauPerms?.account_id);
+
+                    // Resolve BEAU's domain_id (assigned by ensureAccount).
+                    const beauAcct = await localKv.get([
+                      "accounts",
+                      "by_oid",
+                      beauOid,
+                    ]);
+                    const beauDomainId =
+                      (beauAcct.value as { domain_id?: string })?.domain_id;
+                    assertExists(beauDomainId);
+
+                    // Provision USER (the acceptor / message sender).
+                    const userOid = crypto.randomUUID();
+                    const userToken = await issueToken({
+                      oid: userOid,
+                      scope: requiredScopes.join(" "),
+                      name: "User",
+                    });
+                    await ct(userToken, "set_user_verified_metadata");
+
+                    // Seed a pending invitation from BEAU to USER on the same
+                    // local domain. The invitation carries BEAU's domain_id so
+                    // the issued receipt records sender_domain_id = beauDomainId.
+                    const invId = crypto.randomUUID();
                     await localKv.set(["invitations", invId], {
                       invitation_id: invId,
-                      receiver_oid: accountOid,
+                      receiver_oid: userOid,
                       sender_domain: localHost,
                       status: "pending",
                       proposed_terms: {
                         category: "billing",
                         max_content_rating: "G",
                       },
+                      claims: { immutable: { domain_id: beauDomainId } },
                       created_at: new Date().toISOString(),
                     });
 
                     const { result: acceptResult } = await ct<{
                       receipt?: { id: string };
-                    }>(token, "accept_invitation", { invitation_id: invId });
+                    }>(userToken, "accept_invitation", {
+                      invitation_id: invId,
+                    });
                     assertExists(acceptResult?.receipt?.id);
                     const receiptId = acceptResult!.receipt!.id;
 
@@ -387,7 +427,7 @@ Deno.test({
                       message_id?: string;
                       sent_at?: string;
                       accepted?: boolean;
-                    }>(token, "send_message", {
+                    }>(userToken, "send_message", {
                       receipt_id: receiptId,
                       category: "billing",
                       content_rating: "G",
@@ -401,24 +441,38 @@ Deno.test({
                     assertExists(result?.message_id);
                     assertEquals(result?.accepted, true);
 
-                    // Verify the message is stored and listable locally.
-                    const { result: listResult } = await ct<{
+                    // The message must land in BEAU's inbox (the recipient
+                    // identified by sender_domain_id), not USER's.
+                    const { result: beauList } = await ct<{
                       messages?: { message_id: string }[];
-                    }>(token, "list_messages", {});
-                    assertExists(listResult?.messages);
-                    const found = listResult!.messages!.some(
+                    }>(beauToken, "list_messages", {});
+                    assertExists(beauList?.messages);
+                    const beauHas = beauList!.messages!.some(
                       (m) => m.message_id === result?.message_id,
                     );
                     assertEquals(
-                      found,
+                      beauHas,
                       true,
-                      "same-domain message must be locally retrievable",
+                      "same-domain message must be delivered to the recipient's inbox",
                     );
 
+                    // It must NOT land in USER's (the sender's) inbox.
+                    const { result: userList } = await ct<{
+                      messages?: { message_id: string }[];
+                    }>(userToken, "list_messages", {});
+                    const userHas = (userList?.messages ?? []).some(
+                      (m) => m.message_id === result?.message_id,
+                    );
+                    assertEquals(
+                      userHas,
+                      false,
+                      "same-domain message must not appear in the sender's own inbox",
+                    );
                   } finally {
                     localKv.close();
                   }
-              });
+                },
+              );
             },
           );
         } finally {

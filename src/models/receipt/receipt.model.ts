@@ -41,6 +41,18 @@ export const ReceiptSchema = z.object({
   usage_policy: UsagePolicySchema,
   status: ReceiptStatusSchema,
   invitation_id: z.string().optional(),
+  /**
+   * Same-domain sender receipts only: the OID of the message recipient on this
+   * server. When set, `send_message` stores the delivered message under this OID
+   * instead of `oid` (which identifies the receipt holder/sender).
+   */
+  recipient_oid: z.string().optional(),
+  /**
+   * Same-domain sender receipts only: the ID of the receiver-side receipt.
+   * Used as the receipt_id when storing messages so the record is consistent
+   * with what an HTTP delivery would have produced.
+   */
+  original_receipt_id: z.string().optional(),
   issued_at: z.coerce.date(),
   revoked_at: z.coerce.date().optional(),
   revocation_reason: RevocationReasonSchema.optional(),

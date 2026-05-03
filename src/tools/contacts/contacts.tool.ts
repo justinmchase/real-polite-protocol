@@ -161,7 +161,11 @@ type InviteContactArgs = z.infer<z.ZodObject<typeof InviteContactInputSchema>>;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-import type { Contact, InvitationClaims, ReceiptTerms } from "../../models/mod.ts";
+import type {
+  Contact,
+  InvitationClaims,
+  ReceiptTerms,
+} from "../../models/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 
 function toContactOutput(c: Contact) {

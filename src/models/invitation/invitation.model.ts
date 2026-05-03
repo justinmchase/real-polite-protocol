@@ -73,6 +73,8 @@ export const InvitationDeliverySchema = z.object({
 export const InvitationSchema = z.object({
   invitation_id: z.string(),
   receiver_oid: z.string(),
+  /** OID of the sender when both parties share the same domain (same-domain delivery). */
+  sender_oid: z.string().optional(),
   sender_domain: z.string(),
   status: InvitationStatusSchema,
   proposed_terms: ReceiptTermsSchema,

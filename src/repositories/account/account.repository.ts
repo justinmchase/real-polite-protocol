@@ -116,23 +116,69 @@ export class AccountRepository {
     }
     const existingAccount = AccountSchema.parse(existing.value);
     if (existingAccount.domain_id) {
+      // Ensure index exists for legacy accounts written before the index existed.
+      await this.kv.store.set(
+        ["accounts", "by_domain_id", existingAccount.domain_id],
+        oid,
+      );
       return existingAccount;
     }
+    const newDomainId = generateUUIDv7();
     const updated: Account = {
       ...existingAccount,
-      domain_id: generateUUIDv7(),
+      domain_id: newDomainId,
     };
     const result = await this.kv.store.atomic()
       .check(existing)
       .set(key, updated)
+      .set(["accounts", "by_domain_id", newDomainId], oid)
       .commit();
     if (result.ok) {
       return updated;
     }
     // Race: another request assigned it first, re-read.
     const retry = await this.kv.store.get<unknown>(key);
-    if (retry.value) return AccountSchema.parse(retry.value);
+    if (retry.value) {
+      const reread = AccountSchema.parse(retry.value);
+      if (reread.domain_id) {
+        await this.kv.store.set(
+          ["accounts", "by_domain_id", reread.domain_id],
+          oid,
+        );
+      }
+      return reread;
+    }
     throw new DomainIdAssignConflictError(oid);
+  }
+
+  /**
+   * Look up an OID by domain_id. Reads the `["accounts", "by_domain_id", id]`
+   * index. On miss (e.g. legacy account written before the index existed),
+   * scans `["accounts", "by_oid"]` once to backfill.
+   */
+  async findOidByDomainId(domainId: string): Promise<string | undefined> {
+    const indexKey: Deno.KvKey = ["accounts", "by_domain_id", domainId];
+    const indexed = await this.kv.store.get<string>(indexKey);
+    if (typeof indexed.value === "string") {
+      return indexed.value;
+    }
+    // Lazy backfill: scan accounts.
+    const entries = this.kv.store.list<unknown>({
+      prefix: ["accounts", "by_oid"],
+    });
+    for await (const entry of entries) {
+      const account = AccountSchema.parse(entry.value);
+      if (account.domain_id) {
+        await this.kv.store.set(
+          ["accounts", "by_domain_id", account.domain_id],
+          account.oid,
+        );
+        if (account.domain_id === domainId) {
+          return account.oid;
+        }
+      }
+    }
+    return undefined;
   }
 
   async getVerifiedMetadata(

@@ -333,9 +333,30 @@ export class MessageTool {
         // 10. Deliver the message
         if (receiverDomain === this.config.domain) {
           // Same-domain: bypass HTTP to avoid Deno Deploy 508 self-loop.
+          // Resolve the recipient's local OID from the receipt's
+          // `sender_domain_id` (the destination identity captured when the
+          // receipt was issued). The OID is never serialized — we only use it
+          // here to route storage to the correct local inbox.
+          if (!receipt.sender_domain_id) {
+            throw new MessageDeliveryError(
+              receiverDomain,
+              500,
+              "E_RECEIPT_MISSING_SENDER_DOMAIN_ID",
+            );
+          }
+          const recipientOid = await this.accountManager.findOidByDomainId(
+            receipt.sender_domain_id,
+          );
+          if (!recipientOid) {
+            throw new MessageDeliveryError(
+              receiverDomain,
+              404,
+              "E_RECIPIENT_NOT_FOUND",
+            );
+          }
           // Store the message directly — identical to ReceiptMessageHandler.
           await this.messageManager.store(
-            receipt.oid,
+            recipientOid,
             receipt.id,
             receipt.category,
             envelope as MessageEnvelope,
@@ -360,7 +381,10 @@ export class MessageTool {
           if (!response.ok) {
             let receiverCode: string | undefined;
             try {
-              const errorBody = await response.json() as Record<string, unknown>;
+              const errorBody = await response.json() as Record<
+                string,
+                unknown
+              >;
               receiverCode = typeof errorBody.code === "string"
                 ? errorBody.code
                 : undefined;

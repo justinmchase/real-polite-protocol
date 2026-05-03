@@ -116,6 +116,17 @@ export class AccountManager {
     return await this.accounts.getVerifiedMetadata(oid);
   }
 
+  /**
+   * Resolve a local OID from a local domain_id. Returns undefined if no account
+   * on this domain matches. Used by same-domain delivery paths to map a
+   * sender/recipient identity (carried as domain_id over the wire) to the
+   * local OID needed for storage routing — the OID itself is never serialized
+   * out of the server (Section 3A.1).
+   */
+  async findOidByDomainId(domainId: string): Promise<string | undefined> {
+    return await this.accounts.findOidByDomainId(domainId);
+  }
+
   async setUserVerifiedMetadataByAdmin(
     oid: string,
     verifiedFields: Record<string, string>,
