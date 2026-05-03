@@ -1,99 +1,90 @@
 import { assertEquals } from "@std/assert";
 import { withStartedServer } from "../../helpers/with-started-server.ts";
-import {
-  requiredScopes,
-  withAuthTestContext,
-} from "../../helpers/with-auth-test-context.ts";
 
 Deno.test({
-  name: "req:mcp-auth-008 - MCP endpoint validates Origin header",
+  name: "req:mcp-auth-008 - MCP endpoint supports cross-origin browser clients",
   fn: async (t) => {
     await withStartedServer(async ({ baseUrl }) => {
-      await t.step("rejects malformed origin header", async () => {
-        const response = await fetch(`${baseUrl}/mcp`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            origin: "not-a-valid-origin",
-          },
-          body: JSON.stringify({}),
-        });
+      await t.step(
+        "OPTIONS preflight succeeds without auth and returns CORS headers",
+        async () => {
+          const response = await fetch(`${baseUrl}/mcp`, {
+            method: "OPTIONS",
+            headers: {
+              origin: "https://browser.example",
+              "access-control-request-method": "POST",
+              "access-control-request-headers":
+                "authorization, content-type",
+            },
+          });
 
-        assertEquals(response.status, 400);
-        const body = await response.json();
-        assertEquals(body.code, "E_INVALID_ORIGIN");
-      });
-
-      await t.step("rejects mismatched origin header", async () => {
-        const response = await fetch(`${baseUrl}/mcp`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            origin: "http://evil.example",
-          },
-          body: JSON.stringify({}),
-        });
-
-        assertEquals(response.status, 400);
-        const body = await response.json();
-        assertEquals(body.code, "E_INVALID_ORIGIN");
-      });
+          assertEquals(response.status, 204);
+          assertEquals(
+            response.headers.get("Access-Control-Allow-Origin"),
+            "https://browser.example",
+          );
+          const allowMethods =
+            response.headers.get("Access-Control-Allow-Methods") ?? "";
+          assertEquals(allowMethods.includes("POST"), true);
+          const allowHeaders =
+            response.headers.get("Access-Control-Allow-Headers") ?? "";
+          assertEquals(
+            allowHeaders.toLowerCase().includes("authorization"),
+            true,
+          );
+          assertEquals(
+            allowHeaders.toLowerCase().includes("content-type"),
+            true,
+          );
+          await response.body?.cancel();
+        },
+      );
 
       await t.step(
-        "accepts matching origin header and continues auth processing",
+        "cross-origin POST is accepted and CORS headers are present",
         async () => {
           const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
-              origin: baseUrl,
+              origin: "https://browser.example",
             },
             body: JSON.stringify({}),
           });
 
+          // No bearer => 401 from auth, but the request was NOT rejected for
+          // its Origin and CORS headers must be set on the error response.
           assertEquals(response.status, 401);
+          assertEquals(
+            response.headers.get("Access-Control-Allow-Origin"),
+            "https://browser.example",
+          );
+          const exposed =
+            response.headers.get("Access-Control-Expose-Headers") ?? "";
+          assertEquals(
+            exposed.toLowerCase().includes("www-authenticate"),
+            true,
+          );
           const body = await response.json();
           assertEquals(body.code, "E_MISSING_HEADER");
         },
       );
 
       await t.step(
-        "Origin validation fires before any tool handler executes",
+        "requests with no Origin header still receive a wildcard CORS header",
         async () => {
-          // Even with a valid bearer token, a disallowed Origin must be rejected
-          // before the MCP framework dispatches to a tool handler. We verify
-          // this by observing the 400 origin error rather than any tool output.
-          await withAuthTestContext(async ({ issueToken }) => {
-            const token = await issueToken({
-              oid: crypto.randomUUID(),
-              roles: ["domain.admin"],
-              scope: requiredScopes.join(" "),
-            });
-
-            const response = await fetch(`${baseUrl}/mcp`, {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "authorization": `Bearer ${token}`,
-                "origin": "http://evil.example",
-              },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "tools/call",
-                params: { name: "get_domain_identity", arguments: {} },
-              }),
-            });
-
-            // Must get the origin error (400), NOT a tool result (200).
-            assertEquals(response.status, 400);
-            const body = await response.json();
-            assertEquals(
-              body.code,
-              "E_INVALID_ORIGIN",
-              "Origin check must fire before tool dispatch",
-            );
+          const response = await fetch(`${baseUrl}/mcp`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({}),
           });
+
+          assertEquals(response.status, 401);
+          assertEquals(
+            response.headers.get("Access-Control-Allow-Origin"),
+            "*",
+          );
+          await response.body?.cancel();
         },
       );
     });

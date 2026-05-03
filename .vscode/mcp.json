@@ -3,16 +3,10 @@
     // "rpp": {
     //     "url": "http://localhost:8000/mcp",
     //     "type": "http",
-    //     "oauth": {
-    //       "clientId": "4464c8c6-8a29-4f23-a2ae-09d8cf068f71"
-    //     }
     //   }
     "rpp": {
       "url": "https://real-polite-protocol.justinmchase.deno.net/mcp",
       "type": "http",
-      "oauth": {
-        "clientId": "4464c8c6-8a29-4f23-a2ae-09d8cf068f71"
-      }
     }
   },
   "inputs": []
