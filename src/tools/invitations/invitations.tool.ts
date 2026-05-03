@@ -7,6 +7,7 @@ import type {
   InvitationManager,
 } from "../../managers/mod.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
+import type { InvitationClaims, ReceiptTerms } from "../../models/mod.ts";
 import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { inputDate, outputDate } from "../date-schema.ts";
@@ -193,13 +194,6 @@ type CancelInvitationArgs = z.infer<
   z.ZodObject<typeof CancelInvitationInputSchema>
 >;
 
-type InvitationClaims = {
-  immutable?: Record<string, string>;
-  user?: Record<string, string>;
-  admin?: Record<string, string>;
-  custom?: Record<string, unknown>;
-};
-
 export class InvitationTool {
   constructor(
     private readonly invitationManager: InvitationManager,
@@ -253,7 +247,7 @@ export class InvitationTool {
       ...(Object.keys(user).length && { user }),
       ...(Object.keys(admin).length && { admin }),
       ...(customClaims && { custom: customClaims }),
-    };
+    } as InvitationClaims;
   }
 
   register(server: McpServer, auth: AuthInfo): void {
@@ -452,23 +446,40 @@ export class InvitationTool {
 
         // Deliver the invitation envelope to the receiver's submit endpoint.
         // Per spec Section 4.1: localhost uses http, all other domains use https.
-        const receiverIsLocalhost = params.receiver_domain === "localhost" ||
-          params.receiver_domain.startsWith("localhost:");
-        const scheme = receiverIsLocalhost ? "http" : "https";
-        const url = `${scheme}://${params.receiver_domain}/rpp/v1/envelopes`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(envelope),
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(
-            `Failed to deliver invitation to ${params.receiver_domain}: ${response.status} ${text}`,
+        if (params.receiver_domain === senderDomain) {
+          // Same-domain: bypass HTTP to avoid Deno Deploy self-loop detection
+          // (508). Call the manager directly — no network round-trip needed.
+          await this.invitationManager.deliverLocally(
+            invitationId,
+            messageId,
+            senderDomain,
+            claims as InvitationClaims,
+            params.receptive_policy_id,
+            params.shortcode,
+            params.receipt_id,
+            params.proposed_terms as ReceiptTerms,
+            expiresAt,
+            { domain: senderDomain, token: deliveryToken },
           );
+        } else {
+          const receiverIsLocalhost = params.receiver_domain === "localhost" ||
+            params.receiver_domain.startsWith("localhost:");
+          const scheme = receiverIsLocalhost ? "http" : "https";
+          const url = `${scheme}://${params.receiver_domain}/rpp/v1/envelopes`;
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(envelope),
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(
+              `Failed to deliver invitation to ${params.receiver_domain}: ${response.status} ${text}`,
+            );
+          }
+          await response.body?.cancel();
         }
-        await response.body?.cancel();
 
         return toolResult({
           invitation_id: invitationId,

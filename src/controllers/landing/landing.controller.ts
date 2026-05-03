@@ -214,5 +214,13 @@ export class LandingController extends Controller {
     app.get("/", (ctx) => {
       return ctx.html(HTML);
     });
+
+    // Disallow all crawlers. This server exposes machine-to-machine APIs and
+    // a single human-readable landing page; there is nothing useful for
+    // search engines to index, and serving an explicit robots.txt avoids
+    // 404 noise from well-behaved crawlers.
+    app.get("/robots.txt", (ctx) => {
+      return ctx.text("User-agent: *\nDisallow: /\n");
+    });
   }
 }

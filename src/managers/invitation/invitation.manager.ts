@@ -187,4 +187,84 @@ export class InvitationManager {
     };
     return await this.invitations.set(updated);
   }
+
+  /**
+   * Deliver an invitation in-process, bypassing the HTTP envelope endpoint.
+   *
+   * Used when sender and receiver share the same domain so we avoid Deno
+   * Deploy's self-loop detection (508). Replicates the receiver-OID resolution
+   * logic of InvitationMessageHandler without a network round-trip.
+   */
+  async deliverLocally(
+    invitationId: string,
+    messageId: string,
+    senderDomain: string,
+    claims: InvitationClaims | undefined,
+    receptivePolicyId: string | undefined,
+    shortcode: string | undefined,
+    receiptId: string | undefined,
+    proposedTerms: ReceiptTerms,
+    expiresAt: Date | undefined,
+    delivery: { domain: string; token: string },
+  ): Promise<Invitation> {
+    let receiverOid: string;
+
+    if (receiptId) {
+      const receipt = await this.receiptManager.get(receiptId);
+      if (!receipt || receipt.status !== "active") {
+        throw new InvitationNotFoundError(receiptId);
+      }
+      const receiptPolicy = await this.receptivePolicyManager
+        .findActiveReceiptPolicy(receipt.oid, receiptId);
+      if (!receiptPolicy) {
+        throw new InvitationNotFoundError(receiptId);
+      }
+      receiverOid = receipt.oid;
+    } else {
+      let policyId = receptivePolicyId;
+      if (!policyId && shortcode) {
+        const byShortcode = await this.receptivePolicyManager.getByShortcode(
+          shortcode,
+        );
+        if (!byShortcode) {
+          throw new InvitationNotFoundError(shortcode);
+        }
+        policyId = byShortcode.policy_id;
+      }
+      const policy = await this.receptivePolicyManager.getById(policyId!);
+      if (!policy) {
+        throw new InvitationNotFoundError(policyId!);
+      }
+      if (policy.receptive_until && policy.receptive_until < new Date()) {
+        throw new InvitationNotFoundError(policyId!);
+      }
+      if (policy.mode === "closed") {
+        throw new InvitationNotFoundError(policyId!);
+      }
+      if (policy.mode === "contact") {
+        const senderDomainId = claims?.immutable?.["domain_id"];
+        const allowed = typeof senderDomainId === "string" &&
+          policy.contacts?.some(
+            (c) =>
+              c.domain_id === senderDomainId &&
+              c.domain.toLowerCase() === senderDomain.toLowerCase(),
+          );
+        if (!allowed) {
+          throw new InvitationNotFoundError(policyId!);
+        }
+      }
+      receiverOid = policy.oid;
+    }
+
+    return await this.createInvitation(
+      invitationId,
+      receiverOid,
+      senderDomain,
+      proposedTerms,
+      claims,
+      expiresAt,
+      messageId,
+      delivery,
+    );
+  }
 }
