@@ -3,6 +3,7 @@ import { ContactManager } from "./contacts/mod.ts";
 import { DomainIdentityManager } from "./domain-identity/mod.ts";
 import { ReceptivePolicyManager } from "./receptive-policy/mod.ts";
 import { InvitationManager } from "./invitation/mod.ts";
+import { PublicInvitationManager } from "./invitation/mod.ts";
 import { ReceiptManager } from "./receipt/mod.ts";
 import { MessageManager } from "./messages/mod.ts";
 import type { Repositories } from "../repositories/mod.ts";
@@ -22,6 +23,7 @@ export interface Managers {
   domainIdentity: DomainIdentityManager;
   receptivePolicy: ReceptivePolicyManager;
   invitations: InvitationManager;
+  publicInvitations: PublicInvitationManager;
   receipts: ReceiptManager;
   messages: MessageManager;
 }
@@ -46,6 +48,10 @@ export function initManagers(
     contacts,
     receptivePolicy,
   );
+  const publicInvitations = new PublicInvitationManager(
+    repositories.publicInvitations,
+    receipts,
+  );
   const messages = new MessageManager(repositories.messages);
   return {
     accounts,
@@ -53,6 +59,7 @@ export function initManagers(
     domainIdentity,
     receptivePolicy,
     invitations,
+    publicInvitations,
     receipts,
     messages,
   };

@@ -24,8 +24,10 @@ import { ContactTool } from "./contacts/contacts.tool.ts";
 import { DomainAdminTool } from "./domain-admin/domain-admin.tool.ts";
 import { ReceptivePolicyTool } from "./receptive-policy/receptive-policy.tool.ts";
 import { InvitationTool } from "./invitations/invitations.tool.ts";
+import { PublicInvitationTool } from "./invitations/public-invitation.tool.ts";
 import { ReceiptTool } from "./receipt/receipt.tool.ts";
 import { MessageTool } from "./messages/message.tool.ts";
+import type { PublicInvitationManager } from "../managers/mod.ts";
 
 export interface Tool {
   register(server: McpServer, auth: AuthInfo): void;
@@ -38,6 +40,7 @@ export function initTools(
     domainIdentity: DomainIdentityManager;
     receptivePolicy: ReceptivePolicyManager;
     invitations: InvitationManager;
+    publicInvitations: PublicInvitationManager;
     receipts: ReceiptManager;
     messages: MessageManager;
   },
@@ -57,6 +60,11 @@ export function initTools(
     new InvitationTool(
       managers.invitations,
       managers.accounts,
+      managers.domainIdentity,
+      config,
+    ),
+    new PublicInvitationTool(
+      managers.publicInvitations,
       managers.domainIdentity,
       config,
     ),

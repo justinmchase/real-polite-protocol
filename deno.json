@@ -9,6 +9,7 @@
     "@std/encoding/hex": "jsr:@std/encoding@^1.0.10/hex",
     "@std/fs": "jsr:@std/fs@^1.0.0",
     "@std/path": "jsr:@std/path@^1.0.0",
+    "@std/path/glob-to-regexp": "jsr:@std/path@^1.0.0/glob-to-regexp",
     "@std/testing": "jsr:@std/testing@^1.0.18",
     "@std/uuid": "jsr:@std/uuid@^1.1.1",
     "@std/yaml": "jsr:@std/yaml@^1.0.0",
