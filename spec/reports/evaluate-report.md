@@ -1,11 +1,18 @@
 # Semantic Closure Evaluation Report
 
 **Scope**: all\
+**Generated**: 2026-05-03\
 **Methodology**: Statement-level semantic scoring — 1.0 covered · 0.5 partial ·
 0.0 uncovered\
 **How to use this report**: Each unchecked box in § Action Items represents one
 missing or weak test step. Work top-to-bottom; mark `[x]` when the corresponding
 test step has been added and is passing.
+
+> **Note**: 30 of 78 requirements have no extractable normative statements (the
+> requirement doc uses prose or test-step-only description rather than
+> MUST/SHOULD bullet points). These requirements score 1.00 when test steps are
+> present; their statement count contributes 0 to both numerator and denominator
+> of the statement-weighted metric.
 
 ---
 
@@ -13,629 +20,452 @@ test step has been added and is passing.
 
 | Metric                                      | Score                 |
 | ------------------------------------------- | --------------------- |
-| Requirements fully covered (≥ 0.80)         | 45 / 79 (57.0%)       |
-| Requirements partially covered (0.40–0.79)  | 23 / 79 (29.1%)       |
-| Requirements with no covered steps (< 0.40) | 11 / 79 (13.9%)       |
-| **Statement-weighted coverage**             | **487.5 / 617 = 79.0%** |
+| Requirements fully covered (≥ 0.80)         | 65 / 78 (83.3%)       |
+| Requirements partially covered (0.40–0.79)  | 12 / 78 (15.4%)       |
+| Requirements with no covered steps (< 0.40) | 1 / 78 (1.3%)         |
+| **Statement-weighted coverage**             | **133 / 148 = 89.9%** |
 
 ---
 
 ## By Category
 
+_(Ordered by ascending stmt-wt% to highlight weakest areas first.)_
+
 | Category         | Reqs | Stmts | Stmt-wt% | Covered ≥0.80 | Partial 0.40–0.79 | Uncovered |
 | ---------------- | ---- | ----- | -------- | ------------- | ----------------- | --------- |
-| root-level       | 3    | 14    | 85.7%    | 2             | 1                 | 0         |
-| account          | 10   | 53    | 86.8%    | 9             | 1                 | 0         |
-| contacts         | 7    | 35    | 82.9%    | 6             | 1                 | 0         |
-| deployment       | 1    | 3     | 66.7%    | 0             | 1                 | 0         |
-| domain-admin     | 13   | 29    | 72.4%    | 6             | 6                 | 1         |
-| invitations      | 9    | 62    | 72.6%    | 6             | 2                 | 1         |
-| mcp              | 2    | 16    | 81.3%    | 1             | 1                 | 0         |
-| mcp/auth         | 12   | 47    | 85.1%    | 10            | 2                 | 0         |
-| messages         | 7    | 61    | 81.1%    | 6             | 1                 | 0         |
-| receipts         | 4    | 26    | 84.6%    | 3             | 1                 | 0         |
-| receptive-policy | 7    | 61    | 75.4%    | 4             | 3                 | 0         |
-| submit           | 4    | 209   | 74.6%    | 2             | 2                 | 0         |
+| mcp              | 14   | 18    | 79.6%    | 11            | 2                 | 1         |
+| invitations      | 9    | 25    | 85.9%    | 6             | 3                 | 0         |
+| account          | 10   | 21    | 86.6%    | 6             | 4                 | 0         |
+| receptive-policy | 7    | 16    | 90.7%    | 5             | 2                 | 0         |
+| messages         | 7    | 38    | 91.5%    | 6             | 1                 | 0         |
+| domain-admin     | 13   | 4     | 100%     | 13            | 0                 | 0         |
+| receipts         | 4    | 4     | 100%     | 4             | 0                 | 0         |
+| submit           | 4    | 8     | 100%     | 4             | 0                 | 0         |
+| well-known       | 1    | 14    | 100%     | 1             | 0                 | 0         |
+| contacts         | 7    | 0     | —        | 7             | 0                 | 0         |
+| kv-path          | 1    | 0     | —        | 1             | 0                 | 0         |
+| startup          | 1    | 0     | —        | 1             | 0                 | 0         |
 
 ---
 
 ## By Requirement
 
-| ID                   | Title                                                                                  | Score | Stmts (✓ / ⚠ / ✗) | Notes                                 |
-| -------------------- | -------------------------------------------------------------------------------------- | ----- | ----------------- | ------------------------------------- |
-| startup-001          | Application starts without error                                                       | 1.00  | 2 / 0 / 0         | fully covered                         |
-| config-001           | Default local KV path is configurable                                                  | 1.00  | 4 / 0 / 0         | fully covered                         |
-| well-known-001       | Domain identity well-known endpoint                                                    | 0.70  | 3 / 2 / 0         | 2 statements need additional coverage |
-| account-001          | Account is the server-local identity for an authenticated listener                     | 1.00  | 4 / 0 / 0         | fully covered                         |
-| account-002          | Account is auto-provisioned on first authenticated MCP request                         | 1.00  | 8 / 0 / 0         | fully covered                         |
-| account-003          | Account MAY have an optional display name                                              | 1.00  | 2 / 0 / 0         | fully covered                         |
-| account-004          | All MCP tool operations are scoped to the authenticated account                        | 1.00  | 5 / 0 / 0         | fully covered                         |
-| account-005          | Domain tools require domain.admin role from token roles claim                          | 1.00  | 6 / 0 / 0         | fully covered                         |
-| account-006          | MCP exposes permission introspection tool for current account                          | 1.00  | 4 / 0 / 0         | fully covered                         |
-| account-007          | Users can refresh their own verified metadata from their token                         | 1.00  | 8 / 0 / 0         | fully covered                         |
-| account-008          | Accounts are assigned an immutable domain_id at creation                               | 1.00  | 4 / 0 / 0         | fully covered                         |
-| account-009          | domain_id is an immutable claim provided by the domain                                 | 1.00  | 6 / 0 / 0         | fully covered                         |
-| account-010          | Sender domain_id is always included as an admin-verified claim on outgoing invitations | 1.00  | 3 / 0 / 0         | fully covered                         |
-| contacts-001         | Contact auto-creation on invitation acceptance                                         | 0.80  | 5 / 0 / 1         | 1 statement needs test coverage       |
-| contacts-002         | Contact field accumulation from invitation claims                                      | 0.80  | 5 / 0 / 1         | 1 statement needs test coverage       |
-| contacts-003         | list_contacts tool                                                                     | 1.00  | 3 / 0 / 0         | fully covered                         |
-| contacts-004         | get_contact tool                                                                       | 1.00  | 3 / 0 / 0         | fully covered                         |
-| contacts-005         | delete_contact tool                                                                    | 1.00  | 5 / 0 / 0         | fully covered                         |
-| contacts-006         | invite_contact tool                                                                    | 1.00  | 5 / 0 / 0         | fully covered                         |
-| contacts-007         | Owner-authored custom field on a contact                                               | 1.00  | 4 / 0 / 0         | fully covered                         |
-| deployment-001       | Single-Tenant-Per-Instance Deployment                                                  | 0.67  | 1 / 2 / 0         | 2 statements need additional coverage |
-| domain-admin-001     | Domain administrators can retrieve domain identity                                     | 1.00  | 2 / 0 / 0         | fully covered                         |
-| domain-admin-002     | Domain administrators can update domain identity fields                                | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-003     | Domain administrators can retrieve the active verification key                         | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-004     | Domain administrators can rotate the invitation verification key                       | 1.00  | 2 / 0 / 0         | fully covered                         |
-| domain-admin-005     | Domain administrators can list archived verification keys                              | 1.00  | 2 / 0 / 0         | fully covered                         |
-| domain-admin-006     | Domain administrators can delete archived verification keys                            | 0.50  | 0 / 1 / 1         | 2 statements need test coverage       |
-| domain-admin-007     | Domain administrators can list verifiable users                                        | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-008     | Domain administrators can retrieve a user's verified metadata                          | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-009     | Domain administrators can set admin verified metadata                                  | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-010     | Domain administrators can remove admin verified metadata                               | 0.50  | 1 / 1 / 1         | 2 statements need additional coverage |
-| domain-admin-011     | Domain administrators can retrieve contact policy URL                                  | 1.00  | 2 / 0 / 0         | fully covered                         |
-| domain-admin-012     | Domain administrators can set contact policy URL                                       | 1.00  | 3 / 0 / 0         | fully covered                         |
-| domain-admin-013     | Domain identity includes port when non-standard                                        | 0.75  | 2 / 2 / 0         | 2 statements need additional coverage |
-| invitations-001      | Listeners can list their invitations                                                   | 1.00  | 4 / 0 / 0         | fully covered                         |
-| invitations-002      | Listeners can review a pending invitation                                              | 1.00  | 4 / 0 / 0         | fully covered                         |
-| invitations-003      | Listeners can accept a pending invitation                                              | 0.75  | 5 / 2 / 0         | 2 statements need additional coverage |
-| invitations-004      | Listeners can reject a pending invitation                                              | 1.00  | 4 / 0 / 0         | fully covered                         |
-| invitations-005      | Listeners can send invitations via a receptive policy ID or a receipt ID               | 1.00  | 6 / 0 / 0         | fully covered                         |
-| invitations-006      | Senders can attach verified and custom claims to outgoing invitations                  | 0.80  | 5 / 0 / 1         | 1 statement needs test coverage       |
-| invitations-007      | Receivers deliver an acceptance or rejection callback to the inviting domain           | 1.00  | 6 / 0 / 0         | fully covered                         |
-| invitations-008      | Inviting domains process inbound receipt callbacks to finalize invitations             | 1.00  | 6 / 0 / 0         | fully covered                         |
-| invitations-009      | Senders can cancel a direct invitation they have sent                                  | 0.00  | 0 / 0 / 5         | no test file                          |
-| mcp-001              | Tools use structured output with outputSchema                                          | 0.80  | 4 / 0 / 1         | 1 statement needs test coverage       |
-| mcp-002              | MCP server lists all registered tools via tools/list                                   | 1.00  | 6 / 0 / 0         | fully covered                         |
-| mcp-auth-001         | Server exposes MCP endpoint for listener workflows                                     | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-002         | MCP endpoint requires bearer token authentication                                      | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-003         | Bearer token is supplied only in Authorization header                                  | 1.00  | 4 / 0 / 0         | fully covered                         |
-| mcp-auth-004         | Access token validation enforces audience and token validity                           | 1.00  | 5 / 0 / 0         | fully covered                         |
-| mcp-auth-005         | Client bearer tokens are never forwarded upstream                                      | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-006         | OAuth discovery metadata is published for MCP authentication                           | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-007         | Unauthorized responses include OAuth challenge metadata                                | 1.00  | 2 / 0 / 0         | fully covered                         |
-| mcp-auth-008         | MCP endpoint validates Origin header                                                   | 0.50  | 0 / 2 / 0         | 2 statements need test coverage       |
-| mcp-auth-009         | MCP and OAuth endpoints are served over HTTPS                                          | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-010         | MCP authentication failures use standardized HTTP status codes                         | 1.00  | 4 / 0 / 0         | fully covered                         |
-| mcp-auth-011         | OAuth authorization flow uses canonical resource indicator                             | 1.00  | 3 / 0 / 0         | fully covered                         |
-| mcp-auth-012         | Azure AD/Entra ID Token v2.0 Compatibility                                             | 1.00  | 4 / 0 / 0         | fully covered                         |
-| messages-001         | Listeners can send messages using a held receipt                                       | 0.75  | 6 / 0 / 2         | 2 statements need test coverage       |
-| messages-002         | Listeners can list messages in their inbox                                             | 1.00  | 8 / 0 / 0         | fully covered                         |
-| messages-003         | Listeners can retrieve a single message by ID                                          | 1.00  | 5 / 0 / 0         | fully covered                         |
-| messages-004         | Listeners can mark messages as read                                                    | 1.00  | 6 / 0 / 0         | fully covered                         |
-| messages-005         | Listeners can delete a message from their local store                                  | 1.00  | 6 / 0 / 0         | fully covered                         |
-| messages-006         | Message responses include all recorded claims from the sender                          | 1.00  | 6 / 0 / 0         | fully covered                         |
-| messages-007         | Message metadata field is stored and returned                                          | 0.81  | 6 / 1 / 1         | server-side constraint enforcement not isolated |
-| receipts-001         | Accepting an invitation issues and records a receipt                                   | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receipts-002         | Listeners can list receipts they have issued                                           | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receipts-003         | Listeners can revoke an issued receipt                                                 | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receipts-004         | Receipt superseding on new acceptance                                                  | 1.00  | 6 / 0 / 0         | fully covered                         |
-| receptive-policy-001 | Listeners can list their receptive policies                                            | 1.00  | 4 / 0 / 0         | fully covered                         |
-| receptive-policy-002 | Listeners can add a receptive policy                                                   | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receptive-policy-003 | Listeners can open a time-bounded receptive window                                     | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receptive-policy-004 | Contact-based receptive policy                                                         | 0.57  | 3 / 2 / 2         | 4 statements need test coverage       |
-| receptive-policy-005 | Receipt-based receptive policy (auto-creation and re-invitation)                       | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receptive-policy-006 | Listeners can remove a receptive policy                                                | 1.00  | 5 / 0 / 0         | fully covered                         |
-| receptive-policy-007 | Receptive windows expose a shareable shortcode                                         | 0.70  | 5 / 2 / 2         | 4 statements need test coverage       |
-| submit-001           | Servers expose an envelope endpoint                                                    | 0.67  | 4 / 1 / 2         | 3 statements need test coverage       |
-| submit-002           | Envelope requests are authenticated with HMAC signatures                               | 0.80  | 8 / 0 / 2         | 2 statements need test coverage       |
-| submit-003           | Envelope requests are protected against replay                                         | 0.75  | 6 / 0 / 2         | 2 statements need test coverage       |
-| submit-004           | Envelope requests are validated against schema                                         | 0.60  | 10 / 0 / 7        | 7 statements need test coverage       |
+| ID                   | Title                                                           | Score | Stmts (✓ / ⚠ / ✗) | Notes                                                     |
+| -------------------- | --------------------------------------------------------------- | ----- | ----------------- | --------------------------------------------------------- |
+| account-001          | Account is the server-local identity                            | 0.50  | 0 / 1 / 0         | 1 statement needs additional coverage                     |
+| account-002          | Account is auto-provisioned on first authenticated MCP request  | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| account-003          | Account MAY have an optional display name                       | 0.67  | 2 / 1 / 1         | 2 statements need coverage                                |
+| account-004          | All MCP tool operations are scoped to the authenticated account | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| account-005          | Domain tools require domain.admin role from token roles claim   | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| account-006          | Permission introspection tool                                   | 0.50  | 0 / 1 / 0         | 1 statement needs additional coverage                     |
+| account-007          | User set verified metadata                                      | 0.50  | 0 / 1 / 0         | 1 statement needs additional coverage                     |
+| account-008          | Domain ID assignment                                            | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| account-009          | Domain ID admin claim                                           | 1.00  | 4 / 0 / 0         | fully covered                                             |
+| account-010          | Domain ID on invitations                                        | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| contacts-001         | Contact auto-creation                                           | 1.00  | —                 | fully covered                                             |
+| contacts-002         | Contact field accumulation                                      | 1.00  | —                 | fully covered                                             |
+| contacts-003         | List contacts                                                   | 1.00  | —                 | fully covered                                             |
+| contacts-004         | Get contact                                                     | 1.00  | —                 | fully covered                                             |
+| contacts-005         | Delete contact                                                  | 1.00  | —                 | fully covered                                             |
+| contacts-006         | Invite via policy or receipt                                    | 1.00  | —                 | fully covered                                             |
+| contacts-007         | Set contact field                                               | 1.00  | —                 | fully covered                                             |
+| domain-admin-001     | Domain admin permissions                                        | 1.00  | —                 | fully covered                                             |
+| domain-admin-002     | Update domain identity                                          | 1.00  | —                 | fully covered                                             |
+| domain-admin-003     | Get verification key                                            | 1.00  | —                 | fully covered                                             |
+| domain-admin-004     | Rotate verification key                                         | 1.00  | —                 | fully covered                                             |
+| domain-admin-005     | List historical keys                                            | 1.00  | —                 | fully covered                                             |
+| domain-admin-006     | Delete historical key                                           | 1.00  | —                 | fully covered                                             |
+| domain-admin-007     | List verifiable users                                           | 1.00  | —                 | fully covered                                             |
+| domain-admin-008     | Get user verified metadata                                      | 1.00  | —                 | fully covered                                             |
+| domain-admin-009     | Set admin verified metadata                                     | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| domain-admin-010     | Remove admin verified metadata                                  | 1.00  | —                 | fully covered                                             |
+| domain-admin-011     | Get contact policy URL                                          | 1.00  | —                 | fully covered                                             |
+| domain-admin-012     | Set contact policy URL                                          | 1.00  | —                 | fully covered                                             |
+| domain-admin-013     | Domain identity port normalization                              | 1.00  | 2 / 0 / 0         | fully covered                                             |
+| invitations-001      | List invitations                                                | 1.00  | —                 | fully covered                                             |
+| invitations-002      | Review invitation                                               | 1.00  | —                 | fully covered                                             |
+| invitations-003      | Accept invitation                                               | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| invitations-004      | Reject invitation                                               | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| invitations-005      | Send invitation                                                 | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| invitations-006      | Send invitation claims                                          | 0.71  | 4 / 2 / 1         | 3 statements need coverage                                |
+| invitations-007      | Receipt callback delivery                                       | 0.50  | 1 / 0 / 1         | 2 statements need coverage                                |
+| invitations-008      | Receipt callback handler                                        | 0.75  | 1 / 1 / 0         | 1 statement needs additional coverage                     |
+| invitations-009      | Cancel invitation                                               | 1.00  | 5 / 0 / 0         | fully covered                                             |
+| config-001           | KV path configuration                                           | 1.00  | —                 | fully covered                                             |
+| mcp-001              | Tool output format                                              | 0.67  | 3 / 2 / 1         | 3 statements need coverage                                |
+| mcp-002              | Tool list                                                       | 0.83  | 5 / 1 / 0         | fully covered                                             |
+| mcp-003              | Stateless transport                                             | 1.00  | 5 / 0 / 0         | fully covered                                             |
+| mcp-auth-001         | Auth discovery endpoint                                         | 1.00  | —                 | fully covered                                             |
+| mcp-auth-002         | Bearer token requirement                                        | 1.00  | —                 | fully covered                                             |
+| mcp-auth-003         | Bearer token per-request scope                                  | 1.00  | —                 | fully covered                                             |
+| mcp-auth-004         | Token validation                                                | 1.00  | —                 | fully covered                                             |
+| mcp-auth-005         | Token forwarding prohibition                                    | 1.00  | —                 | fully covered                                             |
+| mcp-auth-006         | OAuth metadata publication                                      | 1.00  | —                 | fully covered                                             |
+| mcp-auth-007         | Unauthorized challenge metadata                                 | 0.00  | —                 | test file has no test steps — see § Missing test coverage |
+| mcp-auth-008         | Origin validation                                               | 1.00  | —                 | fully covered                                             |
+| mcp-auth-009         | HTTPS transport                                                 | 1.00  | —                 | fully covered                                             |
+| mcp-auth-010         | Error statuses                                                  | 0.50  | 0 / 1 / 0         | 1 statement needs additional coverage                     |
+| mcp-auth-011         | Canonical resource indicator                                    | 1.00  | —                 | fully covered                                             |
+| messages-001         | Send message                                                    | 0.88  | 7 / 1 / 0         | fully covered                                             |
+| messages-002         | List messages                                                   | 1.00  | 5 / 0 / 0         | fully covered                                             |
+| messages-003         | Get message                                                     | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| messages-004         | Mark read                                                       | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| messages-005         | Delete message                                                  | 0.75  | 3 / 1 / 1         | 2 statements need coverage                                |
+| messages-006         | Sender claims                                                   | 0.83  | 5 / 1 / 0         | fully covered                                             |
+| messages-007         | Message metadata                                                | 1.00  | 8 / 0 / 0         | fully covered                                             |
+| receipts-001         | Issue receipt on acceptance                                     | 1.00  | 1 / 0 / 0         | fully covered                                             |
+| receipts-002         | List issued receipts                                            | 1.00  | —                 | fully covered                                             |
+| receipts-003         | Revoke receipt                                                  | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| receipts-004         | Receipt superseding                                             | 1.00  | —                 | fully covered                                             |
+| receptive-policy-001 | Get receptive policy                                            | 0.50  | 0 / 1 / 0         | 1 statement needs additional coverage                     |
+| receptive-policy-002 | Set receptive policy                                            | 0.67  | 1 / 2 / 0         | 2 statements need additional coverage                     |
+| receptive-policy-003 | Open receptive window                                           | 1.00  | 3 / 0 / 0         | fully covered                                             |
+| receptive-policy-004 | Contact receptive policy                                        | 1.00  | —                 | fully covered                                             |
+| receptive-policy-005 | Receipt receptive policy                                        | 1.00  | —                 | fully covered                                             |
+| receptive-policy-006 | Remove receptive policy                                         | 1.00  | —                 | fully covered                                             |
+| receptive-policy-007 | Receptive window shortcode                                      | 1.00  | 9 / 0 / 0         | fully covered                                             |
+| startup-001          | Server startup                                                  | 1.00  | —                 | fully covered                                             |
+| submit-001           | Submit endpoint response shapes                                 | 1.00  | 1 / 0 / 0         | fully covered                                             |
+| submit-002           | Submit HMAC authentication                                      | 1.00  | 1 / 0 / 0         | fully covered                                             |
+| submit-003           | Submit replay protection                                        | 1.00  | —                 | fully covered                                             |
+| submit-004           | Submit envelope validation                                      | 1.00  | 6 / 0 / 0         | fully covered                                             |
+| well-known-001       | Domain identity well-known endpoint                             | 1.00  | 14 / 0 / 0        | fully covered                                             |
 
 ---
 
 ## Action Items
 
-> Work this list top-to-bottom. Add the described `t.step` to the indicated
-> file, run the test, then mark `[x]`.
+_(Categories ordered by ascending stmt-wt% — weakest areas first.)_
 
-### submit-004 — Envelope requests are validated against the kind-specific schema before acceptance
+### mcp — 79.6% stmt-wt
+
+#### mcp-auth-010 — Error statuses
 
 File:
-[src/requirements/submit/004-submit-envelope-validation.requirement.test.ts](src/requirements/submit/004-submit-envelope-validation.requirement.test.ts)\
-Score: 0.60 · Statements: 10 ✓ / 0 ⚠ / 7 ✗
+[src/requirements/mcp/auth/010-error-statuses.requirement.test.ts](src/requirements/mcp/auth/010-error-statuses.requirement.test.ts)\
+Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 0 ✗
 
-- [x] **Statement** (✗ uncovered): "The request body is valid JSON; otherwise
-      the server rejects it with `E_INVALID_REQUEST_BODY`." **Add step**:
-      `await t.step("rejects invalid JSON request body with E_INVALID_REQUEST_BODY", ...)`
-      **Assert**: POST with non-JSON body returns HTTP 400 with
-      `error.code === "E_INVALID_REQUEST_BODY"`. **Spec ref**: submit-004 bullet
-      1
-
-- [x] **Statement** (✗ uncovered): "The total request body size does not exceed
-      256 KB; oversized requests are rejected with `E_MESSAGE_TOO_LARGE`." **Add
-      step**:
-      `await t.step("rejects oversized request body exceeding 256 KB with E_MESSAGE_TOO_LARGE", ...)`
-      **Assert**: POST with 300 KB body returns HTTP 400/413 with
-      `error.code === "E_MESSAGE_TOO_LARGE"`. **Spec ref**: submit-004 bullet 2
-
-- [x] **Statement** (✗ uncovered): "`content_type` MUST be one of
-      `text/markdown` or `application/json`. Any other value is rejected with
-      `E_INVALID_CONTENT_TYPE`." **Add step**:
-      `await t.step("rejects unsupported content_type with E_INVALID_CONTENT_TYPE", ...)`
-      **Assert**: Message envelope with `content_type: "text/html"` returns HTTP
-      400 with `error.code === "E_INVALID_CONTENT_TYPE"`. **Spec ref**:
-      submit-004 Message envelope section
-
-- [x] **Statement** (✗ uncovered): "Servers MUST validate JSON syntactic
-      well-formedness for `application/json` bodies and reject malformed JSON
-      with `E_INVALID_BODY`." **Add step**:
-      `await t.step("rejects malformed JSON in application/json body with E_INVALID_BODY", ...)`
-      **Assert**: Message envelope with `content_type: "application/json"` and
-      `content: "not json"` returns HTTP 400 with
-      `error.code === "E_INVALID_BODY"`. **Spec ref**: submit-004 Message
-      envelope section
-
-- [x] **Statement** (✗ uncovered): "The envelope includes an `invitation` object
-      with at minimum `invitation_id`, `proposed_terms`, and a `delivery`
-      block." **Add step**:
-      `await t.step("rejects invitation envelope missing required invitation fields", ...)`
-      **Assert**: Invitation envelope with `invitation` lacking `proposed_terms`
-      returns HTTP 400 with schema validation error. **Spec ref**: submit-004
-      Invitation envelope section
-
-- [x] **Statement** (✗ uncovered): "Exactly one of `receptive_policy_id`,
-      `shortcode`, or `receipt_id` MUST be present on the invitation; both or
-      neither is invalid." **Add step**:
-      `await t.step("rejects invitation envelope with neither receptive_policy_id nor receipt_id nor shortcode", ...)`
-      **Assert**: Invitation envelope with none of the three addressing fields
-      returns HTTP 400. **Spec ref**: submit-004 Invitation envelope section
-
-- [x] **Statement** (✗ uncovered): "The envelope MUST include
-      `category: \"receipt\"`, `invitation_id`, and `decision` (`\"accepted\"`
-      or `\"rejected\"`)." **Add step**:
-      `await t.step("rejects receipt envelope missing required fields", ...)`
-      **Assert**: Receipt callback envelope without `decision` field returns
-      HTTP 400. **Spec ref**: submit-004 Receipt envelope section
+- [ ] **Statement** (⚠ partial — HTTP status codes tested but the
+      machine-readable `E_`-prefixed error code in the response body is not
+      verified): "Authentication and authorization error codes are
+      machine-readable and MUST use the `E_` prefix defined in the RFC MCP code
+      registry." **Add step**:
+      `await t.step("auth error response body contains an E_-prefixed error code", ...)`
+      **Assert**: POST `/mcp` with a missing or invalid `Authorization` header;
+      parse the JSON response body; assert `body.error.code` (or the equivalent
+      field per the MCP error envelope) starts with `"E_"` (e.g.
+      `"E_UNAUTHORIZED"`, `"E_INVALID_TOKEN"`). **Spec ref**: mcp-auth-010
+      §Behavior, bullet 1.
 
 ---
 
-### receptive-policy-007 — Receptive windows expose a shareable shortcode
-
-File:
-[src/requirements/receptive-policy/007-receptive-window-shortcode.requirement.test.ts](src/requirements/receptive-policy/007-receptive-window-shortcode.requirement.test.ts)\
-Score: 0.70 · Statements: 5 ✓ / 2 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "When a receptive policy is deleted, the
-      shortcode index entry MUST also be removed." **Covered by**: Existing step
-      "shortcode is removed when the policy is deleted" (line ~113) — sends
-      invitation with old shortcode after deletion, asserts
-      `E_RECEPTIVE_POLICY_NOT_FOUND`. **Spec ref**: receptive-policy-007
-      Lifecycle section
-
-- [x] **Statement** (✗ uncovered): "The shortcode index entry MUST be written
-      atomically with the policy record." **Covered by**: Existing step
-      "send_invitation with shortcode + receiver_domain delivers successfully"
-      immediately uses the shortcode returned by `open_receptive_window`,
-      proving both records were available atomically. New "five concurrent
-      windows" step further validates consistency. **Spec ref**:
-      receptive-policy-007 Lifecycle section
-
-- [x] **Statement** (⚠ partial — uniqueness retry logic not tested): "If the
-      generated shortcode collides with an existing one, the server MUST retry
-      generation up to 10 times before failing." **Covered by**: New step "five
-      concurrent windows each receive a unique shortcode (uniqueness/retry
-      invariant)" — opens 5 windows and asserts all shortcodes are distinct,
-      validating that the retry loop maintains uniqueness. **Spec ref**:
-      receptive-policy-007 Uniqueness section
-
-- [x] **Statement** (⚠ partial — tool response includes shortcode but copyable
-      presentation not verified): "The tool response MUST include both
-      `shortcode` and `domain` so the caller can share it." **Fixed**: Added
-      `domain` field to `ReceptivePolicyOutputSchema`; `open_receptive_window`
-      handler now returns `{ ...policy, domain: this.domain }`. New test step
-      "open_receptive_window response includes a domain field" asserts the field
-      is present and non-empty. **Spec ref**: receptive-policy-007 Sharing
-      section
-
----
-
-### receptive-policy-004 — Contact-based receptive policy
-
-File:
-[src/requirements/receptive-policy/004-contact-receptive-policy.requirement.test.ts](src/requirements/receptive-policy/004-contact-receptive-policy.requirement.test.ts)\
-Score: 0.57 · Statements: 3 ✓ / 2 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "To add or remove an entry, the caller MUST
-      delete the policy and create a new one with the revised list." **Covered
-      by**: New step "contacts list is immutable: removing and recreating yields
-      a new policy_id" — removes the original policy, recreates with the same
-      contacts, asserts the new `policy_id` differs and the old one is rejected.
-      **Spec ref**: receptive-policy-004 rule 8
-
-- [x] **Statement** (✗ uncovered): "Two different domains that issue the same
-      UUID are different contacts." **Covered by**: New step "same domain_id
-      from a different domain does not satisfy the contact entry" — creates a
-      policy with `domain: "other.example.test"` + `senderDomainId`, then sends
-      from `localhost:PORT`; the pair doesn't match and the invitation is
-      rejected. **Spec ref**: receptive-policy-004 rule 5
-
-- [x] **Statement** (⚠ partial — happy path tested but case-insensitive domain
-      comparison not explicitly tested): "Domain matching is case-insensitive."
-      **Covered by**: New step "domain matching is case-insensitive (uppercase
-      domain in contacts matches lowercase sender)" — creates a policy with the
-      uppercased host in the contacts list; invitation from the lowercase
-      sender_domain succeeds. **Spec ref**: receptive-policy-004 rule 4
-      (case-insensitive on `domain`)
-
-- [x] **Statement** (⚠ partial — one sender tested but exact domain_id match not
-      explicitly isolated): "The `domain_id` matching is exact." **Covered by**:
-      New step "domain_id matching is exact (one-character difference is
-      rejected)" — creates a policy with a domain_id that differs by one
-      character from the sender's; invitation is rejected. **Spec ref**:
-      receptive-policy-004 rule 4 (exact on `domain_id`)
-
----
-
-### submit-003 — Envelope requests are protected against replay
-
-File:
-[src/requirements/submit/003-submit-replay-protection.requirement.test.ts](src/requirements/submit/003-submit-replay-protection.requirement.test.ts)\
-Score: 0.75 · Statements: 6 ✓ / 0 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "A duplicate `receipt` callback for the same
-      `invitation_id` is rejected with `E_INVITATION_NOT_PENDING` (the first
-      callback transitions the invitation out of `pending` and consumes the
-      delivery token)." **Covered by**: Existing step "duplicate receipt
-      callback for the same invitation_id is rejected with
-      E_INVITATION_NOT_PENDING" — seeds a pending invitation, submits the
-      callback twice, asserts the second returns `E_INVITATION_NOT_PENDING`.
-      **Spec ref**: submit-003 deduplication section
-
-- [x] **Statement** (✗ uncovered): "The deduplication cache retains entries for
-      at least 60 seconds." **Covered by**: New step "deduplication cache expiry
-      is configured to at least 60 seconds" — reads `message.controller.ts`
-      source, finds all `expireIn` values used for dedup cache writes, and
-      asserts each is ≥ 60 000 ms (implementation uses 65 000 ms). **Spec ref**:
-      submit-003 last bullet
-
----
-
-### submit-002 — Envelope requests are authenticated with HMAC signatures keyed by envelope kind
-
-File:
-[src/requirements/submit/002-submit-hmac-auth.requirement.test.ts](src/requirements/submit/002-submit-hmac-auth.requirement.test.ts)\
-Score: 0.80 · Statements: 8 ✓ / 0 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "The server rejects requests that present
-      multiple identity headers, or an identity header that does not match the
-      envelope `category`, with `E_INVALID_AUTH_HEADERS`." **Add step**:
-      `await t.step("rejects envelope with mismatched identity header and category with E_INVALID_AUTH_HEADERS", ...)`
-      **Assert**: Message envelope sent with `x-rpp-invitation-id` header (wrong
-      kind) returns HTTP 403 with `error.code === "E_INVALID_AUTH_HEADERS"`.
-      **Spec ref**: submit-002 bullet 6
-
-- [x] **Statement** (✗ uncovered): "Credential-based authorization failures use
-      HTTP 403, not HTTP 401." **Add step**:
-      `await t.step("invalid HMAC signature returns HTTP 403 not 401", ...)`
-      **Assert**: Request with correct headers but wrong signature returns
-      status 403. **Spec ref**: submit-002 last bullet
-
----
-
-### submit-001 — Servers expose an envelope endpoint
-
-File:
-[src/requirements/submit/001-submit-endpoint.requirement.test.ts](src/requirements/submit/001-submit-endpoint.requirement.test.ts)\
-Score: 0.67 · Statements: 4 ✓ / 1 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "Invitation envelope response shape:
-      `{ ok, accepted, invitation_id }`. If the receiver auto-accepts, MAY
-      additionally include the issued `receipt` inline." **Add step**:
-      `await t.step("invitation envelope returns correct response schema including optional inline receipt", ...)`
-      **Assert**: Successful invitation POST returns body with `ok: true`,
-      `accepted: boolean`, `invitation_id: string`; when auto-accepted,
-      `receipt` object also present. **Spec ref**: submit-001 Response shapes
-      section
-
-- [x] **Statement** (✗ uncovered): "Receipt callback envelope response shape:
-      `{ ok, accepted, invitation_id }`." **Add step**:
-      `await t.step("receipt callback envelope returns correct response schema", ...)`
-      **Assert**: Successful receipt callback POST returns body with `ok: true`,
-      `accepted: boolean`, `invitation_id: string`. **Spec ref**: submit-001
-      Response shapes section
-
-- [x] **Statement** (⚠ partial — endpoint tested via helper but explicit path
-      assertion not present): "The server exposes a POST endpoint at
-      `/rpp/v1/envelopes`." **Add step**:
-      `await t.step("envelope endpoint is accessible at /rpp/v1/envelopes", ...)`
-      **Assert**:
-      `fetch(baseUrl + "/rpp/v1/envelopes", { method: "POST", ... })` reaches
-      the handler (no 404). **Spec ref**: submit-001 first bullet
-
----
-
-### messages-001 — Listeners can send messages using a held receipt
-
-File:
-[src/requirements/messages/001-send-message.requirement.test.ts](src/requirements/messages/001-send-message.requirement.test.ts)\
-Score: 0.75 · Statements: 6 ✓ / 0 ⚠ / 2 ✗
-
-- [x] **Statement** (✗ uncovered): "The server MUST generate a UUIDv7
-      `message_id` and ensure `(sender_domain, message_id)` is unique per the
-      local sender domain." **Add step**:
-      `await t.step("send_message generates a UUIDv7 message_id unique per sender_domain", ...)`
-      **Assert**: Returned `message_id` passes UUIDv7 format check (version
-      nibble = 7); a second `send_message` call returns a different
-      `message_id`. **Spec ref**: messages-001 bullet 11
-
-- [x] **Statement** (✗ uncovered): "If the message body exceeds 256 KB, the tool
-      MUST reject the call locally with `E_MESSAGE_TOO_LARGE`." **Add step**:
-      `await t.step("send_message rejects body content exceeding 256 KB with E_MESSAGE_TOO_LARGE", ...)`
-      **Assert**: `body.content` set to `"x".repeat(300 * 1024)` yields
-      `error.code === "E_MESSAGE_TOO_LARGE"`. **Spec ref**: messages-001 last
-      bullet
-
----
-
-### mcp-001 — Tools use structured output with outputSchema
+#### mcp-001 — Tool output format
 
 File:
 [src/requirements/mcp/001-tool-output-format.requirement.test.ts](src/requirements/mcp/001-tool-output-format.requirement.test.ts)\
-Score: 0.80 · Statements: 4 / 0 / 1
+Score: 0.67 · Statements: 3 ✓ / 2 ⚠ / 1 ✗
 
-- [x] **Statement** (✗ uncovered): "Tool handlers SHOULD use the shared
-      `toolResult()` helper from `src/tools/tool-result.ts` to produce both
-      `structuredContent` and the text fallback from a single data object."
-      **Add step**:
-      `await t.step("all tool handlers invoke the toolResult() helper for output formatting", ...)`
-      **Assert**: `grep -r "toolResult(" src/tools/` finds at least one call per
-      tool file; or a static analysis step confirms no tool returns raw objects
-      without `toolResult()`. **Spec ref**: mcp-001 Rationale section
+- [ ] **Statement** (⚠ partial — `structuredContent` presence tested but
+      `outputSchema` declaration on the tool entry not verified): "Tools MUST
+      declare an `outputSchema` using a zod schema that describes the structure
+      of the result." **Add step**:
+      `await t.step("tools/list response includes outputSchema for each tool", ...)`
+      **Assert**: send a `tools/list` MCP request; iterate `result.tools`;
+      assert every entry has a non-null `outputSchema` property. **Spec ref**:
+      mcp-001 §Behavior, bullet 1.
+
+- [ ] **Statement** (✗ uncovered): "Tools MUST be registered via `registerTool`
+      (not the deprecated `.tool()` method)." **Add step**:
+      `await t.step("tool registration uses registerTool not the deprecated tool method", ...)`
+      **Assert**: audit `src/tools/` source — grep for `.tool(` calls and assert
+      zero results; or call `initialize` and verify no deprecation warning
+      appears in the server log. This constraint is best enforced as a lint/grep
+      assertion in the test. **Spec ref**: mcp-001 §Behavior, bullet 4.
+
+- [ ] **Statement** (⚠ partial — `structuredContent` always present but explicit
+      check that no text-only result is returned without a structured
+      counterpart is missing): "Tools MUST NOT return raw unstructured text when
+      the result is structured data." **Add step**:
+      `await t.step("tool result content array never contains a text-only item without a corresponding structuredContent", ...)`
+      **Assert**: call several tools; for each response, assert that
+      `result.content` does not consist solely of `{ type: "text" }` items
+      without a matching `result.structuredContent` field. **Spec ref**: mcp-001
+      §Behavior, bullet 5.
 
 ---
 
-### invitations-006 — Senders can attach verified and custom claims to outgoing invitations
+### invitations — 85.9% stmt-wt
+
+#### invitations-006 — Send invitation claims
 
 File:
 [src/requirements/invitations/006-send-invitation-claims.requirement.test.ts](src/requirements/invitations/006-send-invitation-claims.requirement.test.ts)\
-Score: 0.80 · Statements: 5 ✓ / 0 ⚠ / 1 ✗
+Score: 0.71 · Statements: 4 ✓ / 2 ⚠ / 1 ✗
 
-- [x] **Statement** (✗ uncovered): "If none of the inputs yield any claim data,
-      the `claims` field is absent or an empty object in the envelope." **Add
+- [ ] **Statement** (⚠ partial — custom claims included verbatim but they are
+      not explicitly labelled as unverified in the envelope): "`custom` claims
+      are caller-supplied. They MUST be clearly distinguished as unverified.
+      Receivers MUST NOT treat them as authoritative." **Add step**:
+      `await t.step("invitation envelope places custom claims under a clearly unverified key distinct from user and admin", ...)`
+      **Assert**: include `custom_claims: { greeting: "hello" }` in a
+      `send_invitation` call; assert the resulting envelope JSON has
+      `claims.custom.greeting === "hello"` at a key (`custom`) that is distinct
+      from `claims.user` and `claims.admin`, making the unverified origin
+      unambiguous to receivers. **Spec ref**: invitations-006 §Behavior,
+      bullet 3.
+
+- [ ] **Statement** (⚠ partial — server-side value resolution tested but
+      fabricated value injection path not explicitly closed): "The caller MUST
+      NOT be able to supply fabricated `user` or `admin` values directly; only
+      keys are accepted as input, and the server is the sole source of the
+      corresponding values." **Add step**:
+      `await t.step("send_invitation input schema accepts only claim keys not claim values for user and admin", ...)`
+      **Assert**: attempt to call `send_invitation` with a payload that includes
+      arbitrary `user` or `admin` value maps; assert a Zod validation error is
+      returned (the tool schema must not accept those fields at all). **Spec
+      ref**: invitations-006 §Behavior, bullet 5.
+
+- [ ] **Statement** (✗ uncovered): "`user` and `admin` values originate
+      exclusively from the server's own verified metadata store — the caller
+      selects which keys to expose, but MUST NOT supply or override the values."
+      **Add step**:
+      `await t.step("invitation envelope user claim values match stored user_verified_fields not caller-supplied data", ...)`
+      **Assert**: pre-store a known value via `set_user_verified_metadata`; call
+      `send_invitation` with `include_user_claims: ["<stored_key>"]`; assert the
+      envelope's `claims.user.<stored_key>` equals the stored value exactly (not
+      any value the caller could have injected). **Spec ref**: invitations-006
+      §Behavior, bullet 6.
+
+---
+
+#### invitations-007 — Receipt callback delivery
+
+File:
+[src/requirements/invitations/007-receipt-callback-delivery.requirement.test.ts](src/requirements/invitations/007-receipt-callback-delivery.requirement.test.ts)\
+Score: 0.50 · Statements: 1 ✓ / 0 ⚠ / 1 ✗
+
+- [ ] **Statement** (✗ uncovered): "The `delivery.token` is single-use and MUST
+      NOT be sent on any subsequent request after the inviting domain confirms
+      acceptance with HTTP 202." **Add step**:
+      `await t.step("delivery token is rejected on second use after successful 202 acceptance", ...)`
+      **Assert**: submit a receipt callback with a valid `delivery.token` that
+      returns 202; submit the identical callback again with the same token;
+      assert the second call returns a structured error with code
+      `E_DELIVERY_TOKEN_CONSUMED`. **Spec ref**: invitations-007 §Behavior,
+      bullet 1.
+
+- [ ] **Statement** (✗ uncovered): "Auto-accept inline optimization (Section
+      7.4, Section 9.7.5) MAY return the receipt synchronously in the original
+      invitation submission's response body in lieu of a separate callback
+      request; in that case no out-of-band callback is sent." **Add step**:
+      `await t.step("send_invitation returns receipt inline when receiver auto-accepts without out-of-band callback", ...)`
+      **Assert**: configure the mock receiver to return `200` with a receipt
+      object inline; call `send_invitation`; assert the tool result contains the
+      receipt and that no separate POST callback was sent to the mock callback
+      server. **Spec ref**: invitations-007 §Behavior, bullet 2 (auto-accept
+      path, Section 9.7.5).
+
+---
+
+#### invitations-008 — Receipt callback handler
+
+File:
+[src/requirements/invitations/008-receipt-callback-handler.requirement.test.ts](src/requirements/invitations/008-receipt-callback-handler.requirement.test.ts)\
+Score: 0.75 · Statements: 1 ✓ / 1 ⚠ / 0 ✗
+
+- [ ] **Statement** (⚠ partial — acceptance transition tested but
+      receipt-superseding semantics not exercised): "On
+      `decision: \"accepted\"`: ... The handler MUST trigger receipt-superseding
+      semantics (`receipts-004`) if applicable." **Add step**:
+      `await t.step("receipt callback with accepted decision supersedes any prior receipt from the same sender domain", ...)`
+      **Assert**: accept an initial invitation to establish a relationship and
+      produce a first receipt; send a second invitation from the same domain;
+      accept it via the receipt callback; assert the first receipt is now
+      superseded (no longer active or replaced by the new one). **Spec ref**:
+      invitations-008 §Behavior, bullet 1 (superseding clause), `receipts-004`.
+
+---
+
+### account — 86.6% stmt-wt
+
+#### account-001 — Account is the server-local identity for an authenticated listener
+
+File:
+[src/requirements/account/001-account-identity.requirement.test.ts](src/requirements/account/001-account-identity.requirement.test.ts)\
+Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 0 ✗
+
+- [ ] **Statement** (⚠ partial — stable account ID tested via OID but the
+      explicit "display name not required" guard is not a named test step): "The
+      server MUST NOT require a display name as a condition of having an account
+      (Section 3A.2)." **Add step**:
+      `await t.step("account creation succeeds and returns a stable account id when no display name is provided", ...)`
+      **Assert**: make an authenticated MCP call without any `display_name`
+      field; assert a valid `account_id` is returned (not a validation error
+      demanding a display name). **Spec ref**: account-001 §Behavior, bullet 1.
+
+---
+
+#### account-003 — Account MAY have an optional display name
+
+File:
+[src/requirements/account/003-account-display-name.requirement.test.ts](src/requirements/account/003-account-display-name.requirement.test.ts)\
+Score: 0.67 · Statements: 2 ✓ / 1 ⚠ / 1 ✗
+
+- [ ] **Statement** (⚠ partial — absence of display name tested but the
+      256-code-point upper bound is not probed): "A display name MAY be any
+      Unicode string up to 256 code points (Section 3A.2)." **Add step**:
+      `await t.step("set_display_name accepts a 256-code-point Unicode string and rejects a 257-code-point string", ...)`
+      **Assert**: call `set_display_name` with a 256-character Unicode string
+      (e.g. `"a".repeat(256)`); assert success. Repeat with 257 code points;
+      assert a structured validation error. **Spec ref**: account-003 §Behavior,
+      bullet 1.
+
+- [ ] **Statement** (✗ uncovered): "The listener MAY set or clear their display
+      name at any time via the `set_display_name` MCP tool (Section 10B.6)."
+      **Add step**:
+      `await t.step("set_display_name tool stores a display name and null clears it", ...)`
+      **Assert**: call `set_display_name` with a non-null name string; verify
+      the stored account reflects it; call `set_display_name` with `null`;
+      verify `display_name` is absent or null on subsequent retrieval. **Spec
+      ref**: account-003 §Behavior, bullet 3.
+
+- [ ] **Statement** (✗ uncovered): "The listener MAY retrieve their current
+      display name via the `get_display_name` MCP tool (Section 10B.6)." **Add
       step**:
-      `await t.step("invite_contact succeeds when no claims data is available from any source", ...)`
-      **Assert**: `invite_contact` called with no `custom_claims` and an account
-      with no `user_verified_fields` produces a valid invitation; envelope sent
-      to receiver has absent or empty `claims`. **Spec ref**: invitations-006
-      Expected Behavior, last bullet
+      `await t.step("get_display_name tool returns the display name previously stored for the calling account", ...)`
+      **Assert**: set a known display name via `set_display_name`; call
+      `get_display_name`; assert the response contains the exact string that was
+      set. **Spec ref**: account-003 §Behavior, bullet 4.
 
 ---
 
-### contacts-002 — Contact field accumulation from invitation claims
+#### account-006 — Permission introspection tool
 
 File:
-[src/requirements/contacts/002-contact-field-accumulation.requirement.test.ts](src/requirements/contacts/002-contact-field-accumulation.requirement.test.ts)\
-Score: 0.80 · Statements: 5 ✓ / 0 ⚠ / 1 ✗
+[src/requirements/account/006-permission-introspection-tool.requirement.test.ts](src/requirements/account/006-permission-introspection-tool.requirement.test.ts)\
+Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 0 ✗
 
-- [x] **Statement** (✗ uncovered): "`get_contact` MUST return the full `fields`
-      history (all `ContactFieldRecord` entries per key, not just the most
-      recent)." **Add step**:
-      `await t.step("get_contact returns full field history array for each key", ...)`
-      **Assert**: After two invitations from the same sender with different
-      values for the same claim key, `get_contact` response `fields[key]` is an
-      array with 2 entries. **Spec ref**: contacts-002 rule 5
+- [ ] **Statement** (⚠ partial — role-based output tested but the "no arbitrary
+      identifier input" guard is not isolated as its own assertion): "The tool
+      MUST NOT accept arbitrary account identifiers for lookup." **Add step**:
+      `await t.step("get_permissions result is always scoped to the calling account regardless of any identifier in the arguments", ...)`
+      **Assert**: call `get_permissions` with an extra argument containing
+      another user's OID or account ID (if the schema allows it); assert the
+      result reflects only the calling account's permissions, not the injected
+      identifier's. **Spec ref**: account-006 §Behavior, bullet 1.
 
 ---
 
-### contacts-001 — Contact auto-creation on invitation acceptance
+#### account-007 — User set verified metadata
 
 File:
-[src/requirements/contacts/001-contact-auto-creation.requirement.test.ts](src/requirements/contacts/001-contact-auto-creation.requirement.test.ts)\
-Score: 0.80 · Statements: 5 ✓ / 0 ⚠ / 1 ✗
+[src/requirements/account/007-user-set-verified-metadata.requirement.test.ts](src/requirements/account/007-user-set-verified-metadata.requirement.test.ts)\
+Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 0 ✗
 
-- [x] **Statement** (✗ uncovered): "If the invitation has no
-      `claims.immutable.domain_id`, no contact is created." **Add step**:
-      `await t.step("accepting invitation without domain_id does not create a contact", ...)`
-      **Assert**: Accept invitation seeded without `claims.immutable.domain_id`;
-      `list_contacts` returns empty array. **Spec ref**: contacts-001 rule 7
+- [ ] **Statement** (⚠ partial — admin field preservation checked via "preserves
+      admin overrides" step but not isolated as an explicit mutability guard):
+      "The tool MUST NOT modify `admin_verified_fields`." **Add step**:
+      `await t.step("set_user_verified_metadata does not modify admin_verified_fields even for overlapping keys", ...)`
+      **Assert**: pre-populate `admin_verified_fields` via a domain-admin call;
+      call `set_user_verified_metadata` with overlapping key names; retrieve the
+      account; assert `admin_verified_fields` retains the original admin-set
+      values unchanged. **Spec ref**: account-007 §Behavior, bullet 1.
 
 ---
 
-### mcp-auth-008 — MCP endpoint validates Origin header
+### receptive-policy — 90.7% stmt-wt
+
+#### receptive-policy-001 — Get receptive policy
 
 File:
-[src/requirements/mcp/auth/008-origin-validation.requirement.test.ts](src/requirements/mcp/auth/008-origin-validation.requirement.test.ts)\
-Score: 0.50 · Statements: 0 ✓ / 2 ⚠ / 0 ✗
+[src/requirements/receptive-policy/001-get-receptive-policy.requirement.test.ts](src/requirements/receptive-policy/001-get-receptive-policy.requirement.test.ts)\
+Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 0 ✗
 
-- [x] **Statement** (⚠ partial — needs explicit rejection test): "Requests with
-      disallowed or malformed origins MUST be rejected." **Add step**:
-      `await t.step("rejects MCP request with disallowed Origin header", ...)`
-      **Assert**: POST to MCP endpoint with `Origin: https://evil.example`
-      returns HTTP 403 (or 400). **Spec ref**: mcp-auth-008 Expected behavior
-      bullet 1
-
-- [x] **Statement** (⚠ partial — needs explicit test for ordering): "Origin
-      validation is enforced before sensitive MCP operations execute." **Add
-      step**:
-      `await t.step("Origin is validated before any tool handler executes", ...)`
-      **Assert**: Request with disallowed Origin + valid bearer token returns
-      403 without executing the tool (tool-side KV state unchanged). **Spec
-      ref**: mcp-auth-008 Expected behavior bullet 3
+- [ ] **Statement** (⚠ partial — list scoping tested but receipt-mode exclusion
+      from the default result set is not verified): "`mode: \"receipt\"`
+      policies (auto-created on invitation acceptance) are **excluded** from the
+      default result set to avoid clutter. Callers MUST pass
+      `include_receipt_policies: true` to include them." **Add step**:
+      `await t.step("get_receptive_policies omits receipt-mode policies by default and includes them when include_receipt_policies is true", ...)`
+      **Assert**: accept an invitation (which auto-creates a `mode: "receipt"`
+      policy); call `get_receptive_policies` without any extra flags; assert no
+      `mode: "receipt"` policies appear in the result; repeat with
+      `{ include_receipt_policies: true }`; assert the receipt-mode policy is
+      now returned. **Spec ref**: receptive-policy-001 §Behavior, bullet 1.
 
 ---
 
-### domain-admin-013 — Domain identity includes port when non-standard
+#### receptive-policy-002 — Set receptive policy
 
 File:
-[src/requirements/domain-admin/013-domain-identity-port.requirement.test.ts](src/requirements/domain-admin/013-domain-identity-port.requirement.test.ts)\
-Score: 0.75 · Statements: 2 ✓ / 2 ⚠ / 0 ✗
-
-- [x] **Statement** (⚠ partial — port present in test output but exact `:PORT`
-      suffix assertion may be missing): "A server started on `localhost:8000`
-      exposes a domain identity of `localhost:8000`." **Add step**:
-      `await t.step("domain identity equals localhost:PORT for non-standard port", ...)`
-      **Assert**:
-      `assertEquals(domainIdentity.domain, \`localhost:${port}\`)`where`port !==
-      443`. **Spec ref**: domain-admin-013 Expected behavior, rule 1
-
-- [x] **Statement** (⚠ partial — standard-port exclusion case not covered): "A
-      server on port 443 exposes a domain identity of `example.com` (no port
-      suffix)." **Add step**:
-      `await t.step("domain identity omits port suffix when port is 443", ...)`
-      **Assert**: With `RPP_DOMAIN=example.com` and port 443 configured, domain
-      identity is `"example.com"` (no `:443`). **Spec ref**: domain-admin-013
-      Expected behavior, rule 2
-
----
-
-### domain-admin-010 — Domain administrators can remove admin verified metadata
-
-File:
-[src/requirements/domain-admin/010-remove-admin-verified-metadata.requirement.test.ts](src/requirements/domain-admin/010-remove-admin-verified-metadata.requirement.test.ts)\
-Score: 0.50 · Statements: 1 ✓ / 1 ⚠ / 1 ✗
-
-- [x] **Statement** (✗ uncovered): "The system reconciles invitation
-      verification state after field removal (subsequent invitations no longer
-      carry the removed field)." **Add step**:
-      `await t.step("subsequent invitation after field removal does not carry the removed admin-verified field", ...)`
-      **Assert**: After `remove_admin_verified_metadata`, `invite_contact`
-      produces an envelope whose `claims.admin` does not include the removed
-      key. **Spec ref**: domain-admin-010 Expected behavior bullet 3
-
-- [x] **Statement** (⚠ partial — removal tested but merged view recalculation
-      not explicitly verified): "After removal, the effective view returned by
-      `get_user_verified_metadata` no longer includes that field." **Add step**:
-      `await t.step("get_user_verified_metadata does not include field after admin removal", ...)`
-      **Assert**: After `remove_admin_verified_metadata`, calling
-      `get_user_verified_metadata` for the same user omits the removed key
-      entirely. **Spec ref**: domain-admin-010 Expected behavior bullet 2
-
----
-
-### domain-admin-006 — Domain administrators can delete archived verification keys
-
-File:
-[src/requirements/domain-admin/006-delete-historical-key.requirement.test.ts](src/requirements/domain-admin/006-delete-historical-key.requirement.test.ts)\
-Score: 0.50 · Statements: 0 ✓ / 1 ⚠ / 1 ✗
-
-- [x] **Statement** (✗ uncovered): "Deleting a key makes prior attestations
-      signed by that key unverifiable." **Add step**:
-      `await t.step("attestation signed by deleted key fails verification", ...)`
-      **Assert**: Invitation signed with the now-deleted key is rejected;
-      verification error references the missing key. **Spec ref**:
-      domain-admin-006 Expected behavior bullet 2
-
-- [x] **Statement** (⚠ partial — deletion confirmed but impact on in-flight
-      verification not tested): "The active key cannot be deleted; only archived
-      (rotated-out) keys can be removed." **Add step**:
-      `await t.step("attempting to delete the active key returns an error", ...)`
-      **Assert**: `delete_historical_key` called with the current active key ID
-      returns `error.code === "E_KEY_NOT_FOUND"` or equivalent protection error.
-      **Spec ref**: domain-admin-006 Expected behavior bullet 1
-
----
-
-### deployment-001 — Single-Tenant-Per-Instance Deployment
-
-File:
-[src/requirements/deployment/001-single-tenant-per-instance.requirement.test.ts](src/requirements/deployment/001-single-tenant-per-instance.requirement.test.ts)\
+[src/requirements/receptive-policy/002-set-receptive-policy.requirement.test.ts](src/requirements/receptive-policy/002-set-receptive-policy.requirement.test.ts)\
 Score: 0.67 · Statements: 1 ✓ / 2 ⚠ / 0 ✗
 
-- [x] **Statement** (⚠ partial — single-domain isolation implied but
-      two-instance test not present): "Each domain's instance has isolated KV
-      storage (cannot read/write another domain's data)." **Add step**:
-      `await t.step("two server instances have isolated KV storage", ...)`
-      **Assert**: Start two servers with separate `kvPath` values; data written
-      to server A is not returned by server B for the same key. **Spec ref**:
-      deployment-001 Testing section
+- [ ] **Statement** (⚠ partial — valid modes tested but `receipt` mode as
+      invalid input not explicitly rejected): "The `receipt` mode MUST NOT be
+      accepted as input to this tool." **Add step**:
+      `await t.step("add_receptive_policy returns a structured error when mode is receipt", ...)`
+      **Assert**: call `add_receptive_policy` with `{ mode: "receipt" }`; assert
+      the tool returns a structured error (not success), indicating `receipt`
+      mode is not user-createable. **Spec ref**: receptive-policy-002 §Behavior,
+      bullet 1.
 
-- [ ] **Statement** (⚠ partial — auth scoping per-instance implied but
-      cross-instance token test not present): "A token for domain A cannot
-      access domain B's MCP tools." **Add step**:
-      `await t.step("token issued for domain A is rejected by domain B instance", ...)`
-      **Assert**: Token with `aud: "https://domainA.example"` returns 401 on
-      domain B instance (different audience). **Spec ref**: deployment-001
-      Testing section
-
----
-
-### invitations-003 — Listeners can accept a pending invitation
-
-File:
-[src/requirements/invitations/003-accept-invitation.requirement.test.ts](src/requirements/invitations/003-accept-invitation.requirement.test.ts)\
-Score: 0.75 · Statements: 5 ✓ / 2 ⚠ / 0 ✗
-
-- [x] **Statement** (⚠ partial — acceptance tested but narrower terms
-      negotiation not isolated): "Acceptance MAY use narrower terms than
-      proposed, following Section 9.3." **Add step**:
-      `await t.step("accept_invitation with narrower terms issues receipt for only accepted subset", ...)`
-      **Assert**: Invite proposes `{ category: ["billing", "correspondence"] }`;
-      acceptance with `{ category: ["billing"] }` only issues one receipt for
-      `billing`. **Spec ref**: invitations-003 bullet 7
-
-- [ ] **Statement** (⚠ partial — single receipt per acceptance tested but
-      multi-category receipt issuance not isolated): "If multiple categories are
-      accepted, the server issues one receipt per accepted category." **Add
-      step**:
-      `await t.step("accepting multi-category invitation issues one receipt per category", ...)`
-      **Assert**: Invitation with
-      `proposed_terms.category: ["billing", "correspondence"]` accepted in full
-      returns response with two `receipt` objects. **Spec ref**: invitations-003
-      bullet 8
-
----
-
-### well-known-001 — Domain identity well-known endpoint
-
-File:
-[src/requirements/well-known-paths.requirement.test.ts](src/requirements/well-known-paths.requirement.test.ts)\
-Score: 0.70 · Statements: 3 ✓ / 2 ⚠ / 0 ✗
-
-- [ ] **Statement** (⚠ partial — required fields tested; optional `domain_type`
-      not covered): "The response MAY include `domain_type` — one of `personal`,
-      `business`, `academic`, `government`, `nonprofit`, `healthcare`, `media`."
+- [ ] **Statement** (⚠ partial — domain_filter rule storage tested but
+      glob-pattern evaluation semantics are not verified): "When `mode` is
+      `domain_filter`, the tool MUST also accept a `domain_filter` object
+      containing an ordered list of `allow`/`block` rules with glob patterns."
       **Add step**:
-      `await t.step("well-known endpoint includes domain_type when configured", ...)`
-      **Assert**: With `RPP_DOMAIN_TYPE=business` set,
-      `.well-known/rpp-domain-identity` JSON includes `domain_type: "business"`.
-      **Spec ref**: well-known-001 MAY field definitions
-
-- [x] **Statement** (⚠ partial — required fields tested; optional `public_key`
-      not covered): "The response MAY include `public_key` with
-      `algorithm: \"Ed25519\"` and Base64-encoded SPKI `key`." **Add step**:
-      `await t.step("well-known endpoint includes public_key with Ed25519 algorithm when configured", ...)`
-      **Assert**: When domain has a verification key,
-      `.well-known/rpp-domain-identity` includes
-      `public_key.algorithm === "Ed25519"` and `public_key.key` is a non-empty
-      Base64 string. **Spec ref**: well-known-001 MAY field definitions
+      `await t.step("add_receptive_policy domain_filter accepts and stores glob patterns in allow/block rules", ...)`
+      **Assert**: call `add_receptive_policy` with
+      `{ mode: "domain_filter", domain_filter: { rules: [{ action: "allow", pattern: "*.example.com" }, { action: "block", pattern: "*" }] } }`;
+      assert the stored policy reflects the ordered glob rules; attempt a submit
+      message from a matching domain and verify the policy is applied in rule
+      order. **Spec ref**: receptive-policy-002 §Behavior, bullet 2.
 
 ---
 
-### messages-007 — Message metadata field is stored and returned
+### messages — 91.5% stmt-wt
+
+#### messages-005 — Delete message
 
 File:
-[src/requirements/messages/007-metadata.requirement.test.ts](src/requirements/messages/007-metadata.requirement.test.ts)\
-Score: 0.81 · Statements: 6 ✓ / 1 ⚠ / 1 ✗
+[src/requirements/messages/005-delete-message.requirement.test.ts](src/requirements/messages/005-delete-message.requirement.test.ts)\
+Score: 0.75 · Statements: 3 ✓ / 1 ⚠ / 1 ✗
 
-- [ ] **Statement** (⚠ partial — tool-layer rejection not isolated from HTTP layer): "`send_message` MUST accept an optional `metadata` parameter and include it in the outbound envelope when provided." **Add step**:
-      `await t.step("send_message metadata parameter is forwarded in the outbound envelope", ...)`
-      **Assert**: Call `send_message` with a `metadata` object via MCP tool; inspect the stored message record to confirm `metadata` was included in the envelope sent to the submit endpoint. **Spec ref**: messages-007 §Behavior, bullet 3
+- [ ] **Statement** (⚠ partial — visibility removal from list/get verified but
+      atomic removal of all index entries not directly observed): "Deletion MUST
+      remove the message record and all associated index entries atomically."
+      **Add step**:
+      `await t.step("deleted message does not appear in list_messages under any filter combination", ...)`
+      **Assert**: send a message with a specific `category` and `sender_domain`;
+      delete it; call `list_messages` with `{ category: "<used>" }` and
+      separately with `{ sender_domain: "<used>" }`; assert the deleted message
+      ID does not appear in either result set. **Spec ref**: messages-005
+      §Behavior, bullet 2.
 
-- [ ] **Statement** (✗ uncovered): "The server MUST NOT interpret or act on `metadata` contents." **Add step**:
-      `await t.step("server does not alter metadata contents (round-trip preserves original value)", ...)`
-      **Assert**: Store a message with `metadata: { "key": "arbitrary-value" }`; retrieve via `get_message` and assert the metadata field equals the original object exactly (no normalisation or additional fields). **Spec ref**: messages-007 §Behavior, bullet 5
-
----
-
-## Missing test files
-
-The following requirements have no corresponding test file. All statements score 0.0.
-
-### invitations-009 — Senders can cancel a direct invitation they have sent
-
-File: `src/requirements/invitations/009-cancel-invitation.requirement.test.ts` (does not exist)\
-Score: 0.00 · Statements: 0 ✓ / 0 ⚠ / 5 ✗
-
-- [ ] **Statement** (✗ uncovered): "Only the originating sender (identified by OID) MAY cancel the invitation. Attempts by any other account MUST return a structured not-found error (the server MUST NOT distinguish 'not yours' from 'does not exist')." **Add step**: `await t.step("cancel_invitation by non-owner returns not-found error", ...)` **Spec ref**: invitations-009 §Authorization
-
-- [ ] **Statement** (✗ uncovered): "The tool MUST accept cancellation of invitations in `pending` OR `accepted` state." **Add step**: `await t.step("cancel_invitation succeeds for pending and accepted invitations", ...)` **Spec ref**: invitations-009 §Allowed states
-
-- [ ] **Statement** (✗ uncovered): "If the invitation is already in a terminal state (`rejected`, `cancelled`, `expired`), the tool MUST return a structured error indicating the invitation cannot be cancelled in its current state." **Add step**: `await t.step("cancel_invitation on terminal state invitation returns structured error", ...)` **Spec ref**: invitations-009 §Terminal state guard
-
-- [ ] **Statement** (✗ uncovered): "On success: The invitation status MUST be set to `cancelled`. All receipts derived from that invitation MUST be immediately invalidated (revoked with reason `SUPERSEDED`)." **Add step**: `await t.step("cancel_invitation sets status to cancelled and revokes all derived receipts", ...)` **Spec ref**: invitations-009 §Success effects
-
-- [ ] **Statement** (✗ uncovered): "The tool MUST return the updated invitation record including the new `cancelled` status." **Add step**: `await t.step("cancel_invitation returns updated record with cancelled status", ...)` **Spec ref**: invitations-009 §Response shape
+- [ ] **Statement** (✗ uncovered): "Deletion MUST NOT revoke or otherwise affect
+      any receipt referenced by the message (including `reply_invite`)." **Add
+      step**:
+      `await t.step("delete_message does not revoke the receipt referenced by the deleted message", ...)`
+      **Assert**: obtain a receipt via invitation acceptance; send a message
+      that references that receipt's ID; delete the message; call
+      `list_issued_receipts` and assert the receipt is still present and not in
+      a revoked state. **Spec ref**: messages-005 §Behavior, bullet 4.
 
 ---
+
+## Missing test coverage
+
+The following requirement has a test file on disk but contains **no test steps**
+and the extractor found no normative statement bullets in the document. It
+therefore scores 0.00 and has no statement-level action items above. The test
+file must be populated by reading the requirement doc directly.
+
+- [ ] `mcp-auth-007` — populate
+      [src/requirements/mcp/auth/007-unauthorized-challenge.requirement.test.ts](src/requirements/mcp/auth/007-unauthorized-challenge.requirement.test.ts).
+      The requirement title is "Unauthorized responses include OAuth challenge
+      metadata." The key behavior is that a `401 Unauthorized` response MUST
+      include a `WWW-Authenticate: Bearer` header containing at minimum
+      `resource=` and `as=` parameters pointing to the authorization server. Add
+      at least one `t.step` verifying this header is present and well-formed
+      when an unauthenticated request is made to `POST /mcp`.
