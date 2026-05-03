@@ -70,11 +70,27 @@ export const InvitationDeliverySchema = z.object({
   token: z.string(),
 });
 
+/**
+ * Receipt summary recorded on the sender's view of an invitation after
+ * acceptance. Per Section 9.7.2 / 9.7.3 the sender's server stores the
+ * issued receipt locally (including secret) so it can verify HMAC
+ * signatures on inbound messages from the acceptor. For same-domain
+ * acceptance the receipt already exists in the local receipts table; the
+ * summary on the invitation gives the original sender visibility into the
+ * outcome via review_invitation.
+ */
+export const InvitationReceiptSummarySchema = z.object({
+  id: z.string(),
+  secret: z.string().optional(),
+  category: z.string(),
+  max_content_rating: z.string().optional(),
+  usage_policy: z.string().optional(),
+  issued_at: z.coerce.date(),
+});
+
 export const InvitationSchema = z.object({
   invitation_id: z.string(),
   receiver_oid: z.string(),
-  /** OID of the sender when both parties share the same domain (same-domain delivery). */
-  sender_oid: z.string().optional(),
   sender_domain: z.string(),
   status: InvitationStatusSchema,
   proposed_terms: ReceiptTermsSchema,
@@ -85,6 +101,15 @@ export const InvitationSchema = z.object({
   message_id: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   delivery: InvitationDeliverySchema.optional(),
+  /** Receipt summary captured after acceptance (Section 9.7). Absent for
+   * pending/rejected/cancelled/expired invitations. */
+  receipt: InvitationReceiptSummarySchema.optional(),
+  /** Optional voluntary display name supplied by the acceptor in the §9.7
+   * receipt callback envelope. */
+  acceptor_display_name: z.string().optional(),
+  /** Optional free-form reason supplied by the acceptor with the §9.7
+   * callback (either accepted or rejected). */
+  decision_reason: z.string().optional(),
 });
 
 export type Invitation = z.infer<typeof InvitationSchema>;

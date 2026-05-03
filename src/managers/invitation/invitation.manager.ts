@@ -62,6 +62,7 @@ export class InvitationManager {
   async accept(
     invitationId: string,
     negotiatedTerms?: ReceiptTerms,
+    reason?: string,
   ): Promise<{ invitation: Invitation; receipt: Receipt }> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
@@ -74,14 +75,6 @@ export class InvitationManager {
 
     const acceptedTerms = negotiatedTerms ?? invitation.proposed_terms;
     const acceptedAt = new Date();
-
-    const updated: Invitation = {
-      ...invitation,
-      status: "accepted",
-      accepted_at: acceptedAt,
-      proposed_terms: acceptedTerms,
-    };
-    const savedInvitation = await this.invitations.set(updated);
 
     // Revoke any existing receipts from the same sender identity before issuing.
     const senderDomainId = invitation.claims?.immutable?.domain_id;
@@ -105,6 +98,30 @@ export class InvitationManager {
       senderDomainIdStr,
     );
 
+    // Persist a summary of the issued receipt on the invitation so the
+    // original sender can observe acceptance + terms via review_invitation.
+    // Section 9.7.3 step 5 ("store the receipt locally"): the secret is
+    // included so the sender's server can verify HMAC signatures on inbound
+    // messages from the acceptor. For same-domain acceptance the receipt
+    // already exists in the local receipts table; this summary additionally
+    // surfaces it on the sender's view of the invitation.
+    const updated: Invitation = {
+      ...invitation,
+      status: "accepted",
+      accepted_at: acceptedAt,
+      proposed_terms: acceptedTerms,
+      receipt: {
+        id: receipt.id,
+        secret: receipt.secret,
+        category: receipt.category,
+        max_content_rating: receipt.max_content_rating,
+        usage_policy: receipt.usage_policy,
+        issued_at: receipt.issued_at,
+      },
+      ...(reason !== undefined && { decision_reason: reason }),
+    };
+    const savedInvitation = await this.invitations.set(updated);
+
     // Auto-upsert a contact for the sender identity when domain_id is present.
     if (senderDomainIdStr) {
       await this.contactManager.upsertFromInvitation(
@@ -125,7 +142,7 @@ export class InvitationManager {
     return { invitation: savedInvitation, receipt };
   }
 
-  async reject(invitationId: string): Promise<Invitation> {
+  async reject(invitationId: string, reason?: string): Promise<Invitation> {
     const invitation = await this.invitations.get(invitationId);
     if (!invitation) {
       throw new InvitationNotFoundError(invitationId);
@@ -134,6 +151,7 @@ export class InvitationManager {
     const updated: Invitation = {
       ...invitation,
       status: "rejected",
+      ...(reason !== undefined && { decision_reason: reason }),
     };
     return await this.invitations.set(updated);
   }

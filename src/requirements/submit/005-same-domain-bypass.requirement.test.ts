@@ -100,6 +100,67 @@ Deno.test({
               assertExists(delivery.token);
             },
           );
+
+          await t.step(
+            "accept_invitation same-domain records receipt summary on the sender's view of the invitation",
+            async () => {
+              // Provision a second account (BEAU = the sender) and have BEAU
+              // send an invitation to the original test account (USER) on the
+              // same local domain. After USER accepts, BEAU's review_invitation
+              // must surface the issued receipt summary (Section 9.7.3 step 5,
+              // adapted for same-domain delivery).
+              const beauOid = crypto.randomUUID();
+              const beauToken = await issueToken({
+                oid: beauOid,
+                scope: requiredScopes.join(" "),
+                name: "Beau",
+              });
+              await callTool(beauToken, "set_user_verified_metadata");
+
+              // USER opens a fresh receptive window for BEAU to target.
+              const { result: userWindow } = await callTool<
+                { policy_id: string }
+              >(token, "open_receptive_window", { duration_seconds: 300 });
+              assertExists(userWindow);
+
+              // BEAU sends an invitation to USER on the same domain.
+              const { result: sent } = await callTool<{
+                invitation_id?: string;
+              }>(beauToken, "send_invitation", {
+                receiver_domain: receiverDomain,
+                receptive_policy_id: userWindow!.policy_id,
+                proposed_terms: { category: "billing" },
+              });
+              assertExists(sent?.invitation_id);
+              const beauInvId = sent!.invitation_id!;
+
+              // USER accepts.
+              const { result: acceptResult } = await callTool<{
+                receipt?: { id: string };
+              }>(token, "accept_invitation", {
+                invitation_id: beauInvId,
+                reason: "Looking forward to it",
+              });
+              assertExists(acceptResult?.receipt?.id);
+              const issuedReceiptId = acceptResult!.receipt!.id;
+
+              // BEAU reviews the invitation and must see the acceptance state
+              // plus a receipt summary referencing the same receipt id.
+              const { result: review } = await callTool<{
+                status?: string;
+                receipt?: { id?: string; category?: string };
+                decision_reason?: string;
+              }>(beauToken, "review_invitation", {
+                invitation_id: beauInvId,
+              });
+              assertExists(review);
+              assertEquals(review!.status, "accepted");
+              assertExists(review!.receipt);
+              assertEquals(review!.receipt!.id, issuedReceiptId);
+              assertEquals(review!.receipt!.category, "billing");
+              assertEquals(review!.decision_reason, "Looking forward to it");
+            },
+          );
         } finally {
           kv.close();
         }

@@ -68,6 +68,23 @@ const InvitationOutputSchema = {
   accepted_at: outputDate().optional().describe(
     "ISO 8601 timestamp of acceptance",
   ),
+  receipt: z.object({
+    id: z.string().describe("Issued receipt ID"),
+    category: z.string().describe("Permitted message category"),
+    max_content_rating: z.string().optional().describe(
+      "Maximum content rating",
+    ),
+    usage_policy: z.string().optional().describe("Usage policy"),
+    issued_at: outputDate().describe("ISO 8601 timestamp of issuance"),
+  }).optional().describe(
+    "Receipt summary recorded after acceptance (Section 9.7). Visible to the original sender on review_invitation.",
+  ),
+  acceptor_display_name: z.string().optional().describe(
+    "Optional voluntary display name supplied by the acceptor",
+  ),
+  decision_reason: z.string().optional().describe(
+    "Optional human-readable reason supplied by the acceptor",
+  ),
 };
 
 const ListInvitationsInputSchema = {
@@ -318,6 +335,7 @@ export class InvitationTool {
         const { invitation, receipt } = await this.invitationManager.accept(
           params.invitation_id,
           params.negotiated_terms,
+          params.reason,
         );
 
         if (
@@ -367,6 +385,7 @@ export class InvitationTool {
 
         const invitation = await this.invitationManager.reject(
           params.invitation_id,
+          params.reason,
         );
 
         if (
