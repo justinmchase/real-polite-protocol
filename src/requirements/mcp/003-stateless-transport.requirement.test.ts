@@ -104,7 +104,7 @@ Deno.test({
         );
 
         await t.step(
-          "GET /mcp returns 200 text/event-stream to satisfy SSE clients without retries",
+          "GET /mcp returns 405 Method Not Allowed (no SSE push channel)",
           async () => {
             const response = await fetch(`${baseUrl}/mcp`, {
               method: "GET",
@@ -113,25 +113,16 @@ Deno.test({
                 "authorization": `Bearer ${token}`,
               },
             });
-            const body = await response.text();
+            await response.body?.cancel();
             assertEquals(
               response.status,
-              200,
-              "GET /mcp MUST return 200 so SSE clients do not enter a tight retry loop",
-            );
-            assertEquals(
-              response.headers.get("content-type"),
-              "text/event-stream",
-              "GET /mcp MUST return Content-Type: text/event-stream",
+              405,
+              "GET /mcp MUST return 405 to signal no SSE channel per MCP spec",
             );
             assertEquals(
               response.headers.get("mcp-session-id"),
               null,
               "GET /mcp MUST NOT assign a session ID in stateless mode",
-            );
-            assert(
-              body.includes("retry:"),
-              "GET /mcp SSE body MUST include a retry: directive to throttle client reconnects",
             );
           },
         );

@@ -17,20 +17,18 @@ import type { Tool } from "../../tools/mod.ts";
  *   - No `Mcp-Session-Id` header returned → clients never enter a reconnect
  *     cascade caused by stale session IDs across isolate evictions.
  *
- * GET requests (SSE channel open) are handled independently — NOT via the
- * MCP transport — to avoid the transport's server.close() tearing down the
- * stream body before the client can read it. A minimal SSE response is
- * returned that contains only a `retry:` directive and then closes. This:
- *   - Returns 200 (not 405) so the client does not enter a tight retry loop.
- *   - Instructs the client to wait SSE_RETRY_MS before reconnecting.
- *   - Closes the connection immediately so no Deno Deploy isolate is kept alive.
+ * GET requests are answered with `405 Method Not Allowed` per the MCP
+ * Streamable HTTP transport spec, which defines 405 as the protocol-level
+ * signal that the server does not offer an SSE stream — i.e. it does not
+ * send server-initiated requests or notifications. This is the correct way
+ * to advertise "no server push" to a compliant client.
  *
- * The `retry:` field is a standard SSE mechanism (EventSource spec §9.2.5).
- * VS Code and other MCP SSE clients honor it.
+ * https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#listening-for-messages-from-the-server
+ *
+ * Note: some MCP clients (e.g. VS Code as of 2026-05) tight-loop on 405
+ * instead of honoring it. That is a client bug; the server's response is
+ * spec-correct.
  */
-
-/** How long (ms) SSE clients should wait before reconnecting after GET /mcp closes. */
-const SSE_RETRY_MS = 60_000;
 export class McpService {
   private constructor() {}
 
@@ -43,11 +41,13 @@ export class McpService {
     tools: Tool[],
     auth: AuthInfo,
   ): Promise<Response> {
-    // GET opens the SSE server-push channel. For a stateless server that
-    // never initiates requests, hold the channel open with periodic keepalive
-    // comments so clients do not immediately reconnect.
+    // GET opens the optional SSE server-push channel. We don't support it
+    // (stateless, no server-initiated requests), so signal that per spec.
     if (request.method === "GET") {
-      return this.openSseKeepaliveChannel();
+      return new Response(null, {
+        status: 405,
+        headers: { "Allow": "POST" },
+      });
     }
 
     const server = this.buildServer(tools, auth);
@@ -62,19 +62,6 @@ export class McpService {
     } finally {
       await server.close();
     }
-  }
-
-  private openSseKeepaliveChannel(): Response {
-    // Emit a `retry:` directive then close immediately. The client will
-    // reconnect after SSE_RETRY_MS — no persistent connection, no isolate held.
-    const body = `retry: ${SSE_RETRY_MS}\n\n`;
-    return new Response(body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-      },
-    });
   }
 
   private buildServer(tools: Tool[], auth: AuthInfo): McpServer {
