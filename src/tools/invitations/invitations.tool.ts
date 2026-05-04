@@ -455,6 +455,14 @@ export class InvitationTool {
         outputSchema: SendInvitationOutputSchema,
       },
       withToolErrorHandling(async (params: SendInvitationArgs) => {
+        if (
+          !params.receptive_policy_id && !params.shortcode && !params.receipt_id
+        ) {
+          throw new Error(
+            "send_invitation requires exactly one of: receptive_policy_id, shortcode, or receipt_id.",
+          );
+        }
+
         const identity = await this.domainIdentityManager.getDomainIdentity();
         const senderDomain = identity.domain;
 

@@ -256,6 +256,12 @@ export class InvitationManager {
     expiresAt: Date | undefined,
     delivery: { domain: string; token: string },
   ): Promise<Invitation> {
+    if (!receiptId && !receptivePolicyId && !shortcode) {
+      throw new Error(
+        "deliverLocally requires exactly one of: receiptId, receptivePolicyId, or shortcode.",
+      );
+    }
+
     let receiverOid: string;
 
     if (receiptId) {

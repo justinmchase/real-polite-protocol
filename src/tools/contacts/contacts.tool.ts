@@ -286,6 +286,14 @@ export class ContactTool {
         outputSchema: InviteContactOutputSchema,
       },
       withToolErrorHandling(async (params: InviteContactArgs) => {
+        if (!params.receptive_policy_id && !params.receipt_id) {
+          throw new Error(
+            "invite_contact requires either receptive_policy_id or receipt_id. " +
+              "Supply the receptive_policy_id from the contact's reply_invite (embedded in received messages), " +
+              "or the receipt_id from a prior accepted invitation.",
+          );
+        }
+
         // Resolve the receiver domain from the contact.
         const contact = await this.contactManager.get(
           auth.oid,
