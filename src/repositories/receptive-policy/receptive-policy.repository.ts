@@ -72,6 +72,7 @@ export class ReceptivePolicyRepository {
   }
 
   async getById(policyId: string): Promise<ReceptivePolicy | undefined> {
+    if (typeof policyId !== "string" || policyId.length === 0) return undefined;
     const key: Deno.KvKey = [...POLICY_BY_ID_PREFIX, policyId];
     const entry = await this.kv.store.get<unknown>(key);
     return entry.value ? ReceptivePolicySchema.parse(entry.value) : undefined;
@@ -81,6 +82,9 @@ export class ReceptivePolicyRepository {
   async getByShortcode(
     shortcode: string,
   ): Promise<ReceptivePolicy | undefined> {
+    if (typeof shortcode !== "string" || shortcode.length === 0) {
+      return undefined;
+    }
     const key: Deno.KvKey = [...POLICY_BY_SHORTCODE_PREFIX, shortcode];
     const entry = await this.kv.store.get<string>(key);
     if (!entry.value) return undefined;

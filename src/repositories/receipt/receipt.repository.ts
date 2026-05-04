@@ -36,6 +36,7 @@ export class ReceiptRepository {
   constructor(private readonly kv: KvService) {}
 
   async get(id: string): Promise<Receipt | undefined> {
+    if (typeof id !== "string" || id.length === 0) return undefined;
     const entry = await this.kv.store.get<unknown>([...RECEIPT_PREFIX, id]);
     return entry.value ? ReceiptSchema.parse(entry.value) : undefined;
   }

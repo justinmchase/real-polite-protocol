@@ -8,6 +8,7 @@ import type {
   ContactManager,
   MessageManager,
   ReceiptManager,
+  ReceptivePolicyManager,
   SentMessageManager,
 } from "../../managers/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
@@ -300,6 +301,7 @@ export class MessageTool {
     private readonly messageManager: MessageManager,
     private readonly contactManager: ContactManager,
     private readonly sentMessageManager: SentMessageManager,
+    private readonly receptivePolicyManager: ReceptivePolicyManager,
   ) {}
 
   private async getSenderClaims(
@@ -374,6 +376,23 @@ export class MessageTool {
         const senderDomainId = metadata?.immutable_fields?.["domain_id"] as
           | string
           | undefined;
+
+        // 5a. Validate reply_invite.receptive_policy_id (§8.1): MUST be an
+        // active receptive policy on this server owned by the caller. Catching
+        // this here gives the sender a clear error instead of letting the
+        // receiver fail when they try to use the invite later.
+        if (params.reply_invite !== undefined) {
+          const replyPolicy = await this.receptivePolicyManager.getById(
+            params.reply_invite.receptive_policy_id,
+          );
+          if (!replyPolicy || replyPolicy.oid !== auth.oid) {
+            throw new Error(
+              `reply_invite.receptive_policy_id ${params.reply_invite.receptive_policy_id} ` +
+                `is not an active receptive policy owned by you. ` +
+                `Create one with open_receptive_window first, or omit reply_invite.`,
+            );
+          }
+        }
 
         // 6. Construct the message envelope
         const messageId = generateUUIDv7();

@@ -79,6 +79,7 @@ export function initTools(
       managers.messages,
       managers.contacts,
       managers.sentMessages,
+      managers.receptivePolicy,
     ),
   ];
 }
