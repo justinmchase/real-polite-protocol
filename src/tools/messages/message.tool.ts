@@ -21,6 +21,7 @@ import { inputDate, outputDate } from "../date-schema.ts";
 import {
   InvalidBodyError,
   InvalidContentTypeError,
+  InvalidReplyInviteError,
   MessageDeliveryError,
   MessageNotFoundError,
   ReceiptNotActiveError,
@@ -386,10 +387,8 @@ export class MessageTool {
             params.reply_invite.receptive_policy_id,
           );
           if (!replyPolicy || replyPolicy.oid !== auth.oid) {
-            throw new Error(
-              `reply_invite.receptive_policy_id ${params.reply_invite.receptive_policy_id} ` +
-                `is not an active receptive policy owned by you. ` +
-                `Create one with open_receptive_window first, or omit reply_invite.`,
+            throw new InvalidReplyInviteError(
+              params.reply_invite.receptive_policy_id,
             );
           }
         }

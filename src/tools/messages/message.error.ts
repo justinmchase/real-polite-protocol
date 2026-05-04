@@ -47,3 +47,14 @@ export class MessageNotFoundError extends ApplicationError {
     );
   }
 }
+
+export class InvalidReplyInviteError extends ApplicationError {
+  constructor(receptivePolicyId: string) {
+    super(
+      400,
+      "E_INVALID_REPLY_INVITE",
+      `reply_invite.receptive_policy_id ${receptivePolicyId} is not an active receptive policy owned by you. ` +
+        `Create one with open_receptive_window first, or omit reply_invite.`,
+    );
+  }
+}
