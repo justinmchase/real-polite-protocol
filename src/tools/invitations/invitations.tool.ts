@@ -446,7 +446,10 @@ export class InvitationTool {
       {
         description:
           "Send an invitation to a receiver offering proposed receipt terms. Creates a public invitation or direct invitation. " +
-          "To address the receiver use one of: receptive_policy_id (UUID), shortcode + receiver_domain (when the receiver shared a shortcode from open_receptive_window), or receipt_id. " +
+          "You MUST supply exactly one of: receptive_policy_id (UUID), shortcode (with receiver_domain), or receipt_id. " +
+          "To reply to a received message: read the message's reply_invite field and use reply_invite.receptive_policy_id as the receptive_policy_id and reply_invite.receiver_domain as the receiver_domain. " +
+          "To open a new channel to someone who shared a shortcode: use shortcode + receiver_domain. " +
+          "To re-invite an existing contact: use their receipt_id. " +
           "IMPORTANT: Before calling this tool, ask the user which verified claims they would like to include with the invitation. " +
           "Use get_user_verified_metadata to retrieve the available user-verified claims and get_domain_identity to retrieve admin-verified claims, " +
           "then present the available claim keys to the user and ask which ones to include via include_user_claims and include_admin_claims. " +

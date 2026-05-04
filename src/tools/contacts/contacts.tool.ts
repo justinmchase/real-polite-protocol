@@ -280,7 +280,11 @@ export class ContactTool {
       {
         description:
           "Send an invitation to a known contact, resolving their domain automatically. " +
-          "Fails if the contact is not found or delivery fails. " +
+          "You MUST supply exactly one of: receptive_policy_id or receipt_id. " +
+          "To reply to a received message: use the receptive_policy_id from the message's reply_invite field " +
+          "(call get_message or list_messages and read reply_invite.receptive_policy_id). " +
+          "To re-invite an existing contact without a new window: use their receipt_id. " +
+          "Fails if the contact is not found, no addressing field is provided, or delivery fails. " +
           "Note: the invitation process is asynchronous — acceptance is not guaranteed.",
         inputSchema: InviteContactInputSchema,
         outputSchema: InviteContactOutputSchema,
