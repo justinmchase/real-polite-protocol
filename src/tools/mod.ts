@@ -17,6 +17,7 @@ import type {
   MessageManager,
   ReceiptManager,
   ReceptivePolicyManager,
+  SentMessageManager,
 } from "../managers/mod.ts";
 import type { ConfigService } from "../services/config/config.service.ts";
 import { AccountTool } from "./account/account.tool.ts";
@@ -43,6 +44,7 @@ export function initTools(
     publicInvitations: PublicInvitationManager;
     receipts: ReceiptManager;
     messages: MessageManager;
+    sentMessages: SentMessageManager;
   },
   config: ConfigService,
 ): Tool[] {
@@ -76,6 +78,7 @@ export function initTools(
       config,
       managers.messages,
       managers.contacts,
+      managers.sentMessages,
     ),
   ];
 }

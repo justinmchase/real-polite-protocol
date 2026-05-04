@@ -5,7 +5,7 @@ import { ReceptivePolicyRepository } from "./receptive-policy/mod.ts";
 import { InvitationRepository } from "./invitation/mod.ts";
 import { PublicInvitationRepository } from "./invitation/mod.ts";
 import { ReceiptRepository } from "./receipt/mod.ts";
-import { MessageRepository } from "./messages/mod.ts";
+import { MessageRepository, SentMessageRepository } from "./messages/mod.ts";
 import type { Services } from "../services/mod.ts";
 
 export * from "./account/mod.ts";
@@ -25,6 +25,7 @@ export interface Repositories {
   publicInvitations: PublicInvitationRepository;
   receipts: ReceiptRepository;
   messages: MessageRepository;
+  sentMessages: SentMessageRepository;
 }
 
 export function initRepositories(
@@ -38,6 +39,7 @@ export function initRepositories(
   const publicInvitations = new PublicInvitationRepository(services.kv);
   const receipts = new ReceiptRepository(services.kv);
   const messages = new MessageRepository(services.kv, services.events);
+  const sentMessages = new SentMessageRepository(services.kv);
   return {
     accounts,
     contacts,
@@ -47,5 +49,6 @@ export function initRepositories(
     publicInvitations,
     receipts,
     messages,
+    sentMessages,
   };
 }

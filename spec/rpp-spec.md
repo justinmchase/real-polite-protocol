@@ -622,6 +622,37 @@ They MUST NOT make protocol-level routing or authorization decisions based on
 `metadata` content. Sub-protocols that define specific keys SHOULD namespace
 their keys (e.g., `"rpp.threading.in_reply_to"`) to avoid collisions.
 
+### 7.1.4 Sent-Message Storage (Outbox)
+
+When a listener successfully sends a message via `send_message`, the server MUST
+store a local copy of the sent message on the sender's account — the **outbox
+record**. This mirrors the inbox behavior on the receiver side and enables the
+`list_sent_messages` tool (Section 10B.1).
+
+An outbox record MUST include:
+
+- `message_id` — same UUIDv7 used in the submitted envelope.
+- `receiver_domain` — the `sender_domain` from the held receipt (i.e., the
+  domain the message was sent to).
+- `receipt_id` — the receipt used to sign and deliver the message.
+- `category` — the category value from the envelope.
+- `content_rating` — the content rating value from the envelope.
+- `sent_at` — the timestamp used in the envelope (server-generated).
+- `subject` — the subject line when provided; absent otherwise.
+- `body` — the full body object `{ content_type, content }`.
+- `metadata` — forwarded unchanged when present; absent otherwise.
+- `reply_invite` — forwarded unchanged when present; absent otherwise.
+- `status` — delivery status: `"delivered"` on 2xx response from receiver,
+  `"failed"` if the receiver returned a non-2xx. The server MUST write the
+  outbox record in both cases; `"failed"` records provide a delivery audit
+  trail.
+
+Outbox records are private to the sending account. They MUST NOT be visible to
+other accounts or accessible via the submit endpoint.
+
+The server MAY allow the sender to delete outbox records (via the same
+`delete_message` tool, operating on outbox records by their `message_id`).
+
 ### 7.2 Category Registry (Initial)
 
 This draft defines the following initial categories:
@@ -1979,16 +2010,18 @@ data.
 These tools allow listeners to send and receive messages through their own RPP
 server.
 
-| Tool             | Description                                                               |
-| ---------------- | ------------------------------------------------------------------------- |
-| `send_message`   | Compose and send a message using a held receipt. The server performs HMAC |
-|                  | signing and HTTP POST to the receiver's domain on behalf of the listener. |
-| `list_messages`  | List messages in the listener's inbox, with filters for category, sender  |
-|                  | domain, date range, and read/unread status.                               |
-| `get_message`    | Retrieve a single message by message_id.                                  |
-| `mark_read`      | Mark one or more messages as read.                                        |
-| `delete_message` | Delete a message from the listener's local store. Does not affect the     |
-|                  | sender's copy.                                                            |
+| Tool                 | Description                                                               |
+| -------------------- | ------------------------------------------------------------------------- |
+| `send_message`       | Compose and send a message using a held receipt. The server performs HMAC |
+|                      | signing and HTTP POST to the receiver's domain on behalf of the listener. |
+| `list_messages`      | List messages in the listener's inbox, with filters for category, sender  |
+|                      | domain, date range, and read/unread status.                               |
+| `list_sent_messages` | List messages the listener has sent, with filters for category, receiver  |
+|                      | domain, and date range (Section 7.1.4).                                   |
+| `get_message`        | Retrieve a single message by message_id.                                  |
+| `mark_read`          | Mark one or more messages as read.                                        |
+| `delete_message`     | Delete a message from the listener's local store. Does not affect the     |
+|                      | sender's copy.                                                            |
 
 ### 10B.2 Group Tools
 

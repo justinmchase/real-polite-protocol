@@ -8,6 +8,7 @@ import type {
   ContactManager,
   MessageManager,
   ReceiptManager,
+  SentMessageManager,
 } from "../../managers/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 import { CONTENT_RATINGS, MESSAGE_CATEGORIES } from "../../models/mod.ts";
@@ -212,6 +213,63 @@ const SendMessageOutputSchema = {
   accepted: z.boolean().describe("Whether the receiver accepted the message"),
 };
 
+const SentMessageSchema = z.object({
+  id: z.string(),
+  message_id: z.string(),
+  receipt_id: z.string(),
+  receiver_domain: z.string(),
+  category: CategorySchema,
+  content_rating: ContentRatingSchema,
+  sent_at: outputDate(),
+  subject: z.string().optional(),
+  body: z.object({
+    content_type: z.string(),
+    content: z.string(),
+  }),
+  metadata: MessageMetadataSchema.optional(),
+  reply_invite: z.object({
+    receptive_policy_id: z.string(),
+    receiver_domain: z.string(),
+    proposed_terms: z.record(z.string(), z.unknown()).optional(),
+    expires_at: outputDate().optional(),
+  }).optional(),
+  status: z.enum(["delivered", "failed"]),
+});
+
+const ListSentMessagesInputSchema = {
+  category: CategorySchema.optional().describe("Filter by message category"),
+  receiver_domain: z.string().optional().describe(
+    "Filter by receiver domain (case-insensitive exact match)",
+  ),
+  sent_after: inputDate().optional().describe(
+    "Return only messages sent after this ISO 8601 timestamp",
+  ),
+  sent_before: inputDate().optional().describe(
+    "Return only messages sent before this ISO 8601 timestamp",
+  ),
+  status: z.enum(["delivered", "failed"]).optional().describe(
+    "Filter by delivery outcome",
+  ),
+  page_size: z.number().int().min(1).max(200).optional().describe(
+    "Number of messages per page (1–200, default 50)",
+  ),
+  resume_token: z.string().optional().describe(
+    "Opaque token from a previous call to continue pagination",
+  ),
+};
+
+const ListSentMessagesOutputSchema = {
+  messages: z.array(SentMessageSchema).describe("List of sent messages"),
+  page_size: z.number().describe("Effective page size used"),
+  next_resume_token: z.string().optional().describe(
+    "Token to pass as resume_token for the next page; absent when no more pages",
+  ),
+};
+
+type ListSentMessagesArgs = z.infer<
+  z.ZodObject<typeof ListSentMessagesInputSchema>
+>;
+
 type SendMessageArgs = z.infer<z.ZodObject<typeof SendMessageInputSchema>>;
 
 async function signHmac(
@@ -241,6 +299,7 @@ export class MessageTool {
     private readonly config: ConfigService,
     private readonly messageManager: MessageManager,
     private readonly contactManager: ContactManager,
+    private readonly sentMessageManager: SentMessageManager,
   ) {}
 
   private async getSenderClaims(
@@ -429,6 +488,24 @@ export class MessageTool {
             } catch {
               // ignore parse failure
             }
+            // Store a failed outbox record before surfacing the error (§7.1.4)
+            await this.sentMessageManager.store({
+              oid: auth.oid,
+              message_id: messageId,
+              receipt_id: receipt.id,
+              receiver_domain: receiverDomain,
+              category: params.category,
+              content_rating: params.content_rating,
+              sent_at: sentAt,
+              ...(params.subject !== undefined && { subject: params.subject }),
+              body: params.body,
+              ...(params.metadata !== undefined &&
+                { metadata: params.metadata }),
+              ...(params.reply_invite !== undefined && {
+                reply_invite: envelope.reply_invite,
+              }),
+              status: "failed",
+            });
             throw new MessageDeliveryError(
               receiverDomain,
               response.status,
@@ -438,6 +515,24 @@ export class MessageTool {
 
           await response.body?.cancel();
         }
+
+        // Store outbox record (§7.1.4)
+        await this.sentMessageManager.store({
+          oid: auth.oid,
+          message_id: messageId,
+          receipt_id: receipt.id,
+          receiver_domain: receiverDomain,
+          category: params.category,
+          content_rating: params.content_rating,
+          sent_at: sentAt,
+          ...(params.subject !== undefined && { subject: params.subject }),
+          body: params.body,
+          ...(params.metadata !== undefined && { metadata: params.metadata }),
+          ...(params.reply_invite !== undefined && {
+            reply_invite: envelope.reply_invite,
+          }),
+          status: "delivered",
+        });
 
         return toolResult({
           message_id: messageId,
@@ -557,6 +652,41 @@ export class MessageTool {
           throw new MessageNotFoundError(params.message_id);
         }
         return toolResult({ message_id: params.message_id, deleted: true });
+      }),
+    );
+
+    server.registerTool(
+      "list_sent_messages",
+      {
+        description:
+          "List messages you have sent. Returns outbox records for the calling " +
+          "account, ordered by sent_at descending. Includes delivery status.",
+        inputSchema: ListSentMessagesInputSchema,
+        outputSchema: ListSentMessagesOutputSchema,
+      },
+      withToolErrorHandling(async (params: ListSentMessagesArgs) => {
+        const { normalizePageSize, normalizeResumeToken } = await import(
+          "../../utils/pagination.ts"
+        );
+
+        const pageSize = normalizePageSize(params.page_size);
+        const cursor = normalizeResumeToken(params.resume_token);
+
+        const result = await this.sentMessageManager.listByOid(auth.oid, {
+          category: params.category,
+          receiverDomain: params.receiver_domain,
+          sentAfter: params.sent_after,
+          sentBefore: params.sent_before,
+          status: params.status,
+          pageSize,
+          cursor,
+        });
+
+        return toolResult({
+          messages: result.messages,
+          page_size: pageSize,
+          next_resume_token: result.nextCursor,
+        });
       }),
     );
   }

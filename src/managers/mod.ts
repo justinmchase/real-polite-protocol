@@ -5,7 +5,7 @@ import { ReceptivePolicyManager } from "./receptive-policy/mod.ts";
 import { InvitationManager } from "./invitation/mod.ts";
 import { PublicInvitationManager } from "./invitation/mod.ts";
 import { ReceiptManager } from "./receipt/mod.ts";
-import { MessageManager } from "./messages/mod.ts";
+import { MessageManager, SentMessageManager } from "./messages/mod.ts";
 import type { Repositories } from "../repositories/mod.ts";
 import type { Services } from "../services/mod.ts";
 
@@ -26,6 +26,7 @@ export interface Managers {
   publicInvitations: PublicInvitationManager;
   receipts: ReceiptManager;
   messages: MessageManager;
+  sentMessages: SentMessageManager;
 }
 
 export function initManagers(
@@ -53,6 +54,7 @@ export function initManagers(
     receipts,
   );
   const messages = new MessageManager(repositories.messages);
+  const sentMessages = new SentMessageManager(repositories.sentMessages);
   return {
     accounts,
     contacts,
@@ -62,5 +64,6 @@ export function initManagers(
     publicInvitations,
     receipts,
     messages,
+    sentMessages,
   };
 }
