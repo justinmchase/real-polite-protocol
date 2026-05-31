@@ -1,49 +1,12 @@
-// req:messages-007 — Message metadata is preserved and returned verbatim.
-//
-// Tests verify that metadata attached to an inbound message envelope is stored
-// and returned unchanged by get_message and list_messages, that envelopes
-// without metadata do not include the field in responses, and that invalid
-// metadata values are rejected with E_INVALID_MESSAGE_ENVELOPE.
-
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
-import { submitMessage } from "../helpers/submit-message.ts";
-import { computeHmac } from "../helpers/compute-hmac.ts";
-
-// Helper: seeds an invitation and accepts it to obtain a receipt.
-async function setupReceipt(
-  kv: Deno.Kv,
-  callTool: (
-    token: string,
-    tool: string,
-    params?: unknown,
-  ) => Promise<{ status: number; result: unknown }>,
-  token: string,
-  accountOid: string,
-): Promise<{ receiptId: string; receiptSecret: string }> {
-  const invId = crypto.randomUUID();
-  await kv.set(["invitations", invId], {
-    invitation_id: invId,
-    receiver_oid: accountOid,
-    sender_domain: "sender.example",
-    status: "pending",
-    proposed_terms: { category: "billing", max_content_rating: "G" },
-    created_at: new Date().toISOString(),
-  });
-  const { result } = await callTool(token, "accept_invitation", {
-    invitation_id: invId,
-  });
-  const typed = result as { receipt?: { id: string; secret: string } };
-  assertExists(typed?.receipt?.id);
-  return {
-    receiptId: typed.receipt!.id,
-    receiptSecret: typed.receipt!.secret,
-  };
-}
+import { seedContact } from "../helpers/seed-contact.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
 
 Deno.test({
   name:
@@ -52,307 +15,162 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
-
           await callTool(token, "set_user_verified_metadata");
 
-          await t.step(
-            "metadata is stored and returned by get_message",
-            async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
+          const contact = await seedContact(kv, { ownerOid });
 
-              const messageId = crypto.randomUUID();
-              const resp = await submitMessage({
-                receiptId,
-                receiptSecret,
-                messageId,
-                senderDomain: "sender.example",
+          // Submit one message with metadata and one without.
+          const idWith = crypto.randomUUID();
+          const metadata = {
+            thread_id: "t-123",
+            count: 7,
+            flagged: true,
+            tags: ["alpha", "beta"],
+          };
+          const r1 = await submitMessageEnvelope({
+            credential: contact.local_credential,
+            senderDomain: contact.remote_domain,
+            messageId: idWith,
+            metadata,
+            baseUrl,
+          });
+          assertEquals(r1.status, 202);
+          await r1.body?.cancel();
+
+          const idWithout = crypto.randomUUID();
+          const r2 = await submitMessageEnvelope({
+            credential: contact.local_credential,
+            senderDomain: contact.remote_domain,
+            messageId: idWithout,
+            baseUrl,
+          });
+          assertEquals(r2.status, 202);
+          await r2.body?.cancel();
+
+          await t.step("get_message returns metadata verbatim", async () => {
+            const { result } = await callTool<{ metadata?: unknown }>(
+              token,
+              "get_message",
+              { message_id: idWith },
+            );
+            assertExists(result);
+            assertEquals(result.metadata, metadata);
+          });
+
+          await t.step(
+            "get_message omits metadata when not stored",
+            async () => {
+              const { result } = await callTool<Record<string, unknown>>(
+                token,
+                "get_message",
+                { message_id: idWithout },
+              );
+              assertExists(result);
+              assertEquals("metadata" in result, false);
+            },
+          );
+
+          await t.step(
+            "list_messages returns metadata when present",
+            async () => {
+              const { result } = await callTool<{
+                messages: Array<Record<string, unknown>>;
+              }>(token, "list_messages", {});
+              assertExists(result);
+              const m = result.messages.find((x) => x.message_id === idWith);
+              assertExists(m);
+              assertEquals(m.metadata, metadata);
+              const m2 = result.messages.find((x) =>
+                x.message_id === idWithout
+              );
+              assertExists(m2);
+              assertEquals("metadata" in m2, false);
+            },
+          );
+
+          await t.step(
+            "envelope with nested-object metadata is rejected",
+            async () => {
+              const r = await submitMessageEnvelope({
+                credential: contact.local_credential,
+                senderDomain: contact.remote_domain,
+                metadata: { bad: { nested: "x" } } as unknown as Record<
+                  string,
+                  unknown
+                >,
                 baseUrl,
-                metadata: { "in_reply_to": "abc-123", "thread_index": 2 },
               });
-              assertEquals(resp.status, 202);
-              await resp.body?.cancel();
-
-              const { status, result } = await callTool<{
-                message_id: string;
-                metadata?: Record<string, unknown>;
-              }>(token, "get_message", { message_id: messageId });
-
-              assertEquals(status, 200);
-              assertExists(result?.metadata);
-              assertEquals(result!.metadata!["in_reply_to"], "abc-123");
-              assertEquals(result!.metadata!["thread_index"], 2);
+              assertEquals(r.status, 400);
+              await r.body?.cancel();
             },
           );
 
           await t.step(
-            "metadata is returned by list_messages",
+            "send_message surfaces metadata validation as tool error",
             async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
-
-              const messageId = crypto.randomUUID();
-              const resp = await submitMessage({
-                receiptId,
-                receiptSecret,
-                messageId,
-                senderDomain: "sender.example",
-                baseUrl,
-                metadata: { "rpp.threading.in_reply_to": "xyz-789" },
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const c = await seedContact(kv, {
+                  ownerOid,
+                  remoteDomain,
+                });
+                const { result, body } = await callTool(
+                  token,
+                  "send_message",
+                  {
+                    contact_id: c.id,
+                    category: "correspondence",
+                    content_rating: "G",
+                    body: { content_type: "text/markdown", content: "x" },
+                    metadata: { bad: { nested: 1 } },
+                  },
+                );
+                // Either the tool result is an error wrapper or MCP returned a
+                // JSON-RPC error response. Either way, no outbound HTTP request
+                // MUST have been made before the validation error surfaced.
+                const errorish =
+                  (result as { ok?: boolean } | undefined)?.ok ===
+                    false ||
+                  body.error !== undefined ||
+                  result === undefined;
+                assertEquals(errorish, true);
+                assertEquals(getCaptures().length, 0);
               });
-              assertEquals(resp.status, 202);
-              await resp.body?.cancel();
-
-              const { status, result } = await callTool<{
-                messages: Array<{
-                  message_id: string;
-                  metadata?: Record<string, unknown>;
-                }>;
-              }>(token, "list_messages");
-
-              assertEquals(status, 200);
-              const msg = result?.messages?.find(
-                (m) => m.message_id === messageId,
-              );
-              assertExists(msg);
-              assertExists(msg!.metadata);
-              assertEquals(
-                msg!.metadata!["rpp.threading.in_reply_to"],
-                "xyz-789",
-              );
             },
           );
 
           await t.step(
-            "message without metadata does not include metadata field",
+            "send_message includes metadata in outbound envelope",
             async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
-
-              const messageId = crypto.randomUUID();
-              const resp = await submitMessage({
-                receiptId,
-                receiptSecret,
-                messageId,
-                senderDomain: "sender.example",
-                baseUrl,
-                // no metadata
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const c = await seedContact(kv, {
+                  ownerOid,
+                  remoteDomain,
+                });
+                const sentMetadata = { thread_id: "abc" };
+                const { result } = await callTool<{ accepted: boolean }>(
+                  token,
+                  "send_message",
+                  {
+                    contact_id: c.id,
+                    category: "correspondence",
+                    content_rating: "G",
+                    body: { content_type: "text/markdown", content: "x" },
+                    metadata: sentMetadata,
+                  },
+                );
+                assertExists(result);
+                const calls = getCaptures();
+                assertEquals(calls.length, 1);
+                const env = calls[0].body as { metadata?: unknown };
+                assertEquals(env.metadata, sentMetadata);
               });
-              assertEquals(resp.status, 202);
-              await resp.body?.cancel();
-
-              const { status, result } = await callTool<{
-                message_id: string;
-                metadata?: unknown;
-              }>(token, "get_message", { message_id: messageId });
-
-              assertEquals(status, 200);
-              // metadata should be absent (not null or {})
-              assertEquals(result?.metadata, undefined);
-            },
-          );
-
-          await t.step(
-            "submit endpoint rejects metadata with nested objects (E_INVALID_MESSAGE_ENVELOPE)",
-            async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
-
-              const bodyJson = JSON.stringify({
-                message_id: crypto.randomUUID(),
-                sender_domain: "sender.example",
-                category: "message",
-                sent_at: "2026-04-20T00:00:00Z",
-                message: {
-                  content_rating: "G",
-                  subject: "Test",
-                  body: {
-                    content_type: "text/markdown",
-                    content: "Hello.",
-                  },
-                },
-                metadata: { "nested": { "not": "allowed" } },
-              });
-              const bodyBytes = new TextEncoder().encode(bodyJson);
-              const timestamp = new Date().toISOString();
-              const signature = await computeHmac(
-                receiptSecret,
-                timestamp,
-                bodyBytes,
-              );
-
-              const resp = await fetch(
-                `${baseUrl}/rpp/v1/envelopes`,
-                {
-                  method: "POST",
-                  headers: {
-                    "content-type": "application/json",
-                    "x-rpp-receipt-id": receiptId,
-                    "x-rpp-signature": signature,
-                    "x-rpp-timestamp": timestamp,
-                  },
-                  body: bodyJson,
-                },
-              );
-              assertEquals(resp.status, 400);
-              const body = await resp.json() as { code?: string };
-              assertEquals(body.code, "E_INVALID_MESSAGE_ENVELOPE");
-            },
-          );
-
-          await t.step(
-            "submit endpoint rejects metadata exceeding 20 keys (E_INVALID_MESSAGE_ENVELOPE)",
-            async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
-
-              const tooManyKeys = Object.fromEntries(
-                Array.from({ length: 21 }, (_, i) => [`key${i}`, "value"]),
-              );
-
-              const bodyJson = JSON.stringify({
-                message_id: crypto.randomUUID(),
-                sender_domain: "sender.example",
-                category: "message",
-                sent_at: "2026-04-20T00:00:00Z",
-                message: {
-                  content_rating: "G",
-                  subject: "Test",
-                  body: {
-                    content_type: "text/markdown",
-                    content: "Hello.",
-                  },
-                },
-                metadata: tooManyKeys,
-              });
-              const bodyBytes = new TextEncoder().encode(bodyJson);
-              const timestamp = new Date().toISOString();
-              const signature = await computeHmac(
-                receiptSecret,
-                timestamp,
-                bodyBytes,
-              );
-
-              const resp = await fetch(
-                `${baseUrl}/rpp/v1/envelopes`,
-                {
-                  method: "POST",
-                  headers: {
-                    "content-type": "application/json",
-                    "x-rpp-receipt-id": receiptId,
-                    "x-rpp-signature": signature,
-                    "x-rpp-timestamp": timestamp,
-                  },
-                  body: bodyJson,
-                },
-              );
-              assertEquals(resp.status, 400);
-              const body = await resp.json() as { code?: string };
-              assertEquals(body.code, "E_INVALID_MESSAGE_ENVELOPE");
-            },
-          );
-
-          await t.step(
-            "submit endpoint rejects metadata with a string value exceeding 512 chars",
-            async () => {
-              const { receiptId, receiptSecret } = await setupReceipt(
-                kv,
-                callTool as (
-                  t: string,
-                  tool: string,
-                  p?: unknown,
-                ) => Promise<{ status: number; result: unknown }>,
-                token,
-                accountOid,
-              );
-
-              const bodyJson = JSON.stringify({
-                message_id: crypto.randomUUID(),
-                sender_domain: "sender.example",
-                category: "message",
-                sent_at: "2026-04-20T00:00:00Z",
-                message: {
-                  content_rating: "G",
-                  subject: "Test",
-                  body: {
-                    content_type: "text/markdown",
-                    content: "Hello.",
-                  },
-                },
-                metadata: { "key": "x".repeat(513) },
-              });
-              const bodyBytes = new TextEncoder().encode(bodyJson);
-              const timestamp = new Date().toISOString();
-              const signature = await computeHmac(
-                receiptSecret,
-                timestamp,
-                bodyBytes,
-              );
-
-              const resp = await fetch(
-                `${baseUrl}/rpp/v1/envelopes`,
-                {
-                  method: "POST",
-                  headers: {
-                    "content-type": "application/json",
-                    "x-rpp-receipt-id": receiptId,
-                    "x-rpp-signature": signature,
-                    "x-rpp-timestamp": timestamp,
-                  },
-                  body: bodyJson,
-                },
-              );
-              assertEquals(resp.status, 400);
-              const body = await resp.json() as { code?: string };
-              assertEquals(body.code, "E_INVALID_MESSAGE_ENVELOPE");
             },
           );
         } finally {

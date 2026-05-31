@@ -2,15 +2,17 @@ import { z } from "zod";
 import { CONTENT_RATINGS } from "../content-rating.ts";
 import { MESSAGE_CATEGORIES } from "../message-category.ts";
 
+/** Direction of a stored invitation record relative to the local domain. */
+export const InvitationDirectionSchema = z.enum(["inbound", "outbound"]);
+export type InvitationDirection = z.infer<typeof InvitationDirectionSchema>;
+
 export const InvitationStatusSchema = z.enum([
   "pending",
   "accepted",
   "rejected",
-  "cancelled",
   "expired",
-  "undelivered",
+  "cancelled",
 ]);
-
 export type InvitationStatus = z.infer<typeof InvitationStatusSchema>;
 
 export const ClaimValueSchema: z.ZodType<
@@ -31,89 +33,125 @@ export type ClaimValue = z.infer<typeof ClaimValueSchema>;
 
 const ClaimMapSchema = z.record(z.string(), ClaimValueSchema);
 
-const UsagePolicySchema = z.enum(["one-time", "multiple-time", "any-time"]);
-
 /**
- * Terms proposed or negotiated for a receipt. The spec defines one category
- * per receipt (Section 6.1); `category` is singular.
+ * Communication terms declared by one side of an invitation exchange. Both
+ * `categories` and `max_content_rating` are required (spec §10.1).
  */
-export const ReceiptTermsSchema = z.object({
-  category: z.enum(MESSAGE_CATEGORIES),
-  max_content_rating: z.enum(CONTENT_RATINGS).optional(),
-  usage_policy: UsagePolicySchema.optional(),
-  validity_constraints: z.record(z.string(), z.unknown()).optional(),
-  /** Maximum uses within the defined interval (only meaningful for `multiple-time` usage_policy). */
-  interval_budget: z.number().int().positive().optional(),
-}).catchall(z.unknown());
+export const CommunicationTermsSchema = z.object({
+  categories: z.array(z.enum(MESSAGE_CATEGORIES)).min(1),
+  max_content_rating: z.enum(CONTENT_RATINGS),
+});
 
-export type ReceiptTerms = z.infer<typeof ReceiptTermsSchema>;
+export type CommunicationTerms = z.infer<typeof CommunicationTermsSchema>;
 
 /**
- * Optional contextual claims attached by the sender to help the receiver
- * decide whether to accept the invitation.
+ * Per-contact credential carried in invitation / invitation_reply envelopes.
+ * The owner of the credential is the side whose domain generated it; the
+ * other side uses it as the HMAC key for envelopes flowing toward the
+ * generating domain.
+ */
+export const ContactCredentialSchema = z.object({
+  contact_id: z.string(),
+  contact_secret: z.string(),
+});
+
+export type ContactCredential = z.infer<typeof ContactCredentialSchema>;
+
+/**
+ * Optional contextual claims attached by the sending side to help the
+ * receiving side decide whether to accept (or, on reply, to enrich the
+ * contact). See spec §10.6.
+ *
+ * `immutable.domain_id` is REQUIRED on every invitation and invitation_reply
+ * envelope (spec §10.6 / req:submit-004 / req:invitations-004): it is the
+ * sender's stable, admin-verified domain_id used for downstream contact
+ * routing.
  */
 export const InvitationClaimsSchema = z.object({
-  /** Server-assigned immutable claims (e.g. domain_id). Always present on every envelope. */
-  immutable: ClaimMapSchema,
-  /** Claims the sending server has verified against the sender's identity token. */
+  immutable: ClaimMapSchema.refine(
+    (m) => typeof m.domain_id === "string" && m.domain_id.length > 0,
+    { message: "claims.immutable.domain_id is required" },
+  ),
   user: ClaimMapSchema.optional(),
-  /** Claims asserted by the sending server's administrator. */
   admin: ClaimMapSchema.optional(),
-  /** Unverified free-form claims provided by the sender (e.g. a personal note). */
   custom: ClaimMapSchema.optional(),
 });
 
 export type InvitationClaims = z.infer<typeof InvitationClaimsSchema>;
 
-export const InvitationDeliverySchema = z.object({
-  domain: z.string(),
-  token: z.string(),
-});
-
 /**
- * Receipt summary recorded on the sender's view of an invitation after
- * acceptance. Per Section 9.7.2 / 9.7.3 the sender's server stores the
- * issued receipt locally (including secret) so it can verify HMAC
- * signatures on inbound messages from the acceptor. For same-domain
- * acceptance the receipt already exists in the local receipts table; the
- * summary on the invitation gives the original sender visibility into the
- * outcome via review_invitation.
+ * A persisted invitation record. The same schema covers both inbound (received
+ * from a remote sender) and outbound (sent by a local user) records,
+ * discriminated by `direction`.
  */
-export const InvitationReceiptSummarySchema = z.object({
-  id: z.string(),
-  secret: z.string().optional(),
-  category: z.string(),
-  max_content_rating: z.string().optional(),
-  usage_policy: z.string().optional(),
-  issued_at: z.coerce.date(),
-});
-
 export const InvitationSchema = z.object({
   invitation_id: z.string(),
-  receiver_oid: z.string(),
-  /** For cross-domain sender-side records: OID of the local user who sent the invitation. Never serialized to wire. */
-  sender_oid: z.string().optional(),
-  /** For cross-domain sender-side records: domain of the receiver (used to construct the stored receipt). Never serialized to wire. */
-  receiver_domain: z.string().optional(),
-  sender_domain: z.string(),
+  direction: InvitationDirectionSchema,
+  /** OID of the local account that owns this record. */
+  owner_oid: z.string(),
+  /**
+   * The remote party's domain. For inbound records this is the sender's
+   * domain; for outbound records this is the receiver's domain.
+   */
+  remote_domain: z.string(),
   status: InvitationStatusSchema,
-  proposed_terms: ReceiptTermsSchema,
+  /** Communication terms declared by the originating side of THIS record. */
+  communication_terms: CommunicationTermsSchema,
+  /**
+   * Credential the originating side included for the other side to use when
+   * replying. For inbound: credential the local domain will use for outbound
+   * to the remote. For outbound: credential the local domain generated for
+   * the remote to use when replying.
+   */
+  reply_credential: ContactCredentialSchema,
   claims: InvitationClaimsSchema.optional(),
+  sender_display_name: z.string().optional(),
+  message: z.string().optional(),
   expires_at: z.coerce.date().optional(),
+  sent_at: z.coerce.date(),
   created_at: z.coerce.date(),
-  accepted_at: z.coerce.date().optional(),
-  message_id: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  delivery: InvitationDeliverySchema.optional(),
-  /** Receipt summary captured after acceptance (Section 9.7). Absent for
-   * pending/rejected/cancelled/expired invitations. */
-  receipt: InvitationReceiptSummarySchema.optional(),
-  /** Optional voluntary display name supplied by the acceptor in the §9.7
-   * receipt callback envelope. */
-  acceptor_display_name: z.string().optional(),
-  /** Optional free-form reason supplied by the acceptor with the §9.7
-   * callback (either accepted or rejected). */
-  decision_reason: z.string().optional(),
+  decided_at: z.coerce.date().optional(),
 });
 
 export type Invitation = z.infer<typeof InvitationSchema>;
+
+/**
+ * Wire shape of an `invitation` envelope as defined in §10.1. Used for parsing
+ * inbound envelopes and constructing outbound envelopes.
+ */
+export const InvitationEnvelopeSchema = z.object({
+  category: z.literal("invitation"),
+  invitation_id: z.string(),
+  sender_domain: z.string(),
+  sender_display_name: z.string().optional(),
+  receptive_policy_id: z.string().optional(),
+  shortcode: z.string().optional(),
+  sent_at: z.coerce.date(),
+  expires_at: z.coerce.date().optional(),
+  communication_terms: CommunicationTermsSchema,
+  reply_credential: ContactCredentialSchema,
+  claims: InvitationClaimsSchema,
+  message: z.string().optional(),
+  cancelled: z.boolean().optional(),
+});
+
+export type InvitationEnvelope = z.infer<typeof InvitationEnvelopeSchema>;
+
+/**
+ * Wire shape of an `invitation_reply` envelope as defined in §10.4.
+ */
+export const InvitationReplyEnvelopeSchema = z.object({
+  category: z.literal("invitation_reply"),
+  invitation_id: z.string(),
+  sender_domain: z.string(),
+  sender_display_name: z.string().optional(),
+  sent_at: z.coerce.date(),
+  communication_terms: CommunicationTermsSchema,
+  reply_credential: ContactCredentialSchema,
+  claims: InvitationClaimsSchema,
+  message: z.string().optional(),
+});
+
+export type InvitationReplyEnvelope = z.infer<
+  typeof InvitationReplyEnvelopeSchema
+>;

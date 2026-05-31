@@ -10,109 +10,110 @@ Deno.test({
     "req:receptive-policy-001 - Listeners can list their receptive policies",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ callTool, kvPath }) => {
-        await t.step(
-          "authenticated user gets empty list by default",
-          async () => {
-            const token = await issueToken({
-              oid: "oid-listener-001",
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
+      await withStartedServer(async ({ callTool }) => {
+        await t.step("empty by default for a new account", async () => {
+          const token = await issueToken({
+            oid: crypto.randomUUID(),
+            scope: requiredScopes.join(" "),
+            name: "User",
+          });
+          const { status, result } = await callTool<{
+            policies: unknown[];
+            page_size: number;
+          }>(token, "get_receptive_policies");
+          assertEquals(status, 200);
+          assertExists(result);
+          assertEquals(result.policies.length, 0);
+          assertEquals(result.page_size, 0);
+        });
 
-            const { status, result } = await callTool<{
-              policies: Array<unknown>;
-              page_size: number;
-            }>(token, "get_receptive_policies");
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.policies.length, 0);
+        await t.step(
+          "lists only the caller's policies (oid isolation)",
+          async () => {
+            const aliceOid = crypto.randomUUID();
+            const bobOid = crypto.randomUUID();
+            const alice = await issueToken({
+              oid: aliceOid,
+              scope: requiredScopes.join(" "),
+              name: "Alice",
+            });
+            const bob = await issueToken({
+              oid: bobOid,
+              scope: requiredScopes.join(" "),
+              name: "Bob",
+            });
+            await callTool(alice, "add_receptive_policy", { mode: "all" });
+            await callTool(bob, "add_receptive_policy", { mode: "closed" });
+
+            const { result: aliceList } = await callTool<{
+              policies: Array<{ oid: string; mode: string }>;
+            }>(alice, "get_receptive_policies");
+            assertExists(aliceList);
+            assertEquals(aliceList.policies.length, 1);
+            assertEquals(aliceList.policies[0].oid, aliceOid);
+            assertEquals(aliceList.policies[0].mode, "all");
+
+            const { result: bobList } = await callTool<{
+              policies: Array<{ oid: string; mode: string }>;
+            }>(bob, "get_receptive_policies");
+            assertExists(bobList);
+            assertEquals(bobList.policies.length, 1);
+            assertEquals(bobList.policies[0].oid, bobOid);
+            assertEquals(bobList.policies[0].mode, "closed");
           },
         );
 
         await t.step(
-          "policies belong to the authenticated user",
+          "page_size limits the number of results returned",
           async () => {
             const token = await issueToken({
-              oid: "oid-listener-002",
-              roles: [],
+              oid: crypto.randomUUID(),
               scope: requiredScopes.join(" "),
+              name: "User",
             });
-
-            // Add a policy so there is something to list.
-            await callTool(token, "add_receptive_policy", { mode: "all" });
-
-            const { status, result } = await callTool<{
-              policies: Array<{ oid: string; policy_id: string }>;
-              page_size: number;
-            }>(token, "get_receptive_policies");
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.policies.length, 1);
-            assertEquals(result.policies[0].oid, "oid-listener-002");
-            assertExists(result.policies[0].policy_id);
-          },
-        );
-
-        await t.step(
-          "get_receptive_policies omits receipt-mode policies by default and includes them when include_receipt_policies is true",
-          async () => {
-            const oid = "oid-listener-receipt-filter";
-            const token = await issueToken({
-              oid,
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
-
-            // Seed a receipt-mode policy directly in KV (simulating the
-            // side-effect of accept_invitation with a sender domain_id).
-            const policyId = crypto.randomUUID();
-            const receiptId = crypto.randomUUID();
-            const kv = await Deno.openKv(kvPath);
-            try {
-              const policy = {
-                policy_id: policyId,
-                oid,
-                mode: "receipt",
-                receipt_id: receiptId,
-                created_at: new Date(),
-              };
-              await kv.set(["receptive_policies", policyId], policy);
-              await kv.set(
-                ["receptive_policies_by_oid", oid, policyId],
-                policy,
-              );
-            } finally {
-              kv.close();
+            for (let i = 0; i < 5; i++) {
+              await callTool(token, "add_receptive_policy", { mode: "all" });
             }
-
-            // Default call must omit receipt-mode policies.
-            const { result: withoutFlag } = await callTool<{
-              policies: Array<{ mode: string; policy_id: string }>;
-            }>(token, "get_receptive_policies");
-            assertExists(withoutFlag);
-            const ids = withoutFlag.policies.map((p) => p.policy_id);
-            assertEquals(
-              ids.includes(policyId),
-              false,
-              "receipt-mode policy must be omitted from default listing",
-            );
-
-            // With include_receipt_policies: true, it must appear.
-            const { result: withFlag } = await callTool<{
-              policies: Array<{ mode: string; policy_id: string }>;
-            }>(token, "get_receptive_policies", {
-              include_receipt_policies: true,
-            });
-            assertExists(withFlag);
-            const idsWithFlag = withFlag.policies.map((p) => p.policy_id);
-            assertEquals(
-              idsWithFlag.includes(policyId),
-              true,
-              "receipt-mode policy must appear when include_receipt_policies is true",
-            );
+            const { result } = await callTool<{
+              policies: unknown[];
+              page_size: number;
+            }>(token, "get_receptive_policies", { page_size: 2 });
+            assertExists(result);
+            assertEquals(result.policies.length, 2);
+            assertEquals(result.page_size, 2);
           },
         );
+
+        await t.step("each policy record exposes required fields", async () => {
+          const token = await issueToken({
+            oid: crypto.randomUUID(),
+            scope: requiredScopes.join(" "),
+            name: "User",
+          });
+          await callTool(token, "add_receptive_policy", {
+            mode: "domain_filter",
+            domain_filter: {
+              rules: [{ action: "allow", pattern: "**.example" }],
+            },
+          });
+          const { result } = await callTool<{
+            policies: Array<{
+              policy_id: string;
+              oid: string;
+              mode: string;
+              created_at: string;
+              domain_filter?: { rules: unknown[] };
+            }>;
+          }>(token, "get_receptive_policies");
+          assertExists(result);
+          const p = result.policies[0];
+          assertExists(p.policy_id);
+          assertExists(p.oid);
+          assertExists(p.created_at);
+          assertEquals(p.mode, "domain_filter");
+          assertExists(p.domain_filter);
+          assertEquals(p.domain_filter.rules.length, 1);
+        });
       });
     });
   },

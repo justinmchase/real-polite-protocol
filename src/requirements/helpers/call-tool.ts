@@ -4,6 +4,20 @@ export interface ToolCallResult<T = unknown> {
   body: Record<string, unknown>;
 }
 
+/**
+ * Shape of a structured tool failure result (spec §13). Tools that fail return
+ * a JSON payload with `ok: false` and an `error` object describing the
+ * failure; tests use this type to assert error codes.
+ */
+export interface ToolError {
+  ok: false;
+  error?: {
+    code?: string;
+    message?: string;
+    [key: string]: unknown;
+  };
+}
+
 export async function callTool<T = unknown>(
   token: string,
   toolName: string,

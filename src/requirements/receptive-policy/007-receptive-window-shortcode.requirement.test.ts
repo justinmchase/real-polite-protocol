@@ -5,6 +5,11 @@ import {
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
 
+const TERMS = {
+  categories: ["correspondence"],
+  max_content_rating: "PG",
+} as const;
+
 Deno.test({
   name:
     "req:receptive-policy-007 - Receptive windows expose a shareable shortcode",
@@ -13,228 +18,151 @@ Deno.test({
       await withStartedServer(async ({ port, callTool }) => {
         const serverHost = `localhost:${port}`;
 
-        // ── shared listener account ──────────────────────────────────────────
-        const listenerOid = crypto.randomUUID();
         const listenerToken = await issueToken({
-          oid: listenerOid,
+          oid: crypto.randomUUID(),
           scope: requiredScopes.join(" "),
           name: "Listener",
         });
         await callTool(listenerToken, "set_user_verified_metadata");
 
-        // ── shared sender account ────────────────────────────────────────────
-        const senderOid = crypto.randomUUID();
         const senderToken = await issueToken({
-          oid: senderOid,
+          oid: crypto.randomUUID(),
           scope: requiredScopes.join(" "),
           name: "Sender",
         });
         await callTool(senderToken, "set_user_verified_metadata");
 
-        // Open a window once; reuse across steps that only read it.
-        const { result: windowResult } = await callTool<{
-          policy_id: string;
-          shortcode?: string;
-          domain?: string;
-          receptive_until?: string;
-          mode: string;
-        }>(listenerToken, "open_receptive_window", { duration_seconds: 120 });
-        assertExists(windowResult);
+        await t.step("response includes shortcode + domain", async () => {
+          const { result } = await callTool<{
+            shortcode: string;
+            domain: string;
+          }>(listenerToken, "open_receptive_window", { duration_seconds: 120 });
+          assertExists(result);
+          assertExists(result.shortcode);
+          assertExists(result.domain);
+          assertEquals(result.domain, serverHost);
+        });
 
         await t.step(
-          "open_receptive_window response includes a shortcode field",
-          () => {
-            assertExists(
-              windowResult.shortcode,
-              "shortcode must be present in the open_receptive_window response",
-            );
-          },
-        );
-
-        await t.step(
-          "open_receptive_window response includes a domain field",
-          () => {
-            assertExists(
-              windowResult.domain,
-              "domain must be present in the open_receptive_window response",
-            );
-            assertEquals(
-              typeof windowResult.domain,
-              "string",
-              "domain must be a string",
-            );
-            assertEquals(
-              (windowResult.domain ?? "").length > 0,
-              true,
-              "domain must be non-empty",
-            );
-          },
-        );
-
-        await t.step(
-          "shortcode is exactly 8 lowercase alphanumeric characters",
-          () => {
-            assertMatch(
-              windowResult.shortcode!,
-              /^[a-z0-9]{8}$/,
-              "shortcode must match [a-z0-9]{8}",
-            );
-          },
-        );
-
-        await t.step(
-          "two consecutive windows have different shortcodes",
+          "shortcode is 8 lowercase alphanumeric chars",
           async () => {
-            const { result: second } = await callTool<{
-              shortcode?: string;
-            }>(listenerToken, "open_receptive_window", {
-              duration_seconds: 120,
-            });
-            assertExists(second);
-            assertExists(second.shortcode);
-            assertEquals(
-              second.shortcode !== windowResult.shortcode,
-              true,
-              "consecutive windows must have distinct shortcodes",
+            const { result } = await callTool<{ shortcode: string }>(
+              listenerToken,
+              "open_receptive_window",
+              { duration_seconds: 120 },
             );
+            assertExists(result);
+            assertMatch(result.shortcode, /^[a-z0-9]{8}$/);
           },
         );
 
         await t.step(
-          "five concurrent windows each receive a unique shortcode (uniqueness/retry invariant)",
+          "five concurrently-opened windows have unique shortcodes",
           async () => {
-            const shortcodes: string[] = [];
+            const codes: string[] = [];
             for (let i = 0; i < 5; i++) {
-              const { result: w } = await callTool<{ shortcode?: string }>(
+              const { result } = await callTool<{ shortcode: string }>(
                 listenerToken,
                 "open_receptive_window",
                 { duration_seconds: 120 },
               );
-              assertExists(w);
-              assertExists(w.shortcode);
-              shortcodes.push(w.shortcode!);
+              assertExists(result);
+              codes.push(result.shortcode);
             }
-            const unique = new Set(shortcodes);
-            assertEquals(
-              unique.size,
-              shortcodes.length,
-              `All shortcodes must be unique; got: ${shortcodes.join(", ")}`,
-            );
+            assertEquals(new Set(codes).size, 5);
           },
         );
 
         await t.step(
-          "send_invitation with shortcode + receiver_domain delivers successfully",
+          "send_invitation with shortcode delivers via x-rpp-shortcode header",
           async () => {
-            const { result } = await callTool<{ invitation_id?: string }>(
+            const { result: w } = await callTool<{ shortcode: string }>(
+              listenerToken,
+              "open_receptive_window",
+              { duration_seconds: 120 },
+            );
+            assertExists(w);
+            const { result } = await callTool<{ invitation_id: string }>(
               senderToken,
               "send_invitation",
               {
                 receiver_domain: serverHost,
-                shortcode: windowResult.shortcode,
-                proposed_terms: { category: "billing" },
+                shortcode: w.shortcode,
+                communication_terms: TERMS,
               },
             );
             assertExists(result);
-            assertExists(
-              (result as { invitation_id?: string }).invitation_id,
-              "send_invitation with shortcode must return an invitation_id",
-            );
+            assertExists(result.invitation_id);
           },
         );
 
-        await t.step(
-          "send_invitation with an unknown shortcode returns E_RECEPTIVE_POLICY_NOT_FOUND",
-          async () => {
-            const { result } = await callTool<{ ok?: boolean; error?: string }>(
-              senderToken,
-              "send_invitation",
-              {
-                receiver_domain: serverHost,
-                shortcode: "00000000", // intentionally invalid
-                proposed_terms: { category: "billing" },
-              },
-            );
-            assertExists(result);
-            assertEquals(
-              (result as { ok?: boolean }).ok,
-              false,
-              "unknown shortcode must yield a structured error",
-            );
-          },
-        );
+        await t.step("unknown shortcode is rejected", async () => {
+          const { result, body } = await callTool(
+            senderToken,
+            "send_invitation",
+            {
+              receiver_domain: serverHost,
+              shortcode: "00000000",
+              communication_terms: TERMS,
+            },
+          );
+          const errorish =
+            (result as { ok?: boolean } | undefined)?.ok === false ||
+            body.error !== undefined || result === undefined;
+          assertEquals(errorish, true);
+        });
 
         await t.step(
-          "shortcode is removed when the policy is deleted",
+          "shortcode is invalidated when the window is removed",
           async () => {
-            // Open a new window specifically for this step.
             const { result: w } = await callTool<{
               policy_id: string;
-              shortcode?: string;
+              shortcode: string;
             }>(listenerToken, "open_receptive_window", {
               duration_seconds: 120,
             });
             assertExists(w);
-            assertExists(w.shortcode);
-
-            // Remove the policy.
             await callTool(listenerToken, "remove_receptive_policy", {
               policy_id: w.policy_id,
             });
-
-            // Shortcode should no longer resolve.
-            const { result } = await callTool<{ ok?: boolean }>(
+            const { result, body } = await callTool(
               senderToken,
               "send_invitation",
               {
                 receiver_domain: serverHost,
                 shortcode: w.shortcode,
-                proposed_terms: { category: "billing" },
+                communication_terms: TERMS,
               },
             );
-            assertExists(result);
-            assertEquals(
-              (result as { ok?: boolean }).ok,
-              false,
-              "shortcode must be invalid after its policy is removed",
-            );
+            const errorish =
+              (result as { ok?: boolean } | undefined)?.ok === false ||
+              body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
           },
         );
 
-        await t.step(
-          "shortcode for an expired window resolves but yields E_RECEPTIVE_POLICY_EXPIRED",
-          async () => {
-            // Open a 1-second window.
-            const { result: w } = await callTool<{
-              policy_id: string;
-              shortcode?: string;
-            }>(listenerToken, "open_receptive_window", {
-              duration_seconds: 1,
-            });
-            assertExists(w);
-            assertExists(w.shortcode);
-
-            // Wait for the window to expire.
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-
-            // Attempt to deliver via the expired shortcode.
-            const { result } = await callTool<{ ok?: boolean }>(
-              senderToken,
-              "send_invitation",
-              {
-                receiver_domain: serverHost,
-                shortcode: w.shortcode,
-                proposed_terms: { category: "billing" },
-              },
-            );
-            assertExists(result);
-            assertEquals(
-              (result as { ok?: boolean }).ok,
-              false,
-              "expired shortcode must yield a structured error",
-            );
-          },
-        );
+        await t.step("expired shortcode is rejected", async () => {
+          const { result: w } = await callTool<{ shortcode: string }>(
+            listenerToken,
+            "open_receptive_window",
+            { duration_seconds: 1 },
+          );
+          assertExists(w);
+          await new Promise((r) => setTimeout(r, 1500));
+          const { result, body } = await callTool(
+            senderToken,
+            "send_invitation",
+            {
+              receiver_domain: serverHost,
+              shortcode: w.shortcode,
+              communication_terms: TERMS,
+            },
+          );
+          const errorish =
+            (result as { ok?: boolean } | undefined)?.ok === false ||
+            body.error !== undefined || result === undefined;
+          assertEquals(errorish, true);
+        });
       });
     });
   },

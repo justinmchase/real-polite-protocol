@@ -214,7 +214,10 @@ Deno.test({
             }>(userToken, "send_invitation", {
               receiver_domain: receiverDomain,
               receptive_policy_id: windowResult.policy_id,
-              proposed_terms: { category: "correspondence" },
+              communication_terms: {
+                categories: ["correspondence"],
+                max_content_rating: "PG",
+              },
               include_admin_claims: ["display_name"],
             });
             assertExists(invResult?.invitation_id);

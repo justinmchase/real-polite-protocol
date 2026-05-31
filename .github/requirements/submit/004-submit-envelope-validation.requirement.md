@@ -1,62 +1,65 @@
 ---
 id: submit-004
-title: Envelope requests are validated against the kind-specific schema before acceptance
+title: Envelope requests are validated against the category-specific schema before acceptance
+spec_ref: "5, 6, 7, 10"
 ---
 
 # Envelope Validation
 
 Before an envelope is accepted, the envelope endpoint MUST validate the request
-body against the schema for its declared kind (Section 5.1, Section 7, Section
-7.1.1, Section 7.1.2, Section 9.7.2). Envelope kind is determined by the
-top-level `category` field.
+body against the schema for its declared category (§5, §6, §7.1, §10.1, §10.4).
+Envelope category is determined by the top-level `category` field.
 
 ## Expected behavior
 
 - The request body is valid JSON; otherwise the server rejects it with
-  `E_INVALID_REQUEST_BODY`.
+  `E_INVALID_REQUEST_BODY` (§13).
 - The total request body size does not exceed 256 KB; oversized requests are
-  rejected with `E_MESSAGE_TOO_LARGE`.
+  rejected with `E_MESSAGE_TOO_LARGE` (§13).
 - The server reads the top-level `category` field and dispatches to the matching
-  kind-specific validator.
+  category-specific validator. Unknown `category` is rejected with
+  `E_INVALID_ENVELOPE`.
+- Every envelope MUST include `envelope_id` (UUIDv7), `sender_domain`,
+  `sent_at`, and `category` (§5). Missing or malformed common fields are
+  rejected with `E_INVALID_ENVELOPE`.
 
 ### Message envelope (§7.1)
 
-- The request body includes the required message envelope fields defined by the
-  base RPP envelope.
-- If required envelope fields are missing, the server rejects the request with
-  `E_INVALID_MESSAGE_ENVELOPE`.
-- `message_id` is unique per `sender_domain` and is used as part of replay and
-  deduplication checks.
-- `sender_domain` is validated against the receipt context before message
-  delivery is accepted.
+- The envelope MUST include `category` (from §7.1 message categories),
+  `content_rating` (from §7.2), and a `body` object containing `content_type`
+  and `content`.
 - `content_type` MUST be one of `text/markdown` (UTF-8 CommonMark) or
   `application/json` (UTF-8 JSON document whose top-level value is an object or
-  array). Any other `content_type` is rejected with `E_INVALID_CONTENT_TYPE`.
-  Servers MUST validate JSON syntactic well-formedness for `application/json`
-  bodies and reject malformed JSON with `E_INVALID_BODY`. Servers MUST NOT
-  perform application-level schema validation.
+  array). Any other `content_type` is rejected with `E_INVALID_CONTENT_TYPE`
+  (§13). Servers MUST validate JSON syntactic well-formedness for
+  `application/json` bodies and reject malformed JSON with `E_INVALID_BODY`.
+  Servers MUST NOT perform application-level schema validation.
+- If required envelope fields are missing, the server rejects with
+  `E_INVALID_MESSAGE_ENVELOPE` (§13).
+- The named contact's `remote_terms.categories` MUST include this message's
+  `category` and `remote_terms.max_content_rating` MUST be at least as
+  permissive as `content_rating`. On violation reject with
+  `E_CATEGORY_NOT_PERMITTED` or `E_CONTENT_RATING_EXCEEDED` (§11.5, §13).
 
-### Invitation envelope (§9)
+### Invitation envelope (§10.1)
 
-- The envelope includes an `invitation` object with at minimum `invitation_id`,
-  `proposed_terms`, and a `delivery` block (Section 9.7.1).
-- The `delivery` block MUST include `domain` (sender's RPP domain) and `token`
-  (a sender-generated single-use HMAC key for the future receipt callback). The
-  block MAY include `expires_at`.
-- Exactly one of `receptive_policy_id` or `receipt_id` MUST be present on the
-  invitation; both or neither is invalid.
+- The envelope MUST include `invitation_id`, `receptive_policy_id`,
+  `communication_terms`, `reply_credential` (`{ contact_id, contact_secret }`),
+  and `claims.immutable.domain_id`.
 - If required fields are missing, the server rejects with
-  `E_INVALID_MESSAGE_ENVELOPE`.
+  `E_INVALID_INVITATION_ENVELOPE` (§13).
+- The named `receptive_policy_id` (or its shortcode) MUST resolve to an active
+  local policy. Unknown policy id is rejected with
+  `E_RECEPTIVE_POLICY_NOT_FOUND`; expired with `E_RECEPTIVE_POLICY_EXPIRED`;
+  admission failure with `E_RECEPTIVE_POLICY_CLOSED` (§9, §13).
 
-### Receipt envelope (§9.7.2)
+### Invitation_reply envelope (§10.4)
 
-- The envelope MUST include `category: "receipt"`, `invitation_id`, and
-  `decision` (`"accepted"` or `"rejected"`).
-- When `decision` is `"accepted"`, the envelope MUST include a `receipt` object
-  with at minimum `id`, `secret`, `category`, `max_content_rating`,
-  `usage_policy`, and `issued_at`.
-- When `decision` is `"rejected"`, the `receipt` field MUST be absent.
-- The `reason` field is OPTIONAL on either decision and is human-facing only.
-- If the envelope is structurally invalid (missing required fields, malformed
-  receipt block, decision/receipt mismatch), the server rejects with
-  `E_RECEIPT_ENVELOPE_INVALID`.
+- The envelope MUST include `invitation_id` (referencing the local outbound
+  invitation), `communication_terms`, `reply_credential`
+  (`{ contact_id, contact_secret }`), and `claims.immutable.domain_id`.
+- The `x-rpp-contact-id` header MUST name the locally persisted outbound
+  `reply_credential` for the referenced invitation (see `req:submit-002`).
+- If required fields are missing or the referenced invitation is not in
+  `pending` state, the server rejects with `E_INVITATION_NOT_PENDING` or
+  `E_INVALID_INVITATION_REPLY_ENVELOPE` (§13).

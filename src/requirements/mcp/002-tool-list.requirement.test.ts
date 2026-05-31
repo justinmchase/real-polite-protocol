@@ -64,9 +64,6 @@ Deno.test({
               "accept_invitation",
               "reject_invitation",
               "send_invitation",
-              // receipt
-              "list_issued_receipts",
-              "revoke_receipt",
               // messages
               "list_messages",
               "get_message",

@@ -4,6 +4,7 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedInboundInvitation } from "../helpers/seed-inbound-invitation.ts";
 
 Deno.test({
   name: "req:invitations-002 - Listeners can review a pending invitation",
@@ -11,86 +12,111 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
-
-          // Initialize account with verified metadata
           await callTool(token, "set_user_verified_metadata");
 
-          const invitationId = crypto.randomUUID();
-          const proposedTerms = {
-            category: "billing",
-            max_messages_per_day: 100,
-          };
+          const senderDomainId = crypto.randomUUID();
+          const inv = await seedInboundInvitation(kv, {
+            ownerOid,
+            remoteDomain: "alpha.example",
+            remoteDomainId: senderDomainId,
+            senderDisplayName: "Alpha Co.",
+            message: "Hi, let's connect.",
+            claims: {
+              immutable: { domain_id: senderDomainId },
+              user: { name: "Alice" },
+              admin: { dept: "Sales" },
+              custom: { ref: "conf-2026" },
+            },
+          });
 
-          await kv.set(["invitations", invitationId], {
-            invitation_id: invitationId,
-            receiver_oid: accountOid,
-            sender_domain: "trusted-partner.example",
-            status: "pending",
-            proposed_terms: proposedTerms,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-              .toISOString(),
-            created_at: new Date().toISOString(),
+          await t.step("returns full invitation record", async () => {
+            const { status, result } = await callTool<{
+              invitation_id: string;
+              direction: string;
+              remote_domain: string;
+              status: string;
+              communication_terms: { categories: string[] };
+              claims?: {
+                immutable: Record<string, unknown>;
+                user?: Record<string, unknown>;
+                admin?: Record<string, unknown>;
+                custom?: Record<string, unknown>;
+              };
+              sender_display_name?: string;
+              message?: string;
+              sent_at: string;
+              created_at: string;
+              reply_credential?: unknown;
+            }>(token, "review_invitation", {
+              invitation_id: inv.invitation_id,
+            });
+            assertEquals(status, 200);
+            assertExists(result);
+            assertEquals(result.invitation_id, inv.invitation_id);
+            assertEquals(result.direction, "inbound");
+            assertEquals(result.remote_domain, "alpha.example");
+            assertEquals(result.status, "pending");
+            assertEquals(result.sender_display_name, "Alpha Co.");
+            assertEquals(result.message, "Hi, let's connect.");
+            assertExists(result.claims);
+            assertEquals(result.claims.immutable.domain_id, senderDomainId);
+            assertEquals(result.claims.user?.name, "Alice");
+            assertEquals(result.claims.admin?.dept, "Sales");
+            assertEquals(result.claims.custom?.ref, "conf-2026");
           });
 
           await t.step(
-            "review_invitation returns full invitation details",
+            "does NOT expose reply_credential to caller",
             async () => {
-              const { status, result } = await callTool<
-                {
-                  invitation_id: string;
-                  receiver_oid: string;
-                  sender_domain: string;
-                  status: string;
-                  proposed_terms: Record<string, unknown>;
-                }
-              >(token, "review_invitation", {
-                invitation_id: invitationId,
-              });
-
-              assertEquals(status, 200);
+              const { result } = await callTool<Record<string, unknown>>(
+                token,
+                "review_invitation",
+                { invitation_id: inv.invitation_id },
+              );
               assertExists(result);
-              assertEquals(result.invitation_id, invitationId);
-              assertEquals(result.receiver_oid, accountOid);
-              assertEquals(result.sender_domain, "trusted-partner.example");
-              assertEquals(result.status, "pending");
-              assertEquals(result.proposed_terms, proposedTerms);
+              assertEquals("reply_credential" in result, false);
             },
           );
 
+          await t.step("unknown invitation_id errors", async () => {
+            const { result, body } = await callTool(
+              token,
+              "review_invitation",
+              {
+                invitation_id: crypto.randomUUID(),
+              },
+            );
+            const errorish = (result as { ok?: boolean } | undefined)?.ok ===
+                false || body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
+          });
+
           await t.step(
-            "review_invitation can fetch accepted invitation",
+            "another account cannot review the invitation",
             async () => {
-              const acceptedInvitationId = crypto.randomUUID();
-              await kv.set(["invitations", acceptedInvitationId], {
-                invitation_id: acceptedInvitationId,
-                receiver_oid: accountOid,
-                sender_domain: "another-partner.example",
-                status: "accepted",
-                proposed_terms: { category: "marketing" },
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                  .toISOString(),
-                created_at: new Date().toISOString(),
-                accepted_at: new Date().toISOString(),
+              const otherOid = crypto.randomUUID();
+              const otherToken = await issueToken({
+                oid: otherOid,
+                scope: requiredScopes.join(" "),
+                name: "Other",
               });
-
-              const { status, result } = await callTool<
-                { status: string; accepted_at?: string }
-              >(token, "review_invitation", {
-                invitation_id: acceptedInvitationId,
-              });
-
-              assertEquals(status, 200);
-              assertExists(result);
-              assertEquals(result.status, "accepted");
-              assertExists(result.accepted_at);
+              await callTool(otherToken, "set_user_verified_metadata");
+              const { result, body } = await callTool(
+                otherToken,
+                "review_invitation",
+                { invitation_id: inv.invitation_id },
+              );
+              const errorish =
+                (result as { ok?: boolean } | undefined)?.ok === false ||
+                body.error !== undefined || result === undefined;
+              assertEquals(errorish, true);
             },
           );
         } finally {

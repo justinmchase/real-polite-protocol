@@ -4,143 +4,168 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedInboundInvitation } from "../helpers/seed-inbound-invitation.ts";
+import { seedOutboundInvitation } from "../helpers/seed-outbound-invitation.ts";
+import { submitInvitationReplyEnvelope } from "../helpers/submit-invitation-reply-envelope.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
+import { makeCredential, seedContact } from "../helpers/seed-contact.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
 
 Deno.test({
   name: "req:contacts-001 - Contact auto-creation on invitation acceptance",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath, callTool }) => {
+      await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          const senderDomainId = crypto.randomUUID();
-          const senderDomain = "sender.example";
-
-          const invId = crypto.randomUUID();
-          await kv.set(["invitations", invId], {
-            invitation_id: invId,
-            receiver_oid: accountOid,
-            sender_domain: senderDomain,
-            status: "pending",
-            proposed_terms: { category: "billing" },
-            claims: { immutable: { domain_id: senderDomainId } },
-            created_at: new Date().toISOString(),
-          });
-
           await t.step(
-            "accepting invitation with domain_id creates a contact",
+            "local accept creates a contact with bilateral credentials",
             async () => {
-              await callTool(token, "accept_invitation", {
-                invitation_id: invId,
+              await withRemoteServer(async (remoteDomain) => {
+                const senderDomainId = crypto.randomUUID();
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain,
+                  remoteDomainId: senderDomainId,
+                });
+                const { result } = await callTool<{
+                  contact_id: string;
+                }>(token, "accept_invitation", {
+                  invitation_id: inv.invitation_id,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                });
+                assertExists(result);
+                const contact = await kv.get<Record<string, unknown>>([
+                  "contacts",
+                  ownerOid,
+                  result.contact_id,
+                ]);
+                assertExists(contact.value);
+                const c = contact.value as {
+                  remote_domain: string;
+                  remote_domain_id: string;
+                  local_credential: { contact_id: string };
+                  remote_credential: { contact_id: string };
+                  local_terms: unknown;
+                  remote_terms: unknown;
+                  blocked: boolean;
+                };
+                assertEquals(c.remote_domain, remoteDomain);
+                assertEquals(c.remote_domain_id, senderDomainId);
+                assertExists(c.local_credential.contact_id);
+                assertEquals(
+                  c.remote_credential.contact_id,
+                  inv.reply_credential.contact_id,
+                );
+                assertEquals(c.blocked, false);
+                assertExists(c.local_terms);
+                assertExists(c.remote_terms);
               });
-
-              const { result } = await callTool<{
-                contacts: Array<{
-                  id: string;
-                  domain: string;
-                  domain_id: string;
-                }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              assertEquals(result.contacts.length, 1);
-              assertEquals(result.contacts[0].domain, senderDomain);
-              assertEquals(result.contacts[0].domain_id, senderDomainId);
             },
           );
 
           await t.step(
-            "contact id is a server-assigned UUID distinct from domain_id",
+            "remote accept (inbound invitation_reply) creates a contact",
             async () => {
-              const { result } = await callTool<{
-                contacts: Array<{ id: string; domain_id: string }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              const contact = result.contacts[0];
-              assertExists(contact.id);
-              assertEquals(contact.id !== senderDomainId, true);
+              const outbound = await seedOutboundInvitation(kv, {
+                ownerOid,
+                remoteDomain: "remote.example",
+              });
+              const remoteReply = makeCredential();
+              const resp = await submitInvitationReplyEnvelope({
+                invitationId: outbound.invitation_id,
+                signingCredential: outbound.reply_credential,
+                replyCredential: remoteReply,
+                senderDomain: "remote.example",
+                baseUrl,
+              });
+              assertEquals(resp.status, 202);
+              await resp.body?.cancel();
+
+              const contacts: unknown[] = [];
+              for await (
+                const e of kv.list({
+                  prefix: ["contacts_by_oid", ownerOid],
+                })
+              ) {
+                contacts.push(e);
+              }
+              assertEquals(contacts.length >= 1, true);
             },
           );
 
           await t.step(
-            "accepting another invitation with same (domain, domain_id) upserts — not duplicates",
+            "inbound message does NOT auto-create contact (rejected if no contact)",
             async () => {
-              const inv2Id = crypto.randomUUID();
-              await kv.set(["invitations", inv2Id], {
-                invitation_id: inv2Id,
-                receiver_oid: accountOid,
-                sender_domain: senderDomain,
-                status: "pending",
-                proposed_terms: { category: "support" },
-                claims: { immutable: { domain_id: senderDomainId } },
-                created_at: new Date().toISOString(),
+              const unknownCred = makeCredential();
+              const resp = await submitMessageEnvelope({
+                credential: unknownCred,
+                senderDomain: "stranger.example",
+                baseUrl,
               });
-              await callTool(token, "accept_invitation", {
-                invitation_id: inv2Id,
-              });
-
-              const { result } = await callTool<{
-                contacts: Array<{ id: string }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              // Still exactly one contact — the second acceptance upserted it
-              assertEquals(result.contacts.length, 1);
+              assertEquals(resp.status >= 400, true);
+              await resp.body?.cancel();
             },
           );
 
           await t.step(
-            "updated_at is refreshed on upsert but created_at is preserved",
+            "remote_domain + remote_domain_id pair is unique per OID",
             async () => {
-              const { result } = await callTool<{
-                contacts: Array<{
-                  created_at: string;
-                  updated_at: string;
-                }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              const contact = result.contacts[0];
-              assertExists(contact.created_at);
-              assertExists(contact.updated_at);
-            },
-          );
-
-          await t.step(
-            "invitation without domain_id does not create a contact",
-            async () => {
-              const otherOid = crypto.randomUUID();
-              const otherToken = await issueToken({
-                oid: otherOid,
-                scope: requiredScopes.join(" "),
-                name: "Other",
+              const sharedDomain = "dup.example";
+              const sharedDomainId = crypto.randomUUID();
+              await seedContact(kv, {
+                ownerOid,
+                remoteDomain: sharedDomain,
+                remoteDomainId: sharedDomainId,
               });
-              await callTool(otherToken, "set_user_verified_metadata");
-
-              const noDomainInvId = crypto.randomUUID();
-              await kv.set(["invitations", noDomainInvId], {
-                invitation_id: noDomainInvId,
-                receiver_oid: otherOid,
-                sender_domain: "noid.example",
-                status: "pending",
-                proposed_terms: { category: "billing" },
-                // no claims.immutable.domain_id
-                created_at: new Date().toISOString(),
+              // Seed an inbound invitation that resolves to the same composite
+              // key; acceptance should upsert in place, not create a duplicate.
+              await withRemoteServer(async () => {
+                const before: unknown[] = [];
+                for await (
+                  const e of kv.list({
+                    prefix: ["contacts_by_domain_key", ownerOid, sharedDomain],
+                  })
+                ) {
+                  before.push(e);
+                }
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain: sharedDomain,
+                  remoteDomainId: sharedDomainId,
+                });
+                const { result } = await callTool<{
+                  contact_id: string;
+                }>(token, "accept_invitation", {
+                  invitation_id: inv.invitation_id,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                });
+                assertExists(result);
+                const after: unknown[] = [];
+                for await (
+                  const e of kv.list({
+                    prefix: ["contacts_by_domain_key", ownerOid, sharedDomain],
+                  })
+                ) {
+                  after.push(e);
+                }
+                // Same number of (domain,id) keys before and after.
+                assertEquals(after.length, before.length);
               });
-              await callTool(otherToken, "accept_invitation", {
-                invitation_id: noDomainInvId,
-              });
-
-              const { result } = await callTool<{
-                contacts: Array<{ id: string }>;
-              }>(otherToken, "list_contacts", {});
-              assertExists(result);
-              assertEquals(result.contacts.length, 0);
             },
           );
         } finally {

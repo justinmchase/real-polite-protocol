@@ -1,4 +1,10 @@
-# 012-azure-token-support.requirement.md
+---
+id: mcp-auth-012
+title: Azure AD/Entra ID Token v2.0 Compatibility
+spec_ref: "6.2"
+---
+
+# Azure AD/Entra ID Token v2.0 Compatibility
 
 ## Requirement: Azure AD/Entra ID Token v2.0 Compatibility
 

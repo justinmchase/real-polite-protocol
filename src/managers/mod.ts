@@ -3,8 +3,6 @@ import { ContactManager } from "./contacts/mod.ts";
 import { DomainIdentityManager } from "./domain-identity/mod.ts";
 import { ReceptivePolicyManager } from "./receptive-policy/mod.ts";
 import { InvitationManager } from "./invitation/mod.ts";
-import { PublicInvitationManager } from "./invitation/mod.ts";
-import { ReceiptManager } from "./receipt/mod.ts";
 import { MessageManager, SentMessageManager } from "./messages/mod.ts";
 import type { Repositories } from "../repositories/mod.ts";
 import type { Services } from "../services/mod.ts";
@@ -14,7 +12,6 @@ export * from "./contacts/mod.ts";
 export * from "./domain-identity/mod.ts";
 export * from "./receptive-policy/mod.ts";
 export * from "./invitation/mod.ts";
-export * from "./receipt/mod.ts";
 export * from "./messages/mod.ts";
 
 export interface Managers {
@@ -23,8 +20,6 @@ export interface Managers {
   domainIdentity: DomainIdentityManager;
   receptivePolicy: ReceptivePolicyManager;
   invitations: InvitationManager;
-  publicInvitations: PublicInvitationManager;
-  receipts: ReceiptManager;
   messages: MessageManager;
   sentMessages: SentMessageManager;
 }
@@ -34,7 +29,8 @@ export function initManagers(
   services: Services,
 ): Managers {
   const accounts = new AccountManager(repositories.accounts);
-  const contacts = new ContactManager(repositories.contacts);
+  const messages = new MessageManager(repositories.messages);
+  const contacts = new ContactManager(repositories.contacts, messages);
   const domainIdentity = new DomainIdentityManager(
     repositories.domainIdentity,
     services.config,
@@ -42,18 +38,7 @@ export function initManagers(
   const receptivePolicy = new ReceptivePolicyManager(
     repositories.receptivePolicy,
   );
-  const receipts = new ReceiptManager(repositories.receipts, receptivePolicy);
-  const invitations = new InvitationManager(
-    repositories.invitations,
-    receipts,
-    contacts,
-    receptivePolicy,
-  );
-  const publicInvitations = new PublicInvitationManager(
-    repositories.publicInvitations,
-    receipts,
-  );
-  const messages = new MessageManager(repositories.messages);
+  const invitations = new InvitationManager(repositories.invitations);
   const sentMessages = new SentMessageManager(repositories.sentMessages);
   return {
     accounts,
@@ -61,8 +46,6 @@ export function initManagers(
     domainIdentity,
     receptivePolicy,
     invitations,
-    publicInvitations,
-    receipts,
     messages,
     sentMessages,
   };

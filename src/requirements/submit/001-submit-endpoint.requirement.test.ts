@@ -1,162 +1,98 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
-import { computeHmac } from "../helpers/compute-hmac.ts";
-import { submitReceiptCallback } from "../helpers/submit-receipt-callback.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
+import { seedOutboundInvitation } from "../helpers/seed-outbound-invitation.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
+import { submitInvitationEnvelope } from "../helpers/submit-invitation-envelope.ts";
+import { submitInvitationReplyEnvelope } from "../helpers/submit-invitation-reply-envelope.ts";
 
 Deno.test({
   name:
-    "req:submit-001 - Servers expose an envelope endpoint that accepts message, invitation, and receipt envelopes",
+    "req:submit-001 - Servers expose an envelope endpoint that accepts message, invitation, and invitation_reply envelopes",
   fn: async (t) => {
     await withStartedServer(async ({ kvPath, baseUrl }) => {
       const kv = await Deno.openKv(kvPath);
-
       try {
-        // Create a test receipt
-        const receiptId = crypto.randomUUID();
-        const receiptSecret = crypto.randomUUID();
-        await kv.set(
-          ["receipts", receiptId],
-          { id: receiptId, secret: receiptSecret, status: "active" },
-        );
+        const ownerOid = crypto.randomUUID();
 
         await t.step(
-          "POST /rpp/v1/messages accepts a single message envelope",
+          "POST /rpp/v1/envelopes accepts a message envelope (202, { ok, accepted, envelope_id })",
           async () => {
-            const bodyJson = JSON.stringify({
-              message_id: crypto.randomUUID(),
-              sender_domain: "sender.example",
-              category: "message",
-              sent_at: "2026-04-20T00:00:00Z",
-              message: {
-                content_rating: "G",
-                subject: "Hello",
-                body: {
-                  content_type: "text/markdown",
-                  content: "Hello from RPP.",
-                },
-              },
+            const contact = await seedContact(kv, {
+              ownerOid,
+              remoteDomain: "sender.example",
             });
-
-            const bodyBytes = new TextEncoder().encode(bodyJson);
-            const timestamp = new Date().toISOString();
-            const signature = await computeHmac(
-              receiptSecret,
-              timestamp,
-              bodyBytes,
-            );
-
-            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "x-rpp-receipt-id": receiptId,
-                "x-rpp-signature": signature,
-                "x-rpp-timestamp": timestamp,
-              },
-              body: bodyJson,
+            const response = await submitMessageEnvelope({
+              baseUrl,
+              credential: contact.local_credential,
+              senderDomain: contact.remote_domain,
             });
-
             assertEquals(response.status, 202);
-
-            const payload = await response.json() as {
-              accepted?: boolean;
-              message_id?: string;
-              ok?: boolean;
-            };
-
+            const payload = await response.json() as Record<string, unknown>;
             assertEquals(payload.ok, true);
             assertEquals(payload.accepted, true);
-            assertExists(payload.message_id);
+            assertExists(payload.envelope_id);
           },
         );
 
         await t.step(
-          "multiple deliveries require multiple independent submissions",
+          "POST /rpp/v1/envelopes accepts an invitation envelope (202, uniform shape)",
           async () => {
-            const firstJson = JSON.stringify({
-              message_id: crypto.randomUUID(),
-              sender_domain: "sender.example",
-              category: "message",
-              sent_at: "2026-04-20T00:00:01Z",
-              message: {
-                content_rating: "G",
-                subject: "Message one",
-                body: {
-                  content_type: "text/markdown",
-                  content: "First message.",
-                },
-              },
+            // Seed a receptive policy in `all` mode.
+            const policyId = crypto.randomUUID();
+            await kv.set(["receptive_policies", policyId], {
+              policy_id: policyId,
+              oid: ownerOid,
+              mode: "all",
+              created_at: new Date(),
             });
-
-            const secondJson = JSON.stringify({
-              message_id: crypto.randomUUID(),
-              sender_domain: "sender.example",
-              category: "message",
-              sent_at: "2026-04-20T00:00:02Z",
-              message: {
-                content_rating: "G",
-                subject: "Message two",
-                body: {
-                  content_type: "text/markdown",
-                  content: "Second message.",
-                },
-              },
-            });
-
-            const timestamp = new Date().toISOString();
-            const firstBytes = new TextEncoder().encode(firstJson);
-            const secondBytes = new TextEncoder().encode(secondJson);
-            const firstSignature = await computeHmac(
-              receiptSecret,
-              timestamp,
-              firstBytes,
-            );
-            const secondSignature = await computeHmac(
-              receiptSecret,
-              timestamp,
-              secondBytes,
+            await kv.set(
+              ["receptive_policies_by_oid", ownerOid, policyId],
+              policyId,
             );
 
-            const first = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "x-rpp-receipt-id": receiptId,
-                "x-rpp-signature": firstSignature,
-                "x-rpp-timestamp": timestamp,
-              },
-              body: firstJson,
+            const response = await submitInvitationEnvelope({
+              baseUrl,
+              receptivePolicyId: policyId,
+              senderDomain: "remote.example",
             });
-
-            const second = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "x-rpp-receipt-id": receiptId,
-                "x-rpp-signature": secondSignature,
-                "x-rpp-timestamp": timestamp,
-              },
-              body: secondJson,
-            });
-
-            assertEquals(first.status, 202);
-            assertEquals(second.status, 202);
-            await first.text();
-            await second.text();
+            assertEquals(response.status, 202);
+            const payload = await response.json() as Record<string, unknown>;
+            assertEquals(payload.ok, true);
+            assertEquals(payload.accepted, true);
+            assertExists(payload.envelope_id);
           },
         );
 
         await t.step(
-          "envelope endpoint is accessible at POST /rpp/v1/envelopes",
+          "POST /rpp/v1/envelopes accepts an invitation_reply envelope (202, uniform shape)",
           async () => {
-            // Explicit assertion that the exact path /rpp/v1/envelopes is wired up.
-            // A missing or misspelled path would produce 404, not 4xx auth error.
+            const outbound = await seedOutboundInvitation(kv, {
+              ownerOid,
+              remoteDomain: "remote.example",
+            });
+            const response = await submitInvitationReplyEnvelope({
+              baseUrl,
+              invitationId: outbound.invitation_id,
+              signingCredential: outbound.reply_credential,
+              senderDomain: outbound.remote_domain,
+            });
+            assertEquals(response.status, 202);
+            const payload = await response.json() as Record<string, unknown>;
+            assertEquals(payload.ok, true);
+            assertEquals(payload.accepted, true);
+            assertExists(payload.envelope_id);
+          },
+        );
+
+        await t.step(
+          "envelope endpoint is accessible at POST /rpp/v1/envelopes (no 404)",
+          async () => {
             const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: "{}",
             });
-            // Any response other than 404 confirms the handler is reachable.
             assertEquals(
               response.status === 404,
               false,
@@ -167,86 +103,26 @@ Deno.test({
         );
 
         await t.step(
-          "invitation envelope response has shape { ok, accepted, invitation_id }",
+          "multiple message deliveries require multiple independent submissions",
           async () => {
-            // Seed a receptive policy so the invitation is accepted.
-            const policyId = crypto.randomUUID();
-            const accountOid = crypto.randomUUID();
-            await kv.set(["receptive_policies", policyId], {
-              policy_id: policyId,
-              oid: accountOid,
-              mode: "all",
-              status: "active",
-              created_at: new Date(),
+            const contact = await seedContact(kv, {
+              ownerOid,
+              remoteDomain: "fanout.example",
             });
-
-            const invitationId = crypto.randomUUID();
-            const bodyJson = JSON.stringify({
-              message_id: crypto.randomUUID(),
-              sender_domain: "sender.example",
-              category: "invitation",
-              sent_at: new Date().toISOString(),
-              invitation: {
-                invitation_id: invitationId,
-                receptive_policy_id: policyId,
-                proposed_terms: { category: "billing" },
-                delivery: {
-                  domain: "sender.example",
-                  token: crypto.randomUUID(),
-                },
-              },
-            });
-
-            const response = await fetch(`${baseUrl}/rpp/v1/envelopes`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: bodyJson,
-            });
-
-            assertEquals(response.status, 202);
-            const payload = await response.json() as Record<string, unknown>;
-            assertEquals(payload.ok, true);
-            assertEquals(typeof payload.accepted, "boolean");
-            assertExists(payload.invitation_id);
-          },
-        );
-
-        await t.step(
-          "receipt callback envelope response has shape { ok, accepted, invitation_id }",
-          async () => {
-            // Seed an invitation in pending state.
-            const invitationId = crypto.randomUUID();
-            const deliveryToken = crypto.randomUUID();
-            await kv.set(["invitations", invitationId], {
-              invitation_id: invitationId,
-              receiver_oid: crypto.randomUUID(),
-              sender_domain: "partner.example",
-              status: "pending",
-              delivery: { domain: "partner.example", token: deliveryToken },
-              proposed_terms: { category: "billing" },
-              created_at: new Date(),
-            });
-
-            const response = await submitReceiptCallback({
-              invitationId,
-              deliveryToken,
-              decision: "accepted",
-              receipt: {
-                id: crypto.randomUUID(),
-                secret: crypto.randomUUID(),
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                issued_at: new Date().toISOString(),
-              },
+            const first = await submitMessageEnvelope({
               baseUrl,
+              credential: contact.local_credential,
+              senderDomain: contact.remote_domain,
             });
-
-            assertEquals(response.status, 202);
-            const payload = await response.json() as Record<string, unknown>;
-            assertEquals(payload.ok, true);
-            assertEquals(typeof payload.accepted, "boolean");
-            assertExists(payload.invitation_id);
+            const second = await submitMessageEnvelope({
+              baseUrl,
+              credential: contact.local_credential,
+              senderDomain: contact.remote_domain,
+            });
+            assertEquals(first.status, 202);
+            assertEquals(second.status, 202);
+            await first.body?.cancel();
+            await second.body?.cancel();
           },
         );
       } finally {

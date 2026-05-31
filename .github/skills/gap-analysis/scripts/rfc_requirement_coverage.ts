@@ -18,8 +18,8 @@ const spec = await Deno.readTextFile(specPath);
 
 const catalogSection = extractSection(
   spec,
-  "## 10B. MCP Tool Catalog",
-  "## 11. Error Model",
+  "## 12. MCP Tool Catalog",
+  "## 13. Error Model",
 );
 const rfcTools = extractRfcToolsByScope(catalogSection, scope);
 
@@ -106,9 +106,28 @@ function extractSection(
 function extractRfcToolNames(section: string): string[] {
   const names = new Set<string>();
   const regex = /`([a-z]+(?:_[a-z]+)+)`/g;
-  let match: RegExpExecArray | null = null;
-  while ((match = regex.exec(section)) !== null) {
-    names.add(match[1]);
+  // Tool names are the first column of Markdown tables in §12. The first
+  // column always starts after the leading `|` and ends at the next `|`.
+  // Restricting extraction to that first cell avoids matching field names
+  // (`remote_credential`, `key_id`, etc.) that appear in description cells.
+  for (const rawLine of section.split("\n")) {
+    const line = rawLine.trimStart();
+    if (!line.startsWith("|")) {
+      continue;
+    }
+    const afterLeading = line.slice(1);
+    const firstSep = afterLeading.indexOf("|");
+    if (firstSep < 0) {
+      continue;
+    }
+    const firstCell = afterLeading.slice(0, firstSep);
+    if (/^\s*:?-+:?\s*$/.test(firstCell)) {
+      continue; // skip table separator rows like |---|---|
+    }
+    let match: RegExpExecArray | null = null;
+    while ((match = regex.exec(firstCell)) !== null) {
+      names.add(match[1]);
+    }
   }
   return Array.from(names).sort();
 }
@@ -121,58 +140,52 @@ function extractRfcToolsByScope(section: string, scopeValue: string): string[] {
   const byHeading = {
     messaging: extractToolsInSection(
       section,
-      "### 10B.1 Messaging Tools",
-      "### 10B.2 Group Tools",
-    ),
-    group: extractToolsInSection(
-      section,
-      "### 10B.2 Group Tools",
-      "### 10B.3 Receipt Tools",
-    ),
-    receipt: extractToolsInSection(
-      section,
-      "### 10B.3 Receipt Tools",
-      "### 10B.4 Invitation Tools",
+      "### 12.1 Messaging Tools",
+      "### 12.2 Invitation Tools",
     ),
     invitation: extractToolsInSection(
       section,
-      "### 10B.4 Invitation Tools",
-      "### 10B.5 Receptive Policy Tools",
+      "### 12.2 Invitation Tools",
+      "### 12.3 Receptive Policy Tools",
     ),
     receptive: extractToolsInSection(
       section,
-      "### 10B.5 Receptive Policy Tools",
-      "### 10B.6 Identity Tools",
+      "### 12.3 Receptive Policy Tools",
+      "### 12.4 Contact Tools",
+    ),
+    contact: extractToolsInSection(
+      section,
+      "### 12.4 Contact Tools",
+      "### 12.5 Identity Tools",
     ),
     account: extractToolsInSection(
       section,
-      "### 10B.6 Identity Tools",
-      "### 10B.7 Domain Management — Identity and Configuration",
+      "### 12.5 Identity Tools",
+      "### 12.6 Domain Management — Identity and Configuration",
     ),
     domainIdentity: extractToolsInSection(
       section,
-      "### 10B.7 Domain Management — Identity and Configuration",
-      "### 10B.8 Domain Management — User Verification",
+      "### 12.6 Domain Management — Identity and Configuration",
+      "### 12.7 Domain Management — User Verification",
     ),
     domainVerification: extractToolsInSection(
       section,
-      "### 10B.8 Domain Management — User Verification",
-      "### 10B.9 Domain Management — Contact Information",
+      "### 12.7 Domain Management — User Verification",
+      "### 12.8 Domain Management — Contact Information",
     ),
     domainContact: extractToolsInSection(
       section,
-      "### 10B.9 Domain Management — Contact Information",
-      "## 11. Error Model",
+      "### 12.8 Domain Management — Contact Information",
+      "### 12.9 Pagination",
     ),
   };
 
   if (scopeValue === "listener") {
     return uniq([
       ...byHeading.messaging,
-      ...byHeading.group,
-      ...byHeading.receipt,
       ...byHeading.invitation,
       ...byHeading.receptive,
+      ...byHeading.contact,
       ...byHeading.account,
     ]);
   }

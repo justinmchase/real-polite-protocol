@@ -4,189 +4,163 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
 
 Deno.test({
   name:
-    "req:invitations-005 - Listeners can send invitations using a receptive policy ID",
+    "req:invitations-005 - Senders can send a direct invitation by receptive_policy_id",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath, baseUrl, callTool }) => {
+      await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "Sender",
           });
-
-          // Initialize account with verified metadata
           await callTool(token, "set_user_verified_metadata");
 
-          // Open a receptive window to get a policy_id that can be shared.
-          const { result: windowPolicy } = await callTool<
-            { policy_id: string }
-          >(
-            token,
-            "open_receptive_window",
-            { duration_seconds: 300 },
-          );
-          assertExists(windowPolicy);
-          const policyId = windowPolicy.policy_id;
-
-          // In tests both sender and receiver are the same server.
-          const receiverDomain = new URL(baseUrl).host;
-
           await t.step(
-            "send_invitation creates a new pending invitation",
+            "dispatches invitation envelope with receptive_policy_id and records outbound",
             async () => {
-              const { status, result } = await callTool<
-                { invitation_id?: string; created_at?: string }
-              >(token, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: policyId,
-                proposed_terms: { category: "billing" },
-              });
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const policyId = crypto.randomUUID();
+                const { status, result } = await callTool<{
+                  invitation_id: string;
+                  created_at: string;
+                }>(token, "send_invitation", {
+                  receiver_domain: remoteDomain,
+                  receptive_policy_id: policyId,
+                  communication_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                  message: "Hello",
+                });
+                assertEquals(status, 200);
+                assertExists(result);
+                assertExists(result.invitation_id);
 
-              assertEquals(status, 200);
-              assertExists(result);
-              assertExists(result.invitation_id);
-              assertExists(result.created_at);
+                const calls = getCaptures();
+                assertEquals(calls.length, 1);
+                const call = calls[0];
+                assertEquals(call.method, "POST");
+                assertEquals(
+                  call.headers["x-rpp-receptive-policy-id"],
+                  policyId,
+                );
+                // Per req-005 path 1 there is no HMAC header on the
+                // invitation envelope itself (policy id is the credential).
+                assertEquals(
+                  "x-rpp-signature" in call.headers,
+                  false,
+                );
+
+                const env = call.body as Record<string, unknown>;
+                assertEquals(env.category, "invitation");
+                assertEquals(env.invitation_id, result.invitation_id);
+                assertEquals(env.receptive_policy_id, policyId);
+                assertExists(env.reply_credential);
+                assertExists(env.communication_terms);
+                assertExists(
+                  (env.claims as { immutable: { domain_id: string } })
+                    .immutable.domain_id,
+                );
+
+                // Outbound invitation record persisted as pending.
+                const outbound = await kv.get<Record<string, unknown>>([
+                  "invitations",
+                  result.invitation_id as string,
+                ]);
+                assertExists(outbound.value);
+                assertEquals(
+                  (outbound.value as { direction: string }).direction,
+                  "outbound",
+                );
+                assertEquals(
+                  (outbound.value as { status: string }).status,
+                  "pending",
+                );
+                // reply_credential persisted locally for inbound reply auth.
+                assertExists(
+                  (outbound.value as { reply_credential: unknown })
+                    .reply_credential,
+                );
+              });
             },
           );
 
           await t.step(
-            "sent invitation is retrievable via list_invitations",
+            "dispatches invitation envelope using shortcode",
             async () => {
-              const proposedTerms = { category: "marketing" };
-
-              const { status, result } = await callTool<
-                { invitation_id?: string }
-              >(token, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: policyId,
-                proposed_terms: proposedTerms,
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const shortcode = "ABCD1234";
+                const { result } = await callTool<{
+                  invitation_id: string;
+                }>(token, "send_invitation", {
+                  receiver_domain: remoteDomain,
+                  shortcode,
+                  communication_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                });
+                assertExists(result);
+                const calls = getCaptures();
+                assertEquals(calls.length, 1);
+                const env = calls[0].body as Record<string, unknown>;
+                assertEquals(env.shortcode, shortcode);
               });
-
-              assertEquals(status, 200);
-              assertExists(result);
-              assertExists(result.invitation_id);
             },
           );
 
           await t.step(
-            "send_invitation stores invitation on receiver and sets default values",
+            "errors when both receptive_policy_id and shortcode are provided",
             async () => {
-              const proposedTerms = { category: "support" };
-
-              const { status, result } = await callTool<
-                { invitation_id?: string }
-              >(token, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: policyId,
-                proposed_terms: proposedTerms,
+              await withRemoteServer(async (remoteDomain) => {
+                const { result, body } = await callTool(
+                  token,
+                  "send_invitation",
+                  {
+                    receiver_domain: remoteDomain,
+                    receptive_policy_id: crypto.randomUUID(),
+                    shortcode: "ABCD1234",
+                    communication_terms: {
+                      categories: ["correspondence"],
+                      max_content_rating: "PG",
+                    },
+                  },
+                );
+                const errorish =
+                  (result as { ok?: boolean } | undefined)?.ok === false ||
+                  body.error !== undefined || result === undefined;
+                assertEquals(errorish, true);
               });
-
-              assertEquals(status, 200);
-              assertExists(result);
-              const invitationId = result.invitation_id;
-              assertExists(invitationId);
-
-              // The receiver (same server in tests) stores the invitation locally.
-              const stored = await kv.get(["invitations", invitationId]);
-              if (stored.value) {
-                const invitation = stored.value as Record<string, unknown>;
-                assertEquals(invitation.status, "pending");
-                assertExists(invitation.created_at);
-                // expires_at is optional — absent means the invitation never expires
-              }
             },
           );
 
           await t.step(
-            "send_invitation attaches a delivery block with domain and token to the envelope",
+            "errors when neither receptive_policy_id nor shortcode are provided",
             async () => {
-              const { status, result } = await callTool<
-                { invitation_id?: string }
-              >(token, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: policyId,
-                proposed_terms: { category: "billing" },
+              await withRemoteServer(async (remoteDomain) => {
+                const { result, body } = await callTool(
+                  token,
+                  "send_invitation",
+                  {
+                    receiver_domain: remoteDomain,
+                    communication_terms: {
+                      categories: ["correspondence"],
+                      max_content_rating: "PG",
+                    },
+                  },
+                );
+                const errorish =
+                  (result as { ok?: boolean } | undefined)?.ok === false ||
+                  body.error !== undefined || result === undefined;
+                assertEquals(errorish, true);
               });
-
-              assertEquals(status, 200);
-              assertExists(result);
-              const invitationId = result.invitation_id;
-              assertExists(invitationId);
-
-              // The receiver stores the invitation including the delivery block
-              // from the sender's envelope, enabling the callback flow.
-              const stored = await kv.get(["invitations", invitationId]);
-              assertExists(stored.value);
-              const invitation = stored.value as Record<string, unknown>;
-              const delivery = invitation.delivery as
-                | Record<string, unknown>
-                | undefined;
-              assertExists(delivery);
-              assertExists(delivery.domain); // sender's RPP domain
-              assertExists(delivery.token); // single-use HMAC key for receipt callback
-            },
-          );
-
-          await t.step(
-            "send_invitation fails when policy is not found on the receiver",
-            async () => {
-              const { status, body } = await callTool(
-                token,
-                "send_invitation",
-                {
-                  receiver_domain: receiverDomain,
-                  receptive_policy_id: crypto.randomUUID(),
-                  proposed_terms: { category: "billing" },
-                },
-              );
-              // Tool errors come back as 200 with isError set in the MCP result
-              assertEquals(status, 200);
-              const mcpResult = body.result as
-                | { isError?: boolean }
-                | undefined;
-              assertEquals(mcpResult?.isError, true);
-            },
-          );
-
-          await t.step(
-            "same-domain delivery stores invitation without outbound HTTP",
-            async () => {
-              // receiverDomain is the same server as the sender — this exercises
-              // the local delivery path (no HTTP round-trip) that avoids the
-              // Deno Deploy 508 self-loop restriction.
-              const { status, result } = await callTool<
-                { invitation_id?: string; created_at?: string }
-              >(token, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: policyId,
-                proposed_terms: { category: "support" },
-              });
-
-              assertEquals(status, 200);
-              assertExists(result);
-              assertExists(result.invitation_id);
-              assertExists(result.created_at);
-
-              // Invitation must be stored locally with a delivery block.
-              const stored = await kv.get([
-                "invitations",
-                result.invitation_id,
-              ]);
-              assertExists(stored.value);
-              const invitation = stored.value as Record<string, unknown>;
-              assertEquals(invitation.status, "pending");
-              const delivery = invitation.delivery as
-                | Record<string, unknown>
-                | undefined;
-              assertExists(delivery);
-              assertExists(delivery.token); // delivery token persisted for callback auth
             },
           );
         } finally {

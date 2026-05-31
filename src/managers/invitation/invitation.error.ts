@@ -15,17 +15,21 @@ export class InvitationNotPendingError extends ApplicationError {
     super(
       400,
       "E_INVITATION_NOT_PENDING",
-      `Invitation ${invitationId} cannot be accepted: current status is "${currentStatus}"`,
+      `Invitation ${invitationId} cannot be acted on: current status is "${currentStatus}"`,
     );
   }
 }
 
-export class InvitationNotCancellableError extends ApplicationError {
-  constructor(invitationId: string, currentStatus: string) {
+export class InvitationDirectionMismatchError extends ApplicationError {
+  constructor(
+    invitationId: string,
+    expected: string,
+    actual: string,
+  ) {
     super(
       400,
-      "E_INVITATION_NOT_CANCELLABLE",
-      `Invitation ${invitationId} cannot be cancelled: current status is "${currentStatus}"`,
+      "E_INVITATION_DIRECTION_MISMATCH",
+      `Invitation ${invitationId} has direction "${actual}", expected "${expected}"`,
     );
   }
 }

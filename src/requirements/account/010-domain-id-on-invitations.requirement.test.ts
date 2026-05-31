@@ -67,7 +67,10 @@ Deno.test({
               {
                 receiver_domain: receiverDomain,
                 receptive_policy_id: policyId,
-                proposed_terms: { category: "correspondence" },
+                communication_terms: {
+                  categories: ["correspondence"],
+                  max_content_rating: "PG",
+                },
                 // No include_admin_claims specified — domain_id injected unconditionally.
               },
             );
@@ -116,7 +119,10 @@ Deno.test({
               {
                 receiver_domain: receiverDomain,
                 receptive_policy_id: policyId,
-                proposed_terms: { category: "correspondence" },
+                communication_terms: {
+                  categories: ["correspondence"],
+                  max_content_rating: "PG",
+                },
                 include_admin_claims: ["nonexistent_key"], // should still get domain_id
               },
             );
@@ -157,7 +163,10 @@ Deno.test({
                   {
                     receiver_domain: receiverDomain,
                     receptive_policy_id: policyId,
-                    proposed_terms: { category: "correspondence" },
+                    communication_terms: {
+                      categories: ["correspondence"],
+                      max_content_rating: "PG",
+                    },
                   },
                 )).result!.invitation_id,
               },

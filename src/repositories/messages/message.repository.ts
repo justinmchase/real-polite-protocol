@@ -15,7 +15,8 @@ const MESSAGE_BY_MESSAGE_ID_PREFIX: Deno.KvKey = [
 
 export interface ListMessagesOptions {
   category?: MessageCategory;
-  senderDomain?: string;
+  contactId?: string;
+  remoteDomain?: string;
   receivedAfter?: Date;
   receivedBefore?: Date;
   read?: boolean;
@@ -35,10 +36,7 @@ export class MessageRepository {
   ) {}
 
   async get(id: string): Promise<StoredMessage | undefined> {
-    const entry = await this.kv.store.get<unknown>([
-      ...MESSAGE_PREFIX,
-      id,
-    ]);
+    const entry = await this.kv.store.get<unknown>([...MESSAGE_PREFIX, id]);
     return entry.value ? StoredMessageSchema.parse(entry.value) : undefined;
   }
 
@@ -86,6 +84,30 @@ export class MessageRepository {
     return true;
   }
 
+  /**
+   * Cascade-delete every stored message owned by `oid` and associated with
+   * `contactId`. Used when a contact is permanently deleted (spec §11.6 /
+   * req:contacts-005).
+   */
+  async deleteByContact(oid: string, contactId: string): Promise<number> {
+    const prefix = [...MESSAGE_BY_OID_PREFIX, oid];
+    const iter = this.kv.store.list<string>({ prefix });
+    let deleted = 0;
+    for await (const entry of iter) {
+      const msg = await this.get(entry.value);
+      if (!msg) continue;
+      if (msg.contact_id !== contactId) continue;
+      await this.kv.store
+        .atomic()
+        .delete([...MESSAGE_PREFIX, msg.id])
+        .delete([...MESSAGE_BY_OID_PREFIX, msg.oid, msg.id])
+        .delete([...MESSAGE_BY_MESSAGE_ID_PREFIX, msg.oid, msg.message_id])
+        .commit();
+      deleted++;
+    }
+    return deleted;
+  }
+
   async markRead(
     oid: string,
     messageIds: string[],
@@ -124,7 +146,8 @@ export class MessageRepository {
   ): Promise<ListMessagesResult> {
     const {
       category,
-      senderDomain,
+      contactId,
+      remoteDomain,
       receivedAfter,
       receivedBefore,
       read,
@@ -143,9 +166,10 @@ export class MessageRepository {
       const msg = await this.get(entry.value);
       if (!msg) continue;
       if (category !== undefined && msg.category !== category) continue;
+      if (contactId !== undefined && msg.contact_id !== contactId) continue;
       if (
-        senderDomain !== undefined &&
-        msg.sender_domain.toLowerCase() !== senderDomain.toLowerCase()
+        remoteDomain !== undefined &&
+        msg.remote_domain.toLowerCase() !== remoteDomain.toLowerCase()
       ) continue;
       if (receivedAfter !== undefined && msg.received_at <= receivedAfter) {
         continue;
@@ -157,9 +181,6 @@ export class MessageRepository {
       messages.push(msg);
     }
 
-    return {
-      messages,
-      nextCursor: nextResumeToken(iter.cursor),
-    };
+    return { messages, nextCursor: nextResumeToken(iter.cursor) };
   }
 }

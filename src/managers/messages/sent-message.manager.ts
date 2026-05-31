@@ -8,9 +8,7 @@ import type {
 export class SentMessageManager {
   constructor(private readonly sentMessages: SentMessageRepository) {}
 
-  async store(
-    data: Omit<SentMessage, "id">,
-  ): Promise<SentMessage> {
+  async store(data: Omit<SentMessage, "id">): Promise<SentMessage> {
     return await this.sentMessages.create(data);
   }
 

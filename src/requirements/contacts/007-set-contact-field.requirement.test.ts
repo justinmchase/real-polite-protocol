@@ -4,137 +4,125 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
 
 Deno.test({
-  name: "req:contacts-007 - Owner can add custom fields to a contact",
+  name: "req:contacts-007 - Owner-authored custom field on a contact",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          const invId = crypto.randomUUID();
-          await kv.set(["invitations", invId], {
-            invitation_id: invId,
-            receiver_oid: accountOid,
-            sender_domain: "sender.example",
-            status: "pending",
-            proposed_terms: { category: "billing" },
-            claims: { immutable: { domain_id: crypto.randomUUID() } },
-            created_at: new Date().toISOString(),
+          const contact = await seedContact(kv, {
+            ownerOid,
+            fields: {
+              name: [{
+                value: "Alice",
+                source: "sender_verified",
+                recorded_at: new Date(),
+              }],
+            },
           });
-          await callTool(token, "accept_invitation", { invitation_id: invId });
-
-          const { result: list } = await callTool<{
-            contacts: Array<{ id: string; updated_at: string }>;
-          }>(token, "list_contacts", {});
-          assertExists(list);
-          const contact = list.contacts[0];
-          assertExists(contact);
-          const contactId = contact.id;
-          const originalUpdatedAt = contact.updated_at;
 
           await t.step(
-            "set_contact_field prepends a new record and returns the updated contact",
+            "prepends an owner_note record; updates updated_at",
             async () => {
+              const before = await callTool<{ updated_at: string }>(
+                token,
+                "get_contact",
+                { contact_id: contact.id },
+              );
               const { status, result } = await callTool<{
-                id: string;
-                current_fields: Record<
-                  string,
-                  { value: unknown; source: string }
-                >;
                 fields: Record<
                   string,
-                  Array<{ value: unknown; source: string; recorded_at: string }>
+                  Array<{ value: unknown; source: string }>
                 >;
                 updated_at: string;
               }>(token, "set_contact_field", {
-                contact_id: contactId,
-                key: "note",
-                value: "Met at conference",
+                contact_id: contact.id,
+                key: "name",
+                value: "Aliyah",
               });
               assertEquals(status, 200);
               assertExists(result);
-              assertEquals(result.id, contactId);
-              assertExists(result.current_fields.note);
+              assertEquals(result.fields.name.length, 2);
+              assertEquals(result.fields.name[0].value, "Aliyah");
+              assertEquals(result.fields.name[0].source, "owner_note");
+              assertEquals(result.fields.name[1].value, "Alice");
               assertEquals(
-                result.current_fields.note.value,
-                "Met at conference",
-              );
-              assertEquals(result.current_fields.note.source, "owner_note");
-              assertExists(result.fields.note);
-              assertEquals(result.fields.note[0].value, "Met at conference");
-              assertEquals(result.fields.note[0].source, "owner_note");
-              assertExists(result.fields.note[0].recorded_at);
-            },
-          );
-
-          await t.step(
-            "updated_at is refreshed after set_contact_field",
-            async () => {
-              const { result } = await callTool<{ updated_at: string }>(
-                token,
-                "get_contact",
-                { contact_id: contactId },
-              );
-              assertExists(result);
-              // updated_at must be at least as recent as the original
-              assertEquals(
-                new Date(result.updated_at) >= new Date(originalUpdatedAt),
+                new Date(result.updated_at).getTime() >=
+                  new Date(before.result!.updated_at).getTime(),
                 true,
               );
             },
           );
 
           await t.step(
-            "calling set_contact_field again prepends to history without removing old entries",
+            "accepts string|number|boolean|null|array values",
             async () => {
-              await callTool(token, "set_contact_field", {
-                contact_id: contactId,
-                key: "note",
-                value: "Follow-up scheduled",
-              });
-
-              const { result } = await callTool<{
-                fields: Record<
-                  string,
-                  Array<{ value: unknown }>
-                >;
-              }>(token, "get_contact", { contact_id: contactId });
-              assertExists(result);
-              assertEquals(result.fields.note.length, 2);
-              assertEquals(
-                result.fields.note[0].value,
-                "Follow-up scheduled",
-              );
-              assertEquals(result.fields.note[1].value, "Met at conference");
+              for (
+                const v of [
+                  42,
+                  true,
+                  null,
+                  ["a", 1, false, null],
+                ] as unknown[]
+              ) {
+                const { result } = await callTool<{
+                  fields: Record<string, Array<{ value: unknown }>>;
+                }>(token, "set_contact_field", {
+                  contact_id: contact.id,
+                  key: "polytype",
+                  value: v,
+                });
+                assertExists(result);
+                assertEquals(result.fields.polytype[0].value, v);
+              }
             },
           );
 
-          await t.step(
-            "set_contact_field on a non-existent contact returns a structured error",
-            async () => {
-              const { result } = await callTool<{ ok?: boolean }>(
-                token,
-                "set_contact_field",
-                {
-                  contact_id: crypto.randomUUID(),
-                  key: "note",
-                  value: "hello",
-                },
-              );
-              assertExists(result);
-              assertEquals((result as { ok?: boolean }).ok, false);
-            },
-          );
+          await t.step("unknown contact errors", async () => {
+            const { result, body } = await callTool(
+              token,
+              "set_contact_field",
+              {
+                contact_id: crypto.randomUUID(),
+                key: "x",
+                value: "y",
+              },
+            );
+            const errorish =
+              (result as { ok?: boolean } | undefined)?.ok === false ||
+              body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
+          });
+
+          await t.step("foreign account cannot set field", async () => {
+            const otherOid = crypto.randomUUID();
+            const otherToken = await issueToken({
+              oid: otherOid,
+              scope: requiredScopes.join(" "),
+              name: "Other",
+            });
+            await callTool(otherToken, "set_user_verified_metadata");
+            const { result, body } = await callTool(
+              otherToken,
+              "set_contact_field",
+              { contact_id: contact.id, key: "x", value: "y" },
+            );
+            const errorish =
+              (result as { ok?: boolean } | undefined)?.ok === false ||
+              body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
+          });
         } finally {
           kv.close();
         }
