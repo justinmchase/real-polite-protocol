@@ -1,64 +1,24 @@
 import { ApplicationError } from "@justinmchase/grove";
 
-export class MissingReceiptIdError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_MISSING_RECEIPT_ID",
-      "x-rpp-receipt-id header is required",
-    );
-  }
-}
+// ----- Transport / framing -----
 
-export class MissingSignatureError extends ApplicationError {
-  constructor() {
+export class EnvelopeTooLargeError extends ApplicationError {
+  constructor(size: number, maxSize: number = 262144) {
     super(
-      400,
-      "E_MISSING_SIGNATURE",
-      "x-rpp-signature header is required",
-    );
-  }
-}
-
-export class MissingTimestampError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_MISSING_TIMESTAMP",
-      "x-rpp-timestamp header is required",
-    );
-  }
-}
-
-export class ReceiptNotFoundError extends ApplicationError {
-  constructor(receiptId: string) {
-    super(
-      403,
-      "E_RECEIPT_NOT_FOUND",
-      `Receipt ${receiptId} not found`,
-    );
-  }
-}
-
-export class ReceiptInvalidSignatureError extends ApplicationError {
-  constructor() {
-    super(
-      403,
-      "E_RECEIPT_INVALID_SIGNATURE",
-      "Request signature does not match computed HMAC",
+      413,
+      "E_ENVELOPE_TOO_LARGE",
+      `Envelope size ${size} exceeds maximum ${maxSize}`,
     );
   }
 }
 
 export class InvalidRequestBodyError extends ApplicationError {
   constructor(reason: string) {
-    super(
-      400,
-      "E_INVALID_REQUEST_BODY",
-      `Invalid request body: ${reason}`,
-    );
+    super(400, "E_INVALID_REQUEST_BODY", `Invalid request body: ${reason}`);
   }
 }
+
+// ----- Envelope schema -----
 
 export class InvalidMessageEnvelopeError extends ApplicationError {
   constructor(reason: string) {
@@ -70,22 +30,131 @@ export class InvalidMessageEnvelopeError extends ApplicationError {
   }
 }
 
+export class InvalidInvitationEnvelopeError extends ApplicationError {
+  constructor(reason: string) {
+    super(
+      400,
+      "E_INVALID_INVITATION_ENVELOPE",
+      `Invalid invitation envelope: ${reason}`,
+    );
+  }
+}
+
+export class InvalidReplyCredentialError extends ApplicationError {
+  constructor(reason: string) {
+    super(400, "E_INVALID_REPLY_CREDENTIAL", reason);
+  }
+}
+
+export class InvalidContentTypeError extends ApplicationError {
+  constructor(contentType: string) {
+    super(
+      400,
+      "E_INVALID_CONTENT_TYPE",
+      `content_type "${contentType}" is not permitted; must be "text/markdown" or "application/json"`,
+    );
+  }
+}
+
+export class InvalidBodyError extends ApplicationError {
+  constructor(reason: string) {
+    super(400, "E_INVALID_BODY", `Invalid body: ${reason}`);
+  }
+}
+
+// ----- Auth headers -----
+
+export class InvalidAuthHeadersError extends ApplicationError {
+  constructor(reason: string) {
+    super(400, "E_INVALID_AUTH_HEADERS", reason);
+  }
+}
+
+export class MissingContactIdError extends ApplicationError {
+  constructor() {
+    super(400, "E_MISSING_CONTACT_ID", "x-rpp-contact-id header is required");
+  }
+}
+
 export class MissingReceptivePolicyIdError extends ApplicationError {
   constructor() {
     super(
       400,
       "E_MISSING_RECEPTIVE_POLICY_ID",
-      "Invitation message missing required metadata.receptive_policy_id",
+      "Invitation envelope missing receptive_policy_id and shortcode",
     );
   }
 }
 
+export class MissingSignatureError extends ApplicationError {
+  constructor() {
+    super(400, "E_MISSING_SIGNATURE", "x-rpp-signature header is required");
+  }
+}
+
+export class MissingTimestampError extends ApplicationError {
+  constructor() {
+    super(400, "E_MISSING_TIMESTAMP", "x-rpp-timestamp header is required");
+  }
+}
+
+// ----- Replay protection -----
+
+export class RequestStaleError extends ApplicationError {
+  constructor(diffSeconds: number) {
+    super(
+      400,
+      "E_REQUEST_STALE",
+      `Request timestamp is ${diffSeconds} seconds outside the 60-second freshness window`,
+    );
+  }
+}
+
+export class DuplicateEnvelopeError extends ApplicationError {
+  constructor(envelopeId: string) {
+    super(
+      400,
+      "E_DUPLICATE_ENVELOPE",
+      `Envelope ${envelopeId} has already been accepted from this sender domain`,
+    );
+  }
+}
+
+// ----- HMAC / contact authorization -----
+
+export class SignatureInvalidError extends ApplicationError {
+  constructor() {
+    super(
+      403,
+      "E_SIGNATURE_INVALID",
+      "Request signature does not match computed HMAC",
+    );
+  }
+}
+
+/**
+ * Submit-side variant of contact-not-found. The contact-tool variant (404) is
+ * raised by `ContactManager` for resource-lookup paths; this 403 variant is
+ * raised by the envelope endpoint when credential resolution fails.
+ */
+export class SubmitContactNotFoundError extends ApplicationError {
+  constructor(contactId: string) {
+    super(
+      403,
+      "E_CONTACT_NOT_FOUND",
+      `x-rpp-contact-id ${contactId} does not resolve to any contact`,
+    );
+  }
+}
+
+// ----- Receptive policy resolution (invitation envelopes) -----
+
 export class ReceptivePolicyNotFoundError extends ApplicationError {
-  constructor(policyId: string) {
+  constructor(identifier: string) {
     super(
       403,
       "E_RECEPTIVE_POLICY_NOT_FOUND",
-      `Receptive policy ${policyId} not found`,
+      `Receptive policy ${identifier} not found`,
     );
   }
 }
@@ -105,139 +174,29 @@ export class ReceptivePolicyClosedError extends ApplicationError {
     super(
       403,
       "E_RECEPTIVE_POLICY_CLOSED",
-      `Receptive policy ${policyId} is closed`,
+      `Receptive policy ${policyId} is closed to the supplied sender`,
     );
   }
 }
 
-export class ReceiptNotActiveError extends ApplicationError {
-  constructor(receiptId: string) {
+// ----- Soft-term enforcement (spec §10.1 / contacts-011) -----
+
+export class CategoryNotPermittedError extends ApplicationError {
+  constructor(category: string) {
     super(
       403,
-      "E_RECEIPT_NOT_ACTIVE",
-      `Receipt ${receiptId} is not active`,
+      "E_CATEGORY_NOT_PERMITTED",
+      `Message category "${category}" is not permitted by the receiver's local_terms`,
     );
   }
 }
 
-export class MessageTooLargeError extends ApplicationError {
-  constructor(size: number, maxSize: number = 262144) {
+export class ContentRatingNotPermittedError extends ApplicationError {
+  constructor(rating: string, max: string) {
     super(
-      413,
-      "E_MESSAGE_TOO_LARGE",
-      `Message size ${size} exceeds maximum ${maxSize}`,
-    );
-  }
-}
-
-export class RequestStaleError extends ApplicationError {
-  constructor(diffSeconds: number) {
-    super(
-      400,
-      "E_REQUEST_STALE",
-      `Request timestamp is ${diffSeconds} seconds outside the 60-second freshness window`,
-    );
-  }
-}
-
-export class DuplicateMessageError extends ApplicationError {
-  constructor(messageId: string) {
-    super(
-      400,
-      "E_DUPLICATE_MESSAGE",
-      `message_id ${messageId} has already been accepted from this sender domain`,
-    );
-  }
-}
-
-export class ReceiptRevokedError extends ApplicationError {
-  constructor(receiptId: string) {
-    super(403, "E_RECEIPT_REVOKED", `Receipt ${receiptId} has been revoked`);
-  }
-}
-
-export class ReceiptExpiredError extends ApplicationError {
-  constructor(receiptId: string) {
-    super(403, "E_RECEIPT_EXPIRED", `Receipt ${receiptId} has expired`);
-  }
-}
-
-export class InvalidContentTypeError extends ApplicationError {
-  constructor(contentType: string) {
-    super(
-      400,
-      "E_INVALID_CONTENT_TYPE",
-      `content_type "${contentType}" is not permitted; must be "text/markdown" or "application/json"`,
-    );
-  }
-}
-
-export class InvalidBodyError extends ApplicationError {
-  constructor(reason: string) {
-    super(
-      400,
-      "E_INVALID_BODY",
-      `Invalid body: ${reason}`,
-    );
-  }
-}
-
-export class InvalidAuthHeadersError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_INVALID_AUTH_HEADERS",
-      "Both x-rpp-receipt-id and x-rpp-invitation-id were provided; only one identity header is permitted per request",
-    );
-  }
-}
-
-export class InvalidReceiptEnvelopeError extends ApplicationError {
-  constructor(reason: string) {
-    super(
-      400,
-      "E_RECEIPT_ENVELOPE_INVALID",
-      `Invalid receipt envelope: ${reason}`,
-    );
-  }
-}
-
-export class DeliveryTokenInvalidError extends ApplicationError {
-  constructor() {
-    super(
-      401,
-      "E_DELIVERY_TOKEN_INVALID",
-      "HMAC signature does not match delivery token",
-    );
-  }
-}
-
-export class DeliveryTokenConsumedError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_DELIVERY_TOKEN_CONSUMED",
-      "Delivery token has already been consumed",
-    );
-  }
-}
-
-export class DeliveryTokenExpiredError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_DELIVERY_TOKEN_EXPIRED",
-      "Delivery token has expired",
-    );
-  }
-}
-
-export class MissingInvitationIdError extends ApplicationError {
-  constructor() {
-    super(
-      400,
-      "E_MISSING_INVITATION_ID",
-      "x-rpp-invitation-id header is required for receipt callbacks",
+      403,
+      "E_CONTENT_RATING_NOT_PERMITTED",
+      `Message content_rating "${rating}" exceeds the receiver's local_terms.max_content_rating "${max}"`,
     );
   }
 }

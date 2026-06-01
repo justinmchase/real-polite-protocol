@@ -4,92 +4,94 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
 
 Deno.test({
-  name: "req:contacts-005 - Listeners can delete a contact",
+  name: "req:contacts-005 - delete_contact tool",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
-      await withStartedServer(async ({ kvPath, callTool }) => {
+      await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          const invId = crypto.randomUUID();
-          await kv.set(["invitations", invId], {
-            invitation_id: invId,
-            receiver_oid: accountOid,
-            sender_domain: "sender.example",
-            status: "pending",
-            proposed_terms: { category: "billing" },
-            claims: { immutable: { domain_id: crypto.randomUUID() } },
-            created_at: new Date().toISOString(),
+          const contact = await seedContact(kv, { ownerOid });
+          // Submit one message for this contact so we can verify cleanup.
+          const r = await submitMessageEnvelope({
+            credential: contact.local_credential,
+            senderDomain: contact.remote_domain,
+            baseUrl,
           });
-          await callTool(token, "accept_invitation", { invitation_id: invId });
-
-          const { result: list } = await callTool<{
-            contacts: Array<{ id: string }>;
-          }>(token, "list_contacts", {});
-          assertExists(list);
-          const contactId = list.contacts[0]?.id;
-          assertExists(contactId);
+          assertEquals(r.status, 202);
+          await r.body?.cancel();
 
           await t.step(
-            "delete_contact returns contact_id and deleted: true",
+            "returns confirmation { contact_id, deleted: true }",
             async () => {
               const { status, result } = await callTool<{
                 contact_id: string;
-                deleted: boolean;
-              }>(token, "delete_contact", { contact_id: contactId });
+                deleted: true;
+              }>(token, "delete_contact", { contact_id: contact.id });
               assertEquals(status, 200);
               assertExists(result);
-              assertEquals(result.contact_id, contactId);
+              assertEquals(result.contact_id, contact.id);
               assertEquals(result.deleted, true);
             },
           );
 
+          await t.step("contact is gone from get_contact", async () => {
+            const { result, body } = await callTool(token, "get_contact", {
+              contact_id: contact.id,
+            });
+            const errorish =
+              (result as { ok?: boolean } | undefined)?.ok === false ||
+              body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
+          });
+
           await t.step(
-            "deleted contact no longer appears in list_contacts",
+            "freed local_credential.contact_id rejected on inbound",
+            async () => {
+              const resp = await submitMessageEnvelope({
+                credential: contact.local_credential,
+                senderDomain: contact.remote_domain,
+                baseUrl,
+              });
+              assertEquals(resp.status >= 400, true);
+              await resp.body?.cancel();
+            },
+          );
+
+          await t.step(
+            "messages from deleted contact are cascade-removed",
             async () => {
               const { result } = await callTool<{
-                contacts: Array<{ id: string }>;
-              }>(token, "list_contacts", {});
+                messages: Array<{ contact_id: string }>;
+              }>(token, "list_messages", {});
               assertExists(result);
-              assertEquals(result.contacts.length, 0);
+              const stillPresent = result.messages.some((m) =>
+                m.contact_id === contact.id
+              );
+              assertEquals(stillPresent, false);
             },
           );
 
-          await t.step(
-            "get_contact on deleted contact returns a structured error",
-            async () => {
-              const { result } = await callTool<{ ok?: boolean }>(
-                token,
-                "get_contact",
-                { contact_id: contactId },
-              );
-              assertExists(result);
-              assertEquals((result as { ok?: boolean }).ok, false);
-            },
-          );
-
-          await t.step(
-            "delete_contact on a non-existent contact returns a structured error",
-            async () => {
-              const { result } = await callTool<{ ok?: boolean }>(
-                token,
-                "delete_contact",
-                { contact_id: crypto.randomUUID() },
-              );
-              assertExists(result);
-              assertEquals((result as { ok?: boolean }).ok, false);
-            },
-          );
+          await t.step("unknown contact_id errors", async () => {
+            const { result, body } = await callTool(token, "delete_contact", {
+              contact_id: crypto.randomUUID(),
+            });
+            const errorish =
+              (result as { ok?: boolean } | undefined)?.ok === false ||
+              body.error !== undefined || result === undefined;
+            assertEquals(errorish, true);
+          });
         } finally {
           kv.close();
         }

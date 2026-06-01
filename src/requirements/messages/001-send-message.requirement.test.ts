@@ -1,9 +1,4 @@
-// req:messages-001 — Listeners can send messages using a held receipt.
-//
-// Tests here verify that the send_message MCP tool signs and delivers a message
-// envelope to the receiver's /rpp/v1/envelopes endpoint using the receipt secret
-// for HMAC-SHA-256, and that invalid inputs are rejected locally before any
-// network call is attempted.
+// req:messages-001 — Listeners can send messages to a known contact via send_message.
 
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
@@ -11,177 +6,224 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
-import { withCallbackServer } from "../helpers/with-callback-server.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
+import { withFailingRemoteServer } from "../helpers/with-failing-remote-server.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
+
+interface ToolError {
+  ok?: boolean;
+  error?: { code?: string };
+}
 
 Deno.test({
-  name: "req:messages-001 - Listeners can send messages using a held receipt",
+  name: "req:messages-001 - Listeners can send messages to a known contact",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
-
           await callTool(token, "set_user_verified_metadata");
 
           await t.step(
-            "send_message delivers a signed message envelope to the receiver endpoint",
+            "send_message HMAC-signs the envelope and POSTs to remote /rpp/v1/envelopes",
             async () => {
-              await withCallbackServer(async (receiverDomain, getCaptures) => {
-                // Seed a pending invitation from the receiver domain so that
-                // accepting it produces a receipt pointing there.
-                const invId = crypto.randomUUID();
-                await kv.set(["invitations", invId], {
-                  invitation_id: invId,
-                  receiver_oid: accountOid,
-                  sender_domain: receiverDomain,
-                  status: "pending",
-                  proposed_terms: {
-                    category: "billing",
-                    max_content_rating: "G",
-                  },
-                  created_at: new Date().toISOString(),
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const contact = await seedContact(kv, {
+                  ownerOid,
+                  remoteDomain,
                 });
-
-                const { result: acceptResult } = await callTool<{
-                  receipt?: { id: string };
-                }>(token, "accept_invitation", { invitation_id: invId });
-                assertExists(acceptResult?.receipt?.id);
-                const receiptId = acceptResult!.receipt!.id;
-
-                const { status, result } = await callTool<{
-                  message_id: string;
-                  sent_at: string;
-                  accepted: boolean;
-                }>(token, "send_message", {
-                  receipt_id: receiptId,
-                  category: "billing",
+                const { status, result } = await callTool<
+                  { message_id: string; sent_at: string; accepted: boolean }
+                >(token, "send_message", {
+                  contact_id: contact.id,
+                  category: "correspondence",
                   content_rating: "G",
                   body: {
                     content_type: "text/markdown",
-                    content: "Hello from the test.",
+                    content: "Hello.",
                   },
-                  subject: "Test subject",
+                  subject: "Hi",
                 });
-
                 assertEquals(status, 200);
                 assertExists(result?.message_id);
                 assertExists(result?.sent_at);
                 assertEquals(result?.accepted, true);
 
-                // Receiver must have received exactly one POST.
                 const captures = getCaptures();
-                // accept_invitation callback is also captured; the last capture
-                // is the send_message delivery.
-                const msgCapture = captures[captures.length - 1];
-                assertExists(msgCapture);
-                assertEquals(msgCapture.body.category, "message");
-                assertExists(msgCapture.headers["x-rpp-receipt-id"]);
-                assertExists(msgCapture.headers["x-rpp-signature"]);
-                assertExists(msgCapture.headers["x-rpp-timestamp"]);
+                assertEquals(captures.length, 1);
+                const cap = captures[0]!;
+                assertEquals(cap.method, "POST");
+                assertEquals(
+                  cap.url.endsWith("/rpp/v1/envelopes"),
+                  true,
+                );
+                const cb = cap.body as Record<string, unknown>;
+                assertEquals(cb.category, "correspondence");
+                assertEquals(
+                  String(cb.sender_domain).startsWith("localhost"),
+                  true,
+                );
+                assertEquals(cb.subject, "Hi");
+                assertEquals(
+                  cap.headers["x-rpp-contact-id"],
+                  contact.remote_credential.contact_id,
+                );
+                assertExists(cap.headers["x-rpp-signature"]);
+                assertExists(cap.headers["x-rpp-timestamp"]);
               });
             },
           );
 
           await t.step(
-            "send_message returns E_RECEIPT_NOT_ACTIVE for a revoked receipt",
+            "send_message rejects an unknown contact_id with E_CONTACT_NOT_FOUND",
             async () => {
-              const revokedId = crypto.randomUUID();
-              await kv.set(["receipts", revokedId], {
-                id: revokedId,
-                secret: crypto.randomUUID(),
-                oid: accountOid,
-                sender_domain: "partner.example",
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                status: "revoked",
-                issued_at: new Date().toISOString(),
-              });
-
-              const { result } = await callTool<
-                { ok?: boolean; error?: { code?: string } }
-              >(
+              const { result } = await callTool<ToolError>(
                 token,
                 "send_message",
                 {
-                  receipt_id: revokedId,
-                  category: "billing",
+                  contact_id: crypto.randomUUID(),
+                  category: "correspondence",
                   content_rating: "G",
-                  body: { content_type: "text/markdown", content: "Hi." },
+                  body: { content_type: "text/markdown", content: "hi" },
                 },
               );
-
-              assertEquals((result as { ok?: boolean })?.ok, false);
+              assertEquals((result as ToolError).ok, false);
               assertEquals(
-                (result as { error?: { code?: string } })?.error?.code,
-                "E_RECEIPT_NOT_ACTIVE",
+                (result as ToolError).error?.code,
+                "E_CONTACT_NOT_FOUND",
               );
             },
           );
 
           await t.step(
-            "send_message rejects a receipt that belongs to a different account",
+            "send_message rejects a contact owned by a different account",
             async () => {
-              const otherId = crypto.randomUUID();
-              await kv.set(["receipts", otherId], {
-                id: otherId,
-                secret: crypto.randomUUID(),
-                oid: crypto.randomUUID(), // different owner
-                sender_domain: "partner.example",
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                status: "active",
-                issued_at: new Date().toISOString(),
+              const otherOid = crypto.randomUUID();
+              const stranger = await seedContact(kv, {
+                ownerOid: otherOid,
+                remoteDomain: "stranger.example",
               });
-
-              const { result } = await callTool<{ ok?: boolean }>(
+              const { result } = await callTool<ToolError>(
                 token,
                 "send_message",
                 {
-                  receipt_id: otherId,
-                  category: "billing",
+                  contact_id: stranger.id,
+                  category: "correspondence",
                   content_rating: "G",
-                  body: { content_type: "text/markdown", content: "Hi." },
+                  body: { content_type: "text/markdown", content: "hi" },
                 },
               );
-
-              assertEquals((result as { ok?: boolean })?.ok, false);
+              assertEquals((result as ToolError).ok, false);
+              assertEquals(
+                (result as ToolError).error?.code,
+                "E_CONTACT_NOT_FOUND",
+              );
             },
           );
 
           await t.step(
-            "send_message rejects application/json body that is not valid JSON",
+            "send_message rejects a blocked contact with E_CONTACT_NOT_READY",
             async () => {
-              // Seed a fresh active receipt for this step.
-              const receiptId = crypto.randomUUID();
-              await kv.set(["receipts", receiptId], {
-                id: receiptId,
-                secret: crypto.randomUUID(),
-                oid: accountOid,
-                sender_domain: "partner.example",
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                status: "active",
-                issued_at: new Date().toISOString(),
+              const blocked = await seedContact(kv, {
+                ownerOid,
+                remoteDomain: "blocked.example",
+                blocked: true,
               });
-
-              const { result } = await callTool<
-                { ok?: boolean; error?: { code?: string } }
-              >(
+              const { result } = await callTool<ToolError>(
                 token,
                 "send_message",
                 {
-                  receipt_id: receiptId,
-                  category: "billing",
+                  contact_id: blocked.id,
+                  category: "correspondence",
+                  content_rating: "G",
+                  body: { content_type: "text/markdown", content: "hi" },
+                },
+              );
+              assertEquals((result as ToolError).ok, false);
+              assertEquals(
+                (result as ToolError).error?.code,
+                "E_CONTACT_NOT_READY",
+              );
+            },
+          );
+
+          await t.step(
+            "send_message enforces remote_terms.categories with E_CATEGORY_NOT_PERMITTED",
+            async () => {
+              const c = await seedContact(kv, {
+                ownerOid,
+                remoteDomain: "narrow.example",
+                remoteTerms: {
+                  categories: ["billing"],
+                  max_content_rating: "PG",
+                },
+              });
+              const { result } = await callTool<ToolError>(
+                token,
+                "send_message",
+                {
+                  contact_id: c.id,
+                  category: "marketing",
+                  content_rating: "G",
+                  body: { content_type: "text/markdown", content: "hi" },
+                },
+              );
+              assertEquals((result as ToolError).ok, false);
+              assertEquals(
+                (result as ToolError).error?.code,
+                "E_CATEGORY_NOT_PERMITTED",
+              );
+            },
+          );
+
+          await t.step(
+            "send_message enforces remote_terms.max_content_rating",
+            async () => {
+              const c = await seedContact(kv, {
+                ownerOid,
+                remoteDomain: "kids.example",
+                remoteTerms: {
+                  categories: ["correspondence"],
+                  max_content_rating: "G",
+                },
+              });
+              const { result } = await callTool<ToolError>(
+                token,
+                "send_message",
+                {
+                  contact_id: c.id,
+                  category: "correspondence",
+                  content_rating: "R",
+                  body: { content_type: "text/markdown", content: "hi" },
+                },
+              );
+              assertEquals((result as ToolError).ok, false);
+              assertEquals(
+                (result as ToolError).error?.code,
+                "E_CONTENT_RATING_NOT_PERMITTED",
+              );
+            },
+          );
+
+          await t.step(
+            "send_message rejects malformed application/json body with E_INVALID_BODY",
+            async () => {
+              const c = await seedContact(kv, {
+                ownerOid,
+                remoteDomain: "json.example",
+              });
+              const { result } = await callTool<ToolError>(
+                token,
+                "send_message",
+                {
+                  contact_id: c.id,
+                  category: "correspondence",
                   content_rating: "G",
                   body: {
                     content_type: "application/json",
@@ -189,290 +231,92 @@ Deno.test({
                   },
                 },
               );
-
-              assertEquals((result as { ok?: boolean })?.ok, false);
-              assertEquals(
-                (result as { error?: { code?: string } })?.error?.code,
-                "E_INVALID_BODY",
-              );
+              assertEquals((result as ToolError).ok, false);
+              assertEquals((result as ToolError).error?.code, "E_INVALID_BODY");
             },
           );
 
           await t.step(
-            "send_message rejects application/json body whose top-level value is not an object or array",
+            "send_message rejects envelope > 256 KB with E_ENVELOPE_TOO_LARGE",
             async () => {
-              const receiptId = crypto.randomUUID();
-              await kv.set(["receipts", receiptId], {
-                id: receiptId,
-                secret: crypto.randomUUID(),
-                oid: accountOid,
-                sender_domain: "partner.example",
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                status: "active",
-                issued_at: new Date().toISOString(),
+              const c = await seedContact(kv, {
+                ownerOid,
+                remoteDomain: "big.example",
               });
-
-              const { result } = await callTool<
-                { ok?: boolean; error?: { code?: string } }
-              >(
+              const { result } = await callTool<ToolError>(
                 token,
                 "send_message",
                 {
-                  receipt_id: receiptId,
-                  category: "billing",
+                  contact_id: c.id,
+                  category: "correspondence",
                   content_rating: "G",
                   body: {
-                    content_type: "application/json",
-                    content: '"a string"',
+                    content_type: "text/markdown",
+                    content: "x".repeat(262_145),
                   },
                 },
               );
-
-              assertEquals((result as { ok?: boolean })?.ok, false);
+              assertEquals((result as ToolError).ok, false);
               assertEquals(
-                (result as { error?: { code?: string } })?.error?.code,
-                "E_INVALID_BODY",
+                (result as ToolError).error?.code,
+                "E_ENVELOPE_TOO_LARGE",
               );
             },
           );
 
           await t.step(
-            "send_message generates a UUIDv7 message_id that is unique across calls",
+            "send_message surfaces remote delivery failure as E_DELIVERY_FAILED",
             async () => {
-              await withCallbackServer(async (receiverDomain, getCaptures) => {
-                // Seed a pending invitation to produce a receipt pointing at the callback server.
-                const invId = crypto.randomUUID();
-                await kv.set(["invitations", invId], {
-                  invitation_id: invId,
-                  receiver_oid: accountOid,
-                  sender_domain: receiverDomain,
-                  status: "pending",
-                  proposed_terms: {
-                    category: "billing",
-                    max_content_rating: "G",
-                  },
-                  created_at: new Date().toISOString(),
+              await withFailingRemoteServer(500, async (remoteDomain) => {
+                const c = await seedContact(kv, {
+                  ownerOid,
+                  remoteDomain,
                 });
-
-                const { result: acceptResult } = await callTool<{
-                  receipt?: { id: string };
-                }>(token, "accept_invitation", { invitation_id: invId });
-                assertExists(acceptResult?.receipt?.id);
-                const receiptId = acceptResult!.receipt!.id;
-
-                const sendOpts = {
-                  receipt_id: receiptId,
-                  category: "billing",
-                  content_rating: "G",
-                  body: { content_type: "text/markdown", content: "ping" },
-                };
-
-                const { result: r1 } = await callTool<{ message_id?: string }>(
+                const { result } = await callTool<ToolError>(
                   token,
                   "send_message",
-                  sendOpts,
+                  {
+                    contact_id: c.id,
+                    category: "correspondence",
+                    content_rating: "G",
+                    body: { content_type: "text/markdown", content: "hi" },
+                  },
                 );
-                const { result: r2 } = await callTool<{ message_id?: string }>(
-                  token,
-                  "send_message",
-                  sendOpts,
+                assertEquals((result as ToolError).ok, false);
+                assertEquals(
+                  (result as ToolError).error?.code,
+                  "E_DELIVERY_FAILED",
                 );
+              });
+            },
+          );
 
+          await t.step(
+            "send_message generates a UUIDv7 message_id unique across calls",
+            async () => {
+              await withRemoteServer(async (remoteDomain) => {
+                const c = await seedContact(kv, {
+                  ownerOid,
+                  remoteDomain,
+                });
+                const send = () =>
+                  callTool<{ message_id: string }>(token, "send_message", {
+                    contact_id: c.id,
+                    category: "correspondence",
+                    content_rating: "G",
+                    body: { content_type: "text/markdown", content: "ping" },
+                  });
+                const { result: r1 } = await send();
+                const { result: r2 } = await send();
                 const id1 = r1?.message_id ?? "";
                 const id2 = r2?.message_id ?? "";
                 assertExists(id1);
                 assertExists(id2);
-
-                // UUIDv7: the version nibble is the first character of the 3rd
-                // group in xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx (index 14).
-                assertEquals(
-                  id1[14],
-                  "7",
-                  `message_id "${id1}" is not UUIDv7 (version nibble must be 7)`,
-                );
-                assertEquals(
-                  id2[14],
-                  "7",
-                  `message_id "${id2}" is not UUIDv7 (version nibble must be 7)`,
-                );
-
-                // Each call must produce a distinct ID.
-                assertEquals(
-                  id1 === id2,
-                  false,
-                  "consecutive send_message calls must produce unique message_ids",
-                );
-
-                // Drain captured bodies.
-                getCaptures();
+                // UUIDv7 version nibble is the 15th character (index 14).
+                assertEquals(id1[14], "7", id1);
+                assertEquals(id2[14], "7", id2);
+                assertEquals(id1 === id2, false);
               });
-            },
-          );
-
-          await t.step(
-            "send_message rejects a message body exceeding 256 KB",
-            async () => {
-              const receiptId = crypto.randomUUID();
-              await kv.set(["receipts", receiptId], {
-                id: receiptId,
-                secret: crypto.randomUUID(),
-                oid: accountOid,
-                sender_domain: "partner.example",
-                category: "billing",
-                max_content_rating: "G",
-                usage_policy: "any-time",
-                status: "active",
-                issued_at: new Date().toISOString(),
-              });
-
-              // Generate a content string well over 256 KB.
-              const oversized = "x".repeat(300 * 1024);
-
-              const { result } = await callTool<
-                { ok?: boolean; error?: { code?: string } }
-              >(
-                token,
-                "send_message",
-                {
-                  receipt_id: receiptId,
-                  category: "billing",
-                  content_rating: "G",
-                  body: { content_type: "text/markdown", content: oversized },
-                },
-              );
-
-              assertEquals((result as { ok?: boolean })?.ok, false);
-              assertEquals(
-                (result as { error?: { code?: string } })?.error?.code,
-                "E_MESSAGE_TOO_LARGE",
-              );
-            },
-          );
-
-          await t.step(
-            "same-domain delivery stores message without outbound HTTP",
-            async () => {
-              // Same-domain scenario: two distinct accounts (BEAU and USER)
-              // share the local server. BEAU sends an invitation, USER accepts,
-              // USER sends a message back. The message must land in BEAU's
-              // inbox, not USER's. This exercises domain_id → OID resolution
-              // (the OID is never serialized over the wire; we use the
-              // sender_domain_id captured on the receipt to route storage).
-              await withStartedServer(
-                async ({ baseUrl: bu, callTool: ct, kvPath: kp }) => {
-                  const localKv = await Deno.openKv(kp);
-                  try {
-                    const localHost = new URL(bu).host;
-
-                    // Provision BEAU (the invitation sender).
-                    const beauOid = crypto.randomUUID();
-                    const beauToken = await issueToken({
-                      oid: beauOid,
-                      scope: requiredScopes.join(" "),
-                      name: "Beau",
-                    });
-                    await ct(beauToken, "set_user_verified_metadata");
-                    const { result: beauPerms } = await ct<{
-                      account_id?: string;
-                    }>(beauToken, "get_permissions", {});
-                    assertExists(beauPerms?.account_id);
-
-                    // Resolve BEAU's domain_id (assigned by ensureAccount).
-                    const beauAcct = await localKv.get([
-                      "accounts",
-                      "by_oid",
-                      beauOid,
-                    ]);
-                    const beauDomainId =
-                      (beauAcct.value as { domain_id?: string })?.domain_id;
-                    assertExists(beauDomainId);
-
-                    // Provision USER (the acceptor / message sender).
-                    const userOid = crypto.randomUUID();
-                    const userToken = await issueToken({
-                      oid: userOid,
-                      scope: requiredScopes.join(" "),
-                      name: "User",
-                    });
-                    await ct(userToken, "set_user_verified_metadata");
-
-                    // Seed a pending invitation from BEAU to USER on the same
-                    // local domain. The invitation carries BEAU's domain_id so
-                    // the issued receipt records sender_domain_id = beauDomainId.
-                    const invId = crypto.randomUUID();
-                    await localKv.set(["invitations", invId], {
-                      invitation_id: invId,
-                      receiver_oid: userOid,
-                      sender_domain: localHost,
-                      status: "pending",
-                      proposed_terms: {
-                        category: "billing",
-                        max_content_rating: "G",
-                      },
-                      claims: { immutable: { domain_id: beauDomainId } },
-                      created_at: new Date().toISOString(),
-                    });
-
-                    const { result: acceptResult } = await ct<{
-                      receipt?: { id: string };
-                    }>(userToken, "accept_invitation", {
-                      invitation_id: invId,
-                    });
-                    assertExists(acceptResult?.receipt?.id);
-                    const receiptId = acceptResult!.receipt!.id;
-
-                    const { status, result } = await ct<{
-                      message_id?: string;
-                      sent_at?: string;
-                      accepted?: boolean;
-                    }>(userToken, "send_message", {
-                      receipt_id: receiptId,
-                      category: "billing",
-                      content_rating: "G",
-                      body: {
-                        content_type: "text/markdown",
-                        content: "Same-domain message.",
-                      },
-                    });
-
-                    assertEquals(status, 200);
-                    assertExists(result?.message_id);
-                    assertEquals(result?.accepted, true);
-
-                    // The message must land in BEAU's inbox (the recipient
-                    // identified by sender_domain_id), not USER's.
-                    const { result: beauList } = await ct<{
-                      messages?: { message_id: string }[];
-                    }>(beauToken, "list_messages", {});
-                    assertExists(beauList?.messages);
-                    const beauHas = beauList!.messages!.some(
-                      (m) => m.message_id === result?.message_id,
-                    );
-                    assertEquals(
-                      beauHas,
-                      true,
-                      "same-domain message must be delivered to the recipient's inbox",
-                    );
-
-                    // It must NOT land in USER's (the sender's) inbox.
-                    const { result: userList } = await ct<{
-                      messages?: { message_id: string }[];
-                    }>(userToken, "list_messages", {});
-                    const userHas = (userList?.messages ?? []).some(
-                      (m) => m.message_id === result?.message_id,
-                    );
-                    assertEquals(
-                      userHas,
-                      false,
-                      "same-domain message must not appear in the sender's own inbox",
-                    );
-                  } finally {
-                    localKv.close();
-                  }
-                },
-              );
             },
           );
         } finally {

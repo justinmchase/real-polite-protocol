@@ -12,7 +12,6 @@ import { AuthMiddleware } from "./middleware/auth.middleware.ts";
 import { LandingController } from "./landing/landing.controller.ts";
 import { McpController } from "./mcp/mcp.controller.ts";
 import { SubmitController } from "./submit/mod.ts";
-import { PublicInvitationController } from "./public-invitations/public-invitation.controller.ts";
 
 export async function initControllers(
   context: Context,
@@ -27,22 +26,19 @@ export async function initControllers(
     context.services.kv,
     context.managers.invitations,
     context.managers.receptivePolicy,
-    context.managers.receipts,
-    context.managers.messages,
     context.managers.contacts,
+    context.managers.messages,
   ).use(app);
   await new AuthDiscoveryController(
     context.services.config,
     context.managers.domainIdentity,
-  ).use(app);
-  await new PublicInvitationController(
-    context.managers.publicInvitations,
   ).use(app);
   await new AuthMiddleware(context.services.auth).use(app);
   await new McpController(
     context.services.mcp,
     context.managers.accounts,
     context.tools,
+    context.logger,
   ).use(app);
   await new NotFoundController().use(app);
 }

@@ -1,4 +1,5 @@
 import { generate as generateUUIDv7 } from "@std/uuid/v7";
+import type { MessageCategory } from "../../models/message-category.ts";
 import {
   type SentMessage,
   SentMessageSchema,
@@ -10,8 +11,9 @@ const SENT_PREFIX: Deno.KvKey = ["sent_messages"];
 const SENT_BY_OID_PREFIX: Deno.KvKey = ["sent_messages_by_oid"];
 
 export interface ListSentMessagesOptions {
-  category?: string;
-  receiverDomain?: string;
+  category?: MessageCategory;
+  contactId?: string;
+  remoteDomain?: string;
   sentAfter?: Date;
   sentBefore?: Date;
   status?: "delivered" | "failed";
@@ -36,9 +38,7 @@ export class SentMessageRepository {
     return message;
   }
 
-  async create(
-    data: Omit<SentMessage, "id">,
-  ): Promise<SentMessage> {
+  async create(data: Omit<SentMessage, "id">): Promise<SentMessage> {
     const message: SentMessage = { id: generateUUIDv7(), ...data };
     return await this.set(message);
   }
@@ -54,7 +54,8 @@ export class SentMessageRepository {
   ): Promise<ListSentMessagesResult> {
     const {
       category,
-      receiverDomain,
+      contactId,
+      remoteDomain,
       sentAfter,
       sentBefore,
       status,
@@ -73,9 +74,10 @@ export class SentMessageRepository {
       const msg = await this.get(entry.value);
       if (!msg) continue;
       if (category !== undefined && msg.category !== category) continue;
+      if (contactId !== undefined && msg.contact_id !== contactId) continue;
       if (
-        receiverDomain !== undefined &&
-        msg.receiver_domain.toLowerCase() !== receiverDomain.toLowerCase()
+        remoteDomain !== undefined &&
+        msg.remote_domain.toLowerCase() !== remoteDomain.toLowerCase()
       ) continue;
       if (sentAfter !== undefined && msg.sent_at <= sentAfter) continue;
       if (sentBefore !== undefined && msg.sent_at >= sentBefore) continue;

@@ -16,12 +16,12 @@ export class InvalidBodyError extends ApplicationError {
   }
 }
 
-export class ReceiptNotActiveError extends ApplicationError {
-  constructor(receiptId: string) {
+export class ContactNotReadyError extends ApplicationError {
+  constructor(contactId: string) {
     super(
       400,
-      "E_RECEIPT_NOT_ACTIVE",
-      `Receipt ${receiptId} is not active (revoked or expired)`,
+      "E_CONTACT_NOT_READY",
+      `Contact ${contactId} is blocked or otherwise unavailable for outbound messaging.`,
     );
   }
 }
@@ -48,13 +48,22 @@ export class MessageNotFoundError extends ApplicationError {
   }
 }
 
-export class InvalidReplyInviteError extends ApplicationError {
-  constructor(receptivePolicyId: string) {
+export class CategoryNotPermittedError extends ApplicationError {
+  constructor(category: string) {
     super(
       400,
-      "E_INVALID_REPLY_INVITE",
-      `reply_invite.receptive_policy_id ${receptivePolicyId} is not an active receptive policy owned by you. ` +
-        `Create one with open_receptive_window first, or omit reply_invite.`,
+      "E_CATEGORY_NOT_PERMITTED",
+      `Category "${category}" is not in this contact's negotiated remote_terms.categories.`,
+    );
+  }
+}
+
+export class ContentRatingNotPermittedError extends ApplicationError {
+  constructor(rating: string, max: string) {
+    super(
+      400,
+      "E_CONTENT_RATING_NOT_PERMITTED",
+      `Content rating "${rating}" exceeds the contact's negotiated max_content_rating "${max}".`,
     );
   }
 }

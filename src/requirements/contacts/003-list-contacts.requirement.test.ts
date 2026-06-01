@@ -4,137 +4,125 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
 
 Deno.test({
-  name: "req:contacts-003 - Listeners can list their contacts",
+  name: "req:contacts-003 - list_contacts tool",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          await t.step(
-            "list_contacts returns empty list when no contacts exist",
-            async () => {
-              const { status, result } = await callTool<{
-                contacts: unknown[];
-                page_size: number;
-              }>(token, "list_contacts", {});
-              assertEquals(status, 200);
-              assertExists(result);
-              assertEquals(result.contacts.length, 0);
-            },
-          );
-
-          // Create two contacts via different senders
-          const domainId1 = crypto.randomUUID();
-          const domainId2 = crypto.randomUUID();
-
-          for (
-            const [invId, senderDomain, domainId] of [
-              [crypto.randomUUID(), "alpha.example", domainId1],
-              [crypto.randomUUID(), "beta.example", domainId2],
-            ] as [string, string, string][]
-          ) {
-            await kv.set(["invitations", invId], {
-              invitation_id: invId,
-              receiver_oid: accountOid,
-              sender_domain: senderDomain,
-              status: "pending",
-              proposed_terms: { category: "billing" },
-              claims: {
-                immutable: { domain_id: domainId },
-                user: { tag: senderDomain },
-              },
-              created_at: new Date().toISOString(),
-            });
-            await callTool(token, "accept_invitation", {
-              invitation_id: invId,
-            });
-          }
+          await seedContact(kv, { ownerOid, remoteDomain: "alpha.example" });
+          await seedContact(kv, { ownerOid, remoteDomain: "alpha.example" });
+          await seedContact(kv, {
+            ownerOid,
+            remoteDomain: "beta.example",
+            blocked: true,
+          });
 
           await t.step(
-            "list_contacts returns all contacts scoped to the caller",
+            "returns all contacts owned by the caller without secrets",
             async () => {
               const { status, result } = await callTool<{
                 contacts: Array<{
                   id: string;
-                  domain: string;
-                  domain_id: string;
-                  current_fields: Record<
-                    string,
-                    { value: unknown }
-                  >;
-                  created_at: string;
-                  updated_at: string;
+                  remote_domain: string;
+                  remote_domain_id: string;
+                  local_terms: unknown;
+                  remote_terms: unknown;
+                  blocked: boolean;
+                  current_fields: unknown;
+                  local_credential?: { contact_secret?: unknown };
+                  remote_credential?: { contact_secret?: unknown };
                 }>;
                 page_size: number;
               }>(token, "list_contacts", {});
               assertEquals(status, 200);
               assertExists(result);
-              assertEquals(result.contacts.length, 2);
-              assertEquals(
-                result.contacts.some((c) => c.domain === "alpha.example"),
-                true,
-              );
-              assertEquals(
-                result.contacts.some((c) => c.domain === "beta.example"),
-                true,
-              );
-            },
-          );
-
-          await t.step(
-            "each contact includes id, domain, domain_id, current_fields, timestamps",
-            async () => {
-              const { result } = await callTool<{
-                contacts: Array<{
-                  id: string;
-                  domain: string;
-                  domain_id: string;
-                  current_fields: Record<string, { value: unknown }>;
-                  created_at: string;
-                  updated_at: string;
-                }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              for (const contact of result.contacts) {
-                assertExists(contact.id);
-                assertExists(contact.domain);
-                assertExists(contact.domain_id);
-                assertExists(contact.current_fields);
-                assertExists(contact.created_at);
-                assertExists(contact.updated_at);
+              assertEquals(result.contacts.length, 3);
+              const c = result.contacts[0];
+              assertExists(c.id);
+              assertExists(c.remote_domain);
+              assertExists(c.remote_domain_id);
+              assertEquals(typeof c.blocked, "boolean");
+              // Secrets MUST NOT leak.
+              for (const x of result.contacts) {
+                assertEquals(
+                  x.local_credential?.contact_secret === undefined,
+                  true,
+                );
+                assertEquals(
+                  x.remote_credential?.contact_secret === undefined,
+                  true,
+                );
               }
             },
           );
 
-          await t.step(
-            "list_contacts is scoped to the caller — other accounts see only their own contacts",
-            async () => {
-              const otherOid = crypto.randomUUID();
-              const otherToken = await issueToken({
-                oid: otherOid,
-                scope: requiredScopes.join(" "),
-                name: "Other User",
-              });
-              await callTool(otherToken, "set_user_verified_metadata");
+          await t.step("filters by blocked=true", async () => {
+            const { result } = await callTool<{
+              contacts: Array<{ blocked: boolean }>;
+            }>(token, "list_contacts", { blocked: true });
+            assertExists(result);
+            assertEquals(result.contacts.length, 1);
+            assertEquals(result.contacts[0].blocked, true);
+          });
 
-              const { result } = await callTool<{
-                contacts: unknown[];
-              }>(otherToken, "list_contacts", {});
-              assertExists(result);
-              assertEquals(result.contacts.length, 0);
-            },
-          );
+          await t.step("filters by blocked=false", async () => {
+            const { result } = await callTool<{
+              contacts: Array<{ blocked: boolean }>;
+            }>(token, "list_contacts", { blocked: false });
+            assertExists(result);
+            assertEquals(result.contacts.length, 2);
+            assertEquals(
+              result.contacts.every((c) => c.blocked === false),
+              true,
+            );
+          });
+
+          await t.step("isolated by owner OID", async () => {
+            const otherOid = crypto.randomUUID();
+            const otherToken = await issueToken({
+              oid: otherOid,
+              scope: requiredScopes.join(" "),
+              name: "Other",
+            });
+            await callTool(otherToken, "set_user_verified_metadata");
+            const { result } = await callTool<{ contacts: unknown[] }>(
+              otherToken,
+              "list_contacts",
+              {},
+            );
+            assertExists(result);
+            assertEquals(result.contacts.length, 0);
+          });
+
+          await t.step("paginates with resume_token", async () => {
+            const { result: p1 } = await callTool<{
+              contacts: Array<{ id: string }>;
+              next_resume_token?: string;
+            }>(token, "list_contacts", { page_size: 2 });
+            assertExists(p1);
+            assertEquals(p1.contacts.length, 2);
+            assertExists(p1.next_resume_token);
+            const { result: p2 } = await callTool<{
+              contacts: Array<{ id: string }>;
+            }>(token, "list_contacts", {
+              page_size: 2,
+              resume_token: p1.next_resume_token,
+            });
+            assertExists(p2);
+            assertEquals(p2.contacts.length, 1);
+          });
         } finally {
           kv.close();
         }

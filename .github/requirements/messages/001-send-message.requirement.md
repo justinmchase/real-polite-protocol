@@ -1,71 +1,58 @@
 ---
 id: messages-001
-title: Listeners can send messages using a held receipt
-spec_ref: "7.1, 10B.1, 6"
+title: Listeners can send messages to a known contact
+spec_ref: "7, 7.1, 11, 12.4"
 ---
 
 # Send Message
 
-The MCP server MUST expose `send_message` so an authenticated listener can
-compose and deliver a message to another RPP server using a receipt they hold
-(Section 10B.1, Section 7.1).
+The MCP server MUST expose `send_message` so an authenticated local user can
+compose and deliver a `message` envelope to another RPP server using an
+established contact (§7, §12.4).
 
-The server performs HMAC signing and HTTP POST on behalf of the listener; the
-caller never handles the receipt secret directly.
+The server performs HMAC signing and HTTP POST on behalf of the local user; the
+caller never handles the `contact_secret` directly.
 
 ## Expected behavior
 
 - The tool is available to any authenticated account.
 - The tool requires:
-  - `receipt_id` — the held receipt authorizing the send.
-  - `category` — one value from the category registry (Section 7.2).
-  - `content_rating` — one value from the content rating registry (Section 7.3).
-  - `body` — an object with a `content_type` and a `content` field (Section
-    7.1.2). The `content_type` MUST be one of:
-    - `text/markdown` — `content` is a UTF-8 CommonMark string.
-    - `application/json` — `content` is a UTF-8 string containing a valid JSON
-      document whose top-level value is an object or array. Any other
-      `content_type` MUST be rejected with `E_INVALID_CONTENT_TYPE`. If
-      `content_type` is `application/json` and the body is not syntactically
-      valid JSON, the server MUST reject with `E_INVALID_BODY`.
+  - `contact_id` — the local contact identifying the recipient (§11).
+  - `category` — one value from the §7.1 category registry.
+  - `content_rating` — one value from the §7.2 content rating registry.
+  - `body` — an object with a `content_type` and a `content` field
+    (`req:submit-004`). `content_type` MUST be one of `text/markdown` or
+    `application/json`. Other values are rejected with `E_INVALID_CONTENT_TYPE`.
+    Malformed JSON is rejected with `E_INVALID_BODY`.
 - The tool MAY accept:
   - `subject` — informational subject line.
-  - `sender_display_name` — Unicode string (Section 3A.2); informational only.
-  - `reply_invite` — an embedded invitation offering the receiver a reply path
-    (Section 8).
-  - `metadata` — a free-form object passed through to the receiver.
-- The tool MUST verify that the receipt belongs to the authenticated account
-  before sending; receipts held by other accounts MUST NOT be usable.
-- The server MUST generate a UUIDv7 `message_id` and ensure
-  `(sender_domain, message_id)` is unique per the local sender domain.
-- The server MUST construct the submit envelope per Section 7.1, sign it via
-  HMAC-SHA-256 using the receipt secret, and POST it to the receiver's envelope
-  endpoint with the `x-rpp-receipt-id`, `x-rpp-timestamp`, and `x-rpp-signature`
-  headers.
-- If the receiver returns a non-2xx response, the tool MUST surface a structured
-  error to the caller including the receiver's error code when available.
-- If the receipt is not active (revoked or expired), the tool MUST reject the
-  call locally with `E_RECEIPT_NOT_ACTIVE` without contacting the receiver.
-- If the message body exceeds 256 KB (Section 7.1.1), the tool MUST reject the
-  call locally with `E_MESSAGE_TOO_LARGE`.
-- On success the tool returns the new `message_id`, `sent_at` timestamp, and the
-  receiver's accepted-response payload.
+  - `metadata` — a free-form object passed through to the remote
+    (`req:messages-007`).
+- The tool MUST verify the contact belongs to the authenticated account;
+  contacts owned by other accounts MUST NOT be addressable.
+- The tool MUST reject locally with `E_CONTACT_BLOCKED` if the contact is
+  blocked (`req:contacts-008`).
+- Soft term enforcement (§11.5): the tool MUST reject locally if the recipient's
+  `contact.remote_terms` does not permit this `category` or `content_rating`,
+  with `E_CATEGORY_NOT_PERMITTED` or `E_CONTENT_RATING_EXCEEDED` (§13). This
+  mirrors the inbound check at `req:submit-004`.
+- The server MUST generate a UUIDv7 `envelope_id` and ensure
+  `(sender_domain, envelope_id)` is unique per the local sender domain.
+- The server MUST construct the `message` envelope per §7.1, sign it via
+  HMAC-SHA-256 using `contact.remote_credential.contact_secret`, and POST it to
+  the remote's envelope endpoint with the headers
+  `x-rpp-contact-id: <contact.remote_credential.contact_id>`, `x-rpp-timestamp`,
+  and `x-rpp-signature` (`req:submit-002`).
+- If the remote returns a non-2xx response, the tool MUST surface a structured
+  error to the caller including the remote's error code when available.
+- If the envelope body exceeds 256 KB, the tool MUST reject the call locally
+  with `E_MESSAGE_TOO_LARGE`.
+- On success the tool returns the new `envelope_id`, `sent_at` timestamp, and
+  the remote's accepted response payload.
 
 ## Same-domain (local) delivery
 
-When the receipt's `sender_domain` equals the sending server's own domain, the
-message MUST be delivered by calling the local message manager directly,
-**without** making an outbound HTTP request. This avoids the edge-runtime
-self-loop restriction (HTTP 508 "Loop Detected" returned by Deno Deploy when a
-deployment fetches its own domain).
-
-- The local delivery path MUST produce the same observable result as the remote
-  HTTP path: the message is stored and retrievable via `list_messages` /
-  `get_message`.
-- HMAC signing and verification are skipped on the local path because no
-  untrusted network boundary is crossed.
-
-## Out of scope
-
-- Group fan-out (`send_group_message` is a separate tool, Section 10B.2).
-- Mutating the held receipt's terms (use `renew_receipt`, Section 10A.4).
+When the contact's `remote_domain` equals the local domain, the message MUST be
+delivered by calling the local message handler directly without making an
+outbound HTTP request (per `req:submit-005`). HMAC signing and verification MAY
+be skipped on the local path.

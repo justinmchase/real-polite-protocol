@@ -1,7 +1,13 @@
-import { ConsoleLogger, Grove, WebMode } from "@justinmchase/grove";
+import {
+  ConsoleLogger,
+  Grove,
+  MigrationRunner,
+  WebMode,
+} from "@justinmchase/grove";
 import type { Context, State } from "./context.ts";
 import { initControllers } from "./controllers/mod.ts";
 import { initManagers } from "./managers/mod.ts";
+import { MIGRATIONS } from "./migrations/mod.ts";
 import { initRepositories } from "./repositories/mod.ts";
 import { initServices } from "./services/mod.ts";
 import type { Services } from "./services/mod.ts";
@@ -25,6 +31,12 @@ export async function start(options?: StartOptions): Promise<void> {
     const repositories = await initRepositories(services);
     const managers = await initManagers(repositories, services);
     const tools = initTools(managers, services.config);
+
+    const runner = new MigrationRunner(services.kv.store, logger, MIGRATIONS);
+    runner.runPending().catch((err) => {
+      logger.error("kv migrations failed", err);
+    });
+
     return { logger, services, repositories, managers, tools };
   }
 

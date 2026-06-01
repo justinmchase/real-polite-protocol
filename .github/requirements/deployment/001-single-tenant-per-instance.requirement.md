@@ -1,7 +1,7 @@
 ---
-description: RPP servers SHOULD deploy single-tenant-per-instance for data isolation by design.
-rfc_section: 15. Deployment Architecture
-requirement_id: req:deployment-001
+id: deployment-001
+title: Single-Tenant-Per-Instance Deployment
+spec_ref: "17"
 ---
 
 # Single-Tenant-Per-Instance Deployment

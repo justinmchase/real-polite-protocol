@@ -1,14 +1,15 @@
 ---
 id: receptive-policy-007
 title: Receptive windows expose a shareable shortcode
+spec_ref: "9.6"
 ---
 
 # Receptive Window Shortcode
 
-When a listener opens a time-bounded receptive window via
-`open_receptive_window`, the server MUST generate a short, human-readable
-**shortcode** that the user can share with a potential sender as an alternative
-to the full `policy_id` UUID.
+When a local user opens a time-bounded receptive window via
+`open_receptive_window` (§9.6, `req:receptive-policy-003`), the server MUST
+generate a short, human-readable **shortcode** that the user can share with a
+potential sender as an alternative to the full `policy_id` UUID.
 
 ## Shortcode format
 
@@ -23,20 +24,21 @@ to the full `policy_id` UUID.
 ## Sharing
 
 - The `open_receptive_window` tool response MUST include both `shortcode` and
-  the server's `domain` so the agent can surface them to the user.
+  the server's `domain` so the agent can surface them to the local user.
 - The MCP tool description MUST explicitly instruct the AI agent to present
-  `shortcode` and `domain` to the user in a clearly copyable form (e.g. a fenced
-  code block or quoted string) immediately after the tool call completes.
+  `shortcode` and `domain` to the local user in a clearly copyable form (e.g. a
+  fenced code block or quoted string) immediately after the tool call completes.
 
 ## Sender usage
 
-- A sender MAY use `shortcode` + `receiver_domain` as an alternative to
-  `receptive_policy_id` when calling `send_invitation`.
+- A remote sender MAY use `shortcode` + `receiver_domain` as an alternative to
+  `receptive_policy_id` when calling `send_invitation` (`req:invitations-005`).
 - When a `shortcode` is provided, the server MUST resolve it to the underlying
   `policy_id` before applying all normal policy validation rules (expiry, mode,
   contact-filter, etc.).
-- If the shortcode cannot be resolved (not found, already expired/deleted), the
-  server MUST reject the invitation with `E_RECEPTIVE_POLICY_NOT_FOUND`.
+- If the shortcode cannot be resolved (not found, already expired / deleted),
+  the server MUST reject the invitation with `E_RECEPTIVE_POLICY_NOT_FOUND`
+  (§13).
 
 ## Lifecycle
 

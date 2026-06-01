@@ -59,13 +59,6 @@ export class AccountTool {
       }),
     );
 
-    const setUserVerifiedMetadata = withToolErrorHandling(async () => {
-      const record = await this.accountManager.setVerifiedMetadataFromToken(
-        auth,
-      );
-      return toolResult(record);
-    });
-
     server.registerTool(
       "set_user_verified_metadata",
       {
@@ -74,18 +67,12 @@ export class AccountTool {
         inputSchema: {},
         outputSchema: VerifiedMetadataOutputSchema,
       },
-      setUserVerifiedMetadata,
-    );
-
-    server.registerTool(
-      "set_verified_metadata",
-      {
-        description:
-          "Deprecated compatibility alias for set_user_verified_metadata.",
-        inputSchema: {},
-        outputSchema: VerifiedMetadataOutputSchema,
-      },
-      setUserVerifiedMetadata,
+      withToolErrorHandling(async () => {
+        const record = await this.accountManager.setVerifiedMetadataFromToken(
+          auth,
+        );
+        return toolResult(record);
+      }),
     );
 
     server.registerTool(

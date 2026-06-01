@@ -1,13 +1,13 @@
 ---
 id: messages-007
 title: Message metadata is preserved and returned verbatim
-spec_ref: "7.1.3"
+spec_ref: "7.3"
 ---
 
 # Message Metadata Pass-Through
 
 The RPP server MUST preserve a sender-supplied `metadata` object from the
-inbound envelope (Section 7.1.3) and return it unchanged in all read and list
+inbound `message` envelope (§7.3) and return it unchanged in all read and list
 responses for that message.
 
 `metadata` is an optional sub-protocol extension point. It is not interpreted by
@@ -33,7 +33,7 @@ the core protocol.
 ### Validation
 
 The server MUST reject a message envelope whose `metadata` value violates the
-constraints of Section 7.1.3 with `E_INVALID_MESSAGE_ENVELOPE` (HTTP 400):
+constraints of §7.3 with `E_INVALID_MESSAGE_ENVELOPE` (HTTP 400):
 
 - Value types must be `string`, `number`, `boolean`, `null`, or a flat array of
   those types. Nested objects are NOT allowed.
@@ -52,5 +52,5 @@ constraints of Section 7.1.3 with `E_INVALID_MESSAGE_ENVELOPE` (HTTP 400):
 ## Out of scope
 
 - The server MUST NOT interpret or act on `metadata` contents.
-- Sub-protocol semantics of specific keys (e.g., `in_reply_to`) are defined by
-  higher-level protocols, not by core RPP.
+- Sub-protocol semantics of specific keys are defined by higher-level protocols,
+  not by core RPP.

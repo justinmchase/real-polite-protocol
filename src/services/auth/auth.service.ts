@@ -51,6 +51,9 @@ export class AuthService {
     private readonly azureApiAppClientId: string,
     private readonly debugLogTokenPayload: boolean,
     private readonly debugLogRawAccessToken: boolean,
+    private readonly devMode: boolean,
+    private readonly devIssuer: string,
+    private readonly devPublicKeyPath: string,
   ) {}
 
   static create(
@@ -60,6 +63,15 @@ export class AuthService {
     const issuer = config.issuer ??
       `https://login.microsoftonline.com/${config.azureTenantId}/v2.0`;
     const audience = config.audience ?? `api://${config.azureApiAppClientId}`;
+    if (config.devMode) {
+      logger.warn(
+        "RPP_DEV_MODE enabled: dev-issuer tokens will be accepted",
+        {
+          devIssuer: config.devIssuer,
+          devPublicKeyPath: config.devPublicKeyPath,
+        },
+      );
+    }
     return new AuthService(
       logger,
       issuer,
@@ -68,6 +80,9 @@ export class AuthService {
       config.azureApiAppClientId,
       config.authDebugLogTokenPayload,
       config.authDebugLogRawAccessToken,
+      config.devMode,
+      config.devIssuer,
+      config.devPublicKeyPath,
     );
   }
 
@@ -206,6 +221,8 @@ export class AuthService {
       });
     }
 
+    const isDevToken = this.devMode && payload.iss === this.devIssuer;
+
     const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!this.isValidAudience(aud)) {
       this.logger.error("Token audience validation failed", {
@@ -218,10 +235,16 @@ export class AuthService {
       });
     }
 
-    // Get JWKS and verify signature
-    const jwks = await this.fetchJwks();
-    const kid = header.kid;
-    const key = kid ? jwks.get(kid) : jwks.values().next().value;
+    // Resolve verification key: dev key when this is a dev-issued token,
+    // otherwise the issuer's JWKS.
+    let key: Jwk | undefined;
+    if (isDevToken) {
+      key = await this.loadDevPublicJwk();
+    } else {
+      const jwks = await this.fetchJwks();
+      const kid = header.kid;
+      key = kid ? jwks.get(kid) : jwks.values().next().value;
+    }
 
     if (!key) {
       throw new AuthError("Key not found", 401, "E_KEY_NOT_FOUND");
@@ -230,6 +253,27 @@ export class AuthService {
     await this.verifySignature(token, signature, key, header.alg);
 
     return payload;
+  }
+
+  private devKey: Jwk | undefined;
+
+  private async loadDevPublicJwk(): Promise<Jwk> {
+    if (this.devKey) return this.devKey;
+    try {
+      const text = await Deno.readTextFile(this.devPublicKeyPath);
+      this.devKey = JSON.parse(text) as Jwk;
+      return this.devKey;
+    } catch (e) {
+      this.logger.error("Failed to load dev public key", e, {
+        path: this.devPublicKeyPath,
+      });
+      throw new AuthError(
+        "Dev mode enabled but dev public key is missing",
+        500,
+        "E_DEV_KEY_MISSING",
+        { path: this.devPublicKeyPath },
+      );
+    }
   }
 
   private async fetchJwks(): Promise<Map<string, Jwk>> {
@@ -419,6 +463,9 @@ export class AuthService {
 
   private isValidIssuer(actual: string | undefined): boolean {
     if (!actual || !this.issuer) return false;
+
+    // Dev-mode: accept the configured dev issuer as-is.
+    if (this.devMode && actual === this.devIssuer) return true;
 
     if (this.normalizeIssuer(actual) === this.normalizeIssuer(this.issuer)) {
       return true;

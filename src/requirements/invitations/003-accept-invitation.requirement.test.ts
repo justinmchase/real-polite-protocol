@@ -1,15 +1,12 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
-import { computeHmac } from "../helpers/compute-hmac.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
-import { withCallbackServer } from "../helpers/with-callback-server.ts";
-
-// ---------------------------------------------------------------------------
-// Requirement tests
-// ---------------------------------------------------------------------------
+import { seedInboundInvitation } from "../helpers/seed-inbound-invitation.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
+import { computeHmac } from "../helpers/compute-hmac.ts";
 
 Deno.test({
   name: "req:invitations-003 - Listeners can accept a pending invitation",
@@ -17,230 +14,132 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
-
-          // Initialize account with verified metadata
           await callTool(token, "set_user_verified_metadata");
 
           await t.step(
-            "accept_invitation transitions invitation to accepted and delivers receipt callback",
+            "accept dispatches HMAC-signed invitation_reply and creates a contact",
             async () => {
-              await withCallbackServer(async (callbackDomain, getCaptures) => {
-                const invitationId = crypto.randomUUID();
-                const deliveryToken = crypto.randomUUID();
-
-                await kv.set(["invitations", invitationId], {
-                  invitation_id: invitationId,
-                  receiver_oid: accountOid,
-                  sender_domain: "partner.example",
-                  status: "pending",
-                  proposed_terms: { category: "billing" },
-                  delivery: { domain: callbackDomain, token: deliveryToken },
-                  expires_at: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ).toISOString(),
-                  created_at: new Date().toISOString(),
+              await withRemoteServer(async (remoteDomain, getCaptures) => {
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain,
                 });
-
                 const { status, result } = await callTool<{
-                  status: string;
-                  accepted_at?: string;
+                  invitation: { status: string; invitation_id: string };
+                  contact_id: string;
                 }>(token, "accept_invitation", {
-                  invitation_id: invitationId,
+                  invitation_id: inv.invitation_id,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                  message: "Glad to meet.",
                 });
-
                 assertEquals(status, 200);
                 assertExists(result);
-                assertEquals(result.status, "accepted");
-                assertExists(result.accepted_at);
+                assertEquals(result.invitation.status, "accepted");
+                assertExists(result.contact_id);
 
-                // The server MUST have POSTed a receipt envelope to the
-                // delivery domain (Section 9.7.2, invitations-003).
-                const callbacks = getCaptures();
-                assertEquals(callbacks.length, 1);
-                const cb = callbacks[0];
-                assertEquals(cb.body.category, "receipt");
-                assertEquals(cb.body.invitation_id, invitationId);
-                assertEquals(cb.body.decision, "accepted");
-                assertExists(cb.body.receipt);
-              });
-            },
-          );
-
-          await t.step(
-            "receipt callback carries issued receipt credentials",
-            async () => {
-              await withCallbackServer(async (callbackDomain, getCaptures) => {
-                const invitationId = crypto.randomUUID();
-                const deliveryToken = crypto.randomUUID();
-
-                await kv.set(["invitations", invitationId], {
-                  invitation_id: invitationId,
-                  receiver_oid: accountOid,
-                  sender_domain: "partner.example",
-                  status: "pending",
-                  proposed_terms: { category: "billing" },
-                  delivery: { domain: callbackDomain, token: deliveryToken },
-                  expires_at: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ).toISOString(),
-                  created_at: new Date().toISOString(),
-                });
-
-                await callTool(token, "accept_invitation", {
-                  invitation_id: invitationId,
-                });
-
-                const callbacks = getCaptures();
-                assertEquals(callbacks.length, 1);
-                const receipt = callbacks[0].body.receipt as
-                  | Record<string, unknown>
-                  | undefined;
-
-                assertExists(receipt);
-                assertExists(receipt.id);
-                assertExists(receipt.secret);
-                assertExists(receipt.category);
-                assertExists(receipt.max_content_rating);
-                assertExists(receipt.issued_at);
-              });
-            },
-          );
-
-          await t.step(
-            "receipt callback is HMAC-signed with the delivery token",
-            async () => {
-              await withCallbackServer(async (callbackDomain, getCaptures) => {
-                const invitationId = crypto.randomUUID();
-                const deliveryToken = crypto.randomUUID();
-
-                await kv.set(["invitations", invitationId], {
-                  invitation_id: invitationId,
-                  receiver_oid: accountOid,
-                  sender_domain: "partner.example",
-                  status: "pending",
-                  proposed_terms: { category: "billing" },
-                  delivery: { domain: callbackDomain, token: deliveryToken },
-                  expires_at: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ).toISOString(),
-                  created_at: new Date().toISOString(),
-                });
-
-                await callTool(token, "accept_invitation", {
-                  invitation_id: invitationId,
-                });
-
-                const callbacks = getCaptures();
-                assertEquals(callbacks.length, 1);
-                const { headers, bodyBytes } = callbacks[0];
-
-                // x-rpp-invitation-id, not x-rpp-receipt-id, on receipt envelopes
-                assertEquals(headers["x-rpp-invitation-id"], invitationId);
-                assertExists(headers["x-rpp-timestamp"]);
-                assertExists(headers["x-rpp-signature"]);
-
-                // Verify HMAC over raw body bytes using the delivery token
-                const expectedSig = await computeHmac(
-                  deliveryToken,
-                  headers["x-rpp-timestamp"],
-                  bodyBytes,
+                const calls = getCaptures();
+                assertEquals(calls.length, 1);
+                const call = calls[0];
+                assertEquals(call.method, "POST");
+                // Identity header uses the inbound reply_credential.contact_id
+                assertEquals(
+                  call.headers["x-rpp-contact-id"],
+                  inv.reply_credential.contact_id,
                 );
-                assertEquals(headers["x-rpp-signature"], expectedSig);
+                // HMAC was signed with reply_credential.contact_secret
+                const expected = await computeHmac(
+                  inv.reply_credential.contact_secret,
+                  call.headers["x-rpp-timestamp"],
+                  call.bodyBytes,
+                );
+                assertEquals(call.headers["x-rpp-signature"], expected);
+                const env = call.body as Record<string, unknown>;
+                assertEquals(env.category, "invitation_reply");
+                assertEquals(env.invitation_id, inv.invitation_id);
+                assertExists(env.reply_credential);
+                assertExists(env.communication_terms);
+                assertEquals(env.message, "Glad to meet.");
+
+                // Contact was created with bilateral credentials and terms.
+                const contact = await kv.get<Record<string, unknown>>([
+                  "contacts",
+                  ownerOid,
+                  result.contact_id,
+                ]);
+                assertExists(contact.value);
+                assertEquals(
+                  (contact.value as { remote_domain: string }).remote_domain,
+                  remoteDomain,
+                );
               });
             },
           );
 
           await t.step(
-            "accept_invitation includes optional reason in the callback",
+            "accept of non-pending invitation errors",
             async () => {
-              await withCallbackServer(async (callbackDomain, getCaptures) => {
-                const invitationId = crypto.randomUUID();
-                const deliveryToken = crypto.randomUUID();
-
-                await kv.set(["invitations", invitationId], {
-                  invitation_id: invitationId,
-                  receiver_oid: accountOid,
-                  sender_domain: "partner.example",
-                  status: "pending",
-                  proposed_terms: { category: "billing" },
-                  delivery: { domain: callbackDomain, token: deliveryToken },
-                  expires_at: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ).toISOString(),
-                  created_at: new Date().toISOString(),
-                });
-
-                const reason = "Looking forward to working with you!";
-
-                await callTool(token, "accept_invitation", {
-                  invitation_id: invitationId,
-                  reason,
-                });
-
-                const callbacks = getCaptures();
-                assertEquals(callbacks.length, 1);
-                assertEquals(callbacks[0].body.reason, reason);
+              const inv = await seedInboundInvitation(kv, {
+                ownerOid,
+                status: "rejected",
               });
+              const { result, body } = await callTool(
+                token,
+                "accept_invitation",
+                {
+                  invitation_id: inv.invitation_id,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                },
+              );
+              const errorish =
+                (result as { ok?: boolean } | undefined)?.ok === false ||
+                body.error !== undefined || result === undefined;
+              assertEquals(errorish, true);
             },
           );
 
           await t.step(
-            "accept_invitation can apply negotiated terms",
+            "another account cannot accept this invitation",
             async () => {
-              await withCallbackServer(async (callbackDomain, getCaptures) => {
-                const invitationId = crypto.randomUUID();
-                const deliveryToken = crypto.randomUUID();
-
-                await kv.set(["invitations", invitationId], {
-                  invitation_id: invitationId,
-                  receiver_oid: accountOid,
-                  sender_domain: "another-partner.example",
-                  status: "pending",
-                  proposed_terms: { category: "correspondence" },
-                  delivery: { domain: callbackDomain, token: deliveryToken },
-                  expires_at: new Date(
-                    Date.now() + 7 * 24 * 60 * 60 * 1000,
-                  ).toISOString(),
-                  created_at: new Date().toISOString(),
+              await withRemoteServer(async (remoteDomain) => {
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain,
                 });
-
-                const { status, result } = await callTool<{ status: string }>(
-                  token,
+                const otherOid = crypto.randomUUID();
+                const otherToken = await issueToken({
+                  oid: otherOid,
+                  scope: requiredScopes.join(" "),
+                  name: "Other",
+                });
+                await callTool(otherToken, "set_user_verified_metadata");
+                const { result, body } = await callTool(
+                  otherToken,
                   "accept_invitation",
                   {
-                    invitation_id: invitationId,
-                    negotiated_terms: {
-                      category: "correspondence",
-                      max_content_rating: "G",
+                    invitation_id: inv.invitation_id,
+                    local_terms: {
+                      categories: ["correspondence"],
+                      max_content_rating: "PG",
                     },
                   },
                 );
-
-                assertEquals(status, 200);
-                assertExists(result);
-                assertEquals(result.status, "accepted");
-
-                // The receipt delivered to the callback must carry the negotiated
-                // (narrowed) terms so the sender knows the exact agreed terms.
-                const callbacks = getCaptures();
-                assertEquals(callbacks.length, 1);
-                const receipt = callbacks[0].body.receipt as
-                  | Record<string, unknown>
-                  | undefined;
-                assertExists(receipt);
-                assertEquals(
-                  receipt.category,
-                  "correspondence",
-                  "issued receipt must carry the negotiated category",
-                );
+                const errorish =
+                  (result as { ok?: boolean } | undefined)?.ok === false ||
+                  body.error !== undefined || result === undefined;
+                assertEquals(errorish, true);
               });
             },
           );

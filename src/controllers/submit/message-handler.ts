@@ -1,493 +1,334 @@
-import { encodeHex } from "@std/encoding/hex";
-import { generate as generateUUIDv7 } from "@std/uuid/v7";
 import { z } from "zod";
-import type { KvService } from "../../services/kv/kv.service.ts";
+import {
+  ContactBlockedError,
+  ContactSenderDomainMismatchError,
+} from "../../managers/contacts/contact.error.ts";
+import {
+  InvitationDirectionMismatchError,
+  InvitationNotPendingError,
+} from "../../managers/invitation/invitation.error.ts";
 import type {
   ContactManager,
   InvitationManager,
   MessageManager,
-  ReceiptManager,
   ReceptivePolicyManager,
 } from "../../managers/mod.ts";
-import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
-import type { MessageCategory } from "../../models/message-category.ts";
 import { CONTENT_RATINGS } from "../../models/content-rating.ts";
+import {
+  InvitationEnvelopeSchema,
+  InvitationReplyEnvelopeSchema,
+} from "../../models/invitation/invitation.model.ts";
+import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
 import { MessageMetadataSchema } from "../../models/messages/stored-message.model.ts";
 import {
-  InvitationNotFoundError,
-  InvitationNotPendingError,
-} from "../../managers/invitation/invitation.error.ts";
-import {
-  MissingReceiptIdError,
-  MissingSignatureError,
-  MissingTimestampError,
-  ReceiptExpiredError,
-  ReceiptInvalidSignatureError,
-  ReceiptNotActiveError,
-  ReceiptNotFoundError,
-  ReceiptRevokedError,
+  CategoryNotPermittedError,
+  ContentRatingNotPermittedError,
+  InvalidInvitationEnvelopeError,
+  InvalidMessageEnvelopeError,
   ReceptivePolicyClosedError,
   ReceptivePolicyExpiredError,
   ReceptivePolicyNotFoundError,
-  RequestStaleError,
+  SubmitContactNotFoundError,
 } from "./submit.error.ts";
 
-const ClaimValueSchema = z.union([
-  z.string().max(512),
-  z.number(),
-  z.boolean(),
-  z.null(),
-  z.array(z.union([z.string().max(512), z.number(), z.boolean(), z.null()]))
-    .max(20),
-]);
+// ---------- Wire schemas ----------
 
-const ClaimMapSchema = z.record(z.string().max(64), ClaimValueSchema)
-  .refine((v) => Object.keys(v).length <= 20);
-
-const ReceiptTermsSchema = z.object({
-  category: z.enum(MESSAGE_CATEGORIES),
-  max_content_rating: z.enum(CONTENT_RATINGS).optional(),
-  usage_policy: z.enum(["one-time", "multiple-time", "any-time"]).optional(),
-  validity_constraints: z.record(z.string(), z.unknown()).optional(),
-  interval_budget: z.number().int().positive().optional(),
-}).catchall(z.unknown());
-
-const DeliverySchema = z.object({
-  domain: z.string(),
-  token: z.string(),
-});
-
-export const InvitationEnvelopeSchema = z.object({
-  message_id: z.string(),
-  sender_domain: z.string(),
-  category: z.literal("invitation"),
-  sent_at: z.coerce.date(),
-  invitation: z.object({
-    invitation_id: z.string(),
-    receptive_policy_id: z.uuid().optional(),
-    shortcode: z.string().optional(),
-    receipt_id: z.uuid().optional(),
-    proposed_terms: ReceiptTermsSchema,
-    claims: z.object({
-      immutable: ClaimMapSchema,
-      user: ClaimMapSchema.optional(),
-      admin: ClaimMapSchema.optional(),
-      custom: ClaimMapSchema.optional(),
-    }).optional(),
-    expires_at: z.coerce.date().optional(),
-    delivery: DeliverySchema,
-  }).refine(
-    (d) => {
-      const count = [
-        d.receptive_policy_id,
-        d.shortcode,
-        d.receipt_id,
-      ].filter((v) => v !== undefined).length;
-      return count === 1;
-    },
-    {
-      message:
-        "Exactly one of receptive_policy_id, shortcode, or receipt_id must be present",
-    },
-  ),
-});
-
-const ReplyInviteSchema = z.object({
-  receptive_policy_id: z.string(),
-  receiver_domain: z.string(),
-  proposed_terms: z.record(z.string(), z.unknown()).optional(),
-  expires_at: z.coerce.date().optional(),
-});
-
+/**
+ * `message` envelope wire shape, per spec §8.1. `message_id` and
+ * `sender_domain` are required by the controller for dedup and contact
+ * verification before this schema is applied.
+ */
 export const MessageEnvelopeSchema = z.object({
   message_id: z.string(),
   sender_domain: z.string(),
-  sender_domain_id: z.string().optional(),
-  category: z.literal("message"),
+  sender_display_name: z.string().max(256).optional(),
+  category: z.enum(MESSAGE_CATEGORIES),
+  content_rating: z.enum(CONTENT_RATINGS),
   sent_at: z.coerce.date(),
-  message: z.object({
-    content_rating: z.string(),
-    subject: z.string(),
-    body: z.object({
-      content_type: z.string(),
-      content: z.string(),
-    }),
+  subject: z.string(),
+  body: z.object({
+    content_type: z.string(),
+    content: z.string(),
   }),
   metadata: MessageMetadataSchema.optional(),
-  reply_invite: ReplyInviteSchema.optional(),
 });
 
-const ReceiptObjectSchema = z.object({
-  id: z.string(),
-  secret: z.string(),
-  category: z.string(),
-  max_content_rating: z.string().optional(),
-  usage_policy: z.string().optional(),
-  issued_at: z.coerce.date(),
-}).catchall(z.unknown());
+export type MessageEnvelope = z.infer<typeof MessageEnvelopeSchema>;
 
-export const ReceiptCallbackEnvelopeSchema = z.object({
-  category: z.literal("receipt"),
-  invitation_id: z.string(),
-  decision: z.enum(["accepted", "rejected"]),
-  receipt: ReceiptObjectSchema.optional(),
-  reason: z.string().optional(),
-  /** domain_id of the acceptor — included by same-spec receivers so the sender can create a symmetric contact. */
-  acceptor_domain_id: z.string().optional(),
-}).superRefine((d, ctx) => {
-  if (d.decision === "accepted" && d.receipt === undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "receipt is required when decision is 'accepted'",
-    });
-  }
-  if (d.decision === "rejected" && d.receipt !== undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "receipt must not be present when decision is 'rejected'",
-    });
-  }
-});
-
-export const SubmitMessageEnvelopeSchema = z.discriminatedUnion("category", [
+/** Discriminated union over the three envelope kinds defined in §8. */
+export const SubmitEnvelopeSchema = z.discriminatedUnion("category", [
   InvitationEnvelopeSchema,
+  InvitationReplyEnvelopeSchema,
   MessageEnvelopeSchema,
 ]);
 
-export type InvitationEnvelope = z.infer<typeof InvitationEnvelopeSchema>;
-export type MessageEnvelope = z.infer<typeof MessageEnvelopeSchema>;
-export type SubmitMessageEnvelope = z.infer<typeof SubmitMessageEnvelopeSchema>;
-export type ReceiptCallbackEnvelope = z.infer<
-  typeof ReceiptCallbackEnvelopeSchema
->;
+export type SubmitEnvelope = z.infer<typeof SubmitEnvelopeSchema>;
 
-export interface HandlerContext {
-  bodyBytes: Uint8Array;
-  receiptId?: string;
-  signature?: string;
-  timestamp?: string;
+// ---------- Handler interface ----------
+
+export interface EnvelopeHandlerResult {
+  envelopeId: string;
 }
 
-export interface MessageHandler {
-  readonly category: string;
-  handle(
-    body: SubmitMessageEnvelope,
-    context: HandlerContext,
-  ): Promise<{ messageId: string }>;
-}
+// ---------- Invitation handler ----------
 
-export class InvitationMessageHandler implements MessageHandler {
-  readonly category = "invitation";
-
+export class InvitationEnvelopeHandler {
   constructor(
-    private readonly kv: KvService,
     private readonly invitationManager: InvitationManager,
     private readonly receptivePolicyManager: ReceptivePolicyManager,
-    private readonly receiptManager: ReceiptManager,
   ) {}
 
   async handle(
-    body: SubmitMessageEnvelope,
-    _context: HandlerContext,
-  ): Promise<{ messageId: string }> {
-    const { invitation } = body as InvitationEnvelope;
-
-    let receiverOid: string;
-
-    if (invitation.receipt_id) {
-      // Receipt-path: look up the receipt and verify the receipt-mode policy.
-      const receipt = await this.receiptManager.get(invitation.receipt_id);
-      if (!receipt || receipt.status !== "active") {
-        throw new ReceiptNotActiveError(invitation.receipt_id);
+    envelope: z.infer<typeof InvitationEnvelopeSchema>,
+    now: Date,
+  ): Promise<EnvelopeHandlerResult> {
+    // Resolve the receptive policy that authorizes this inbound invitation.
+    let policyId = envelope.receptive_policy_id;
+    if (!policyId && envelope.shortcode) {
+      const byShort = await this.receptivePolicyManager.getByShortcode(
+        envelope.shortcode,
+      );
+      if (!byShort) {
+        throw new ReceptivePolicyNotFoundError(envelope.shortcode);
       }
-      const receiptPolicy = await this.receptivePolicyManager
-        .findActiveReceiptPolicy(receipt.oid, invitation.receipt_id);
-      if (!receiptPolicy) {
-        throw new ReceptivePolicyNotFoundError(invitation.receipt_id);
-      }
-      receiverOid = receipt.oid;
-    } else {
-      // Policy-path: standard receptive_policy_id flow, or shortcode resolution.
-      let policyId = invitation.receptive_policy_id;
-      if (!policyId && invitation.shortcode) {
-        const byShortcode = await this.receptivePolicyManager.getByShortcode(
-          invitation.shortcode,
+      policyId = byShort.policy_id;
+    }
+    if (!policyId) {
+      throw new InvalidInvitationEnvelopeError(
+        "exactly one of receptive_policy_id or shortcode is required",
+      );
+    }
+
+    const policy = await this.receptivePolicyManager.getById(policyId);
+    if (!policy) throw new ReceptivePolicyNotFoundError(policyId);
+    if (policy.receptive_until && policy.receptive_until < now) {
+      throw new ReceptivePolicyExpiredError(policy.policy_id);
+    }
+    if (policy.mode === "closed") {
+      throw new ReceptivePolicyClosedError(policy.policy_id);
+    }
+    if (policy.mode === "contact") {
+      const remoteDomainId = envelope.claims.immutable["domain_id"];
+      const senderDomain = envelope.sender_domain;
+      const allowed = typeof remoteDomainId === "string" &&
+        policy.contacts?.some(
+          (c) =>
+            c.domain_id === remoteDomainId &&
+            c.domain.toLowerCase() === senderDomain.toLowerCase(),
         );
-        if (!byShortcode) {
-          throw new ReceptivePolicyNotFoundError(invitation.shortcode);
-        }
-        policyId = byShortcode.policy_id;
-      }
-      const policy = await this.receptivePolicyManager.getById(policyId!);
-      if (!policy) {
-        throw new ReceptivePolicyNotFoundError(policyId!);
-      }
-      if (
-        policy.receptive_until && policy.receptive_until < new Date()
-      ) {
-        throw new ReceptivePolicyExpiredError(policy.policy_id);
-      }
-      // Closed-mode: explicitly reject all senders.
-      if (policy.mode === "closed") {
-        throw new ReceptivePolicyClosedError(policy.policy_id);
-      }
-      // Contact-mode check: verify (sender_domain, domain_id) pair is in contacts.
-      if (policy.mode === "contact") {
-        const senderDomainId = invitation.claims?.immutable?.["domain_id"];
-        const senderDomain = (body as InvitationEnvelope).sender_domain;
-        const allowed = typeof senderDomainId === "string" &&
-          policy.contacts?.some(
-            (c) =>
-              c.domain_id === senderDomainId &&
-              c.domain.toLowerCase() === senderDomain.toLowerCase(),
-          );
-        if (!allowed) {
-          throw new ReceptivePolicyClosedError(policy.policy_id);
-        }
-      }
-      receiverOid = policy.oid;
+      if (!allowed) throw new ReceptivePolicyClosedError(policy.policy_id);
     }
 
-    // Store the raw message.
-    const messageId = generateUUIDv7();
-    await this.kv.store.set(["messages", messageId], body);
+    // Cancellation: spec §10.3. Re-submitted invitation with the same id and
+    // `cancelled: true` transitions a pending inbound invitation to cancelled.
+    if (envelope.cancelled) {
+      await this.invitationManager.cancel(
+        policy.oid,
+        envelope.invitation_id,
+        now,
+      );
+      return { envelopeId: envelope.invitation_id };
+    }
 
-    await this.invitationManager.createInvitation(
-      invitation.invitation_id,
-      receiverOid,
-      body.sender_domain,
-      invitation.proposed_terms,
-      invitation.claims,
-      invitation.expires_at,
-      messageId,
-      invitation.delivery,
-    );
+    await this.invitationManager.createInbound({
+      invitationId: envelope.invitation_id,
+      ownerOid: policy.oid,
+      remoteDomain: envelope.sender_domain,
+      communicationTerms: envelope.communication_terms,
+      replyCredential: envelope.reply_credential,
+      claims: envelope.claims,
+      ...(envelope.sender_display_name !== undefined && {
+        senderDisplayName: envelope.sender_display_name,
+      }),
+      ...(envelope.message !== undefined && { message: envelope.message }),
+      ...(envelope.expires_at !== undefined && {
+        expiresAt: envelope.expires_at,
+      }),
+      sentAt: envelope.sent_at,
+      recordedAt: now,
+    });
 
-    return { messageId: invitation.invitation_id };
+    return { envelopeId: envelope.invitation_id };
   }
 }
 
-export class ReceiptMessageHandler implements MessageHandler {
-  readonly category = "message";
+// ---------- Invitation-reply handler ----------
 
-  constructor(
-    private readonly kv: KvService,
-    private readonly messageManager: MessageManager,
-  ) {}
-
-  async handle(
-    body: SubmitMessageEnvelope,
-    context: HandlerContext,
-  ): Promise<{ messageId: string }> {
-    // This handler is responsible for receipt-based HMAC authentication
-    const { bodyBytes, receiptId, signature, timestamp } = context;
-
-    if (!receiptId) {
-      throw new MissingReceiptIdError();
-    }
-
-    if (!signature) {
-      throw new MissingSignatureError();
-    }
-
-    if (!timestamp) {
-      throw new MissingTimestampError();
-    }
-
-    // Timestamp freshness check (RFC §5.1.1): must be within ±60 seconds.
-    const requestTime = new Date(timestamp).getTime();
-    if (isNaN(requestTime)) {
-      throw new MissingTimestampError();
-    }
-    const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
-    if (diffSeconds > 60) {
-      throw new RequestStaleError(Math.round(diffSeconds));
-    }
-
-    // Verify HMAC signature
-    const receiptEntry = await this.kv.store.get(["receipts", receiptId]);
-    if (!receiptEntry.value) {
-      throw new ReceiptNotFoundError(receiptId);
-    }
-
-    const receipt = receiptEntry.value as {
-      secret: string;
-      status?: string;
-      oid?: string;
-      category?: string;
-    };
-    if (receipt.status === "revoked") {
-      throw new ReceiptRevokedError(receiptId);
-    }
-    if (receipt.status === "expired") {
-      throw new ReceiptExpiredError(receiptId);
-    }
-
-    const isValid = await this.verifyHmac(
-      receipt.secret,
-      timestamp,
-      bodyBytes,
-      signature,
-    );
-
-    if (!isValid) {
-      throw new ReceiptInvalidSignatureError();
-    }
-
-    const stored = await this.messageManager.store(
-      receipt.oid ?? generateUUIDv7(),
-      receiptId,
-      (receipt.category ?? "correspondence") as MessageCategory,
-      body as MessageEnvelope,
-    );
-
-    return { messageId: stored.id };
-  }
-
-  private async verifyHmac(
-    secret: string,
-    timestamp: string,
-    bodyBytes: Uint8Array,
-    presentedSignature: string,
-  ): Promise<boolean> {
-    const key = new TextEncoder().encode(secret);
-    const data = new TextEncoder().encode(`${timestamp}.`);
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-
-    const combined = new Uint8Array(data.length + bodyBytes.length);
-    combined.set(data, 0);
-    combined.set(bodyBytes, data.length);
-
-    const computedSignature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      combined,
-    );
-
-    const computedHex = encodeHex(new Uint8Array(computedSignature));
-
-    return computedHex === presentedSignature.toLowerCase();
-  }
+export interface InvitationReplyAuthContext {
+  /** Credential resolved by the controller before HMAC verification. */
+  contactId: string;
+  contactSecret: string;
 }
 
-export class ReceiptCallbackHandler {
+export class InvitationReplyEnvelopeHandler {
   constructor(
-    private readonly kv: KvService,
-    private readonly contactManager?: ContactManager,
+    private readonly invitationManager: InvitationManager,
+    private readonly contactManager: ContactManager,
   ) {}
 
-  async handle(
-    envelope: ReceiptCallbackEnvelope,
-  ): Promise<{ messageId: string }> {
-    const { invitation_id, decision, receipt, acceptor_domain_id } = envelope;
-
-    // Look up invitation to check status
-    const entry = await this.kv.store.get(["invitations", invitation_id]);
-    if (!entry.value) {
-      throw new InvitationNotFoundError(invitation_id);
+  /**
+   * Resolve the HMAC key for an inbound `invitation_reply`. The remote signs
+   * with the `reply_credential.contact_secret` we issued in the outbound
+   * invitation; we look up the outbound invitation by id and return the
+   * matching credential.
+   */
+  async resolveAuth(
+    invitationId: string,
+    contactId: string,
+  ): Promise<InvitationReplyAuthContext> {
+    const invitation = await this.invitationManager.requireByIdAndDirection(
+      invitationId,
+      "outbound",
+    );
+    if (invitation.reply_credential.contact_id !== contactId) {
+      // Spec §11.2 / submit-002: any x-rpp-contact-id that does not resolve
+      // to a known credential MUST be rejected with E_CONTACT_NOT_FOUND,
+      // regardless of envelope category.
+      throw new SubmitContactNotFoundError(contactId);
     }
-
-    const invitation = entry.value as {
-      status: string;
-      sender_oid?: string;
-      receiver_oid?: string;
-      receiver_domain?: string;
-      sender_domain?: string;
-      [key: string]: unknown;
+    return {
+      contactId: invitation.reply_credential.contact_id,
+      contactSecret: invitation.reply_credential.contact_secret,
     };
+  }
+
+  async handle(
+    envelope: z.infer<typeof InvitationReplyEnvelopeSchema>,
+    now: Date,
+  ): Promise<EnvelopeHandlerResult> {
+    // The outbound invitation was already required for HMAC resolution; fetch
+    // again here to perform the actual transition + contact creation. If the
+    // status has since changed we surface the standard not-pending error.
+    const invitation = await this.invitationManager.requireByIdAndDirection(
+      envelope.invitation_id,
+      "outbound",
+    );
 
     if (invitation.status !== "pending") {
-      throw new InvitationNotPendingError(invitation_id, invitation.status);
+      throw new InvitationNotPendingError(
+        invitation.invitation_id,
+        invitation.status,
+      );
     }
 
-    // Transition invitation state
-    const updated = {
-      ...invitation,
-      status: decision,
-      ...(decision === "accepted" && receipt && { receipt }),
-    };
-    await this.kv.store.set(["invitations", invitation_id], updated);
-
-    // §9.7.3 step 5: store the issued receipt locally so the sender can sign
-    // future outbound messages with it (HMAC verification uses the secret).
-    // The local OID for this receipt is the sender's local user oid captured
-    // on the sender-side invitation record.
-    if (decision === "accepted" && receipt) {
-      const senderOid = invitation.sender_oid ?? invitation.receiver_oid;
-      // receiver_domain is the domain the sender will send TO (the acceptor's domain).
-      const receiverDomain = invitation.receiver_domain ??
-        invitation.sender_domain;
-      if (senderOid && receiverDomain) {
-        await this.kv.store.set(["receipts", receipt.id], {
-          id: receipt.id,
-          secret: receipt.secret,
-          oid: senderOid,
-          sender_domain: receiverDomain,
-          category: receipt.category,
-          max_content_rating: receipt.max_content_rating ?? "G",
-          usage_policy: receipt.usage_policy ?? "any-time",
-          status: "active",
-          issued_at: receipt.issued_at,
-        });
-      }
+    if (
+      invitation.remote_domain.toLowerCase() !==
+        envelope.sender_domain.toLowerCase()
+    ) {
+      throw new ContactSenderDomainMismatchError(
+        invitation.remote_domain,
+        envelope.sender_domain,
+      );
     }
 
-    // Symmetric contact: if the callback includes the acceptor's domain_id,
-    // upsert a contact for the acceptor on the sender's account.
-    if (decision === "accepted" && acceptor_domain_id && this.contactManager) {
-      const senderOid = invitation.sender_oid ?? invitation.receiver_oid;
-      const receiverDomain = invitation.receiver_domain ??
-        invitation.sender_domain;
-      if (senderOid && receiverDomain) {
-        await this.contactManager.upsertFromInvitation(
-          senderOid,
-          receiverDomain,
-          acceptor_domain_id,
-          undefined,
-          new Date(),
-        );
-      }
+    const remoteDomainId = envelope.claims.immutable["domain_id"];
+    if (typeof remoteDomainId !== "string" || remoteDomainId.length === 0) {
+      throw new InvalidInvitationEnvelopeError(
+        "claims.immutable.domain_id is required",
+      );
     }
 
-    return { messageId: invitation_id };
+    // Spec §11.2 path 2: the local domain's outbound reply_credential becomes
+    // the new contact's local_credential; the inbound envelope's
+    // reply_credential becomes the contact's remote_credential.
+    await this.contactManager.upsertFromInvitationReply({
+      ownerOid: invitation.owner_oid,
+      remoteDomain: invitation.remote_domain,
+      remoteDomainId,
+      remoteTerms: envelope.communication_terms,
+      localTerms: invitation.communication_terms,
+      localCredential: invitation.reply_credential,
+      remoteCredential: envelope.reply_credential,
+      claims: envelope.claims,
+      recordedAt: now,
+    });
+
+    await this.invitationManager.markOutboundAccepted(
+      invitation.owner_oid,
+      invitation.invitation_id,
+      now,
+    );
+
+    return { envelopeId: invitation.invitation_id };
   }
+}
 
-  async verifyHmac(
-    secret: string,
-    timestamp: string,
-    bodyBytes: Uint8Array,
-    presentedSignature: string,
-  ): Promise<boolean> {
-    const key = new TextEncoder().encode(secret);
-    const data = new TextEncoder().encode(`${timestamp}.`);
+// Re-export Invitation*MismatchError to make IDE imports easier from controller.
+export { InvitationDirectionMismatchError };
 
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
+// ---------- Message handler ----------
+
+const NON_MESSAGE_CATEGORIES = new Set<string>([
+  "invitation",
+  "invitation_reply",
+]);
+
+export class MessageEnvelopeHandler {
+  constructor(
+    private readonly messageManager: MessageManager,
+    private readonly contactManager: ContactManager,
+  ) {}
+
+  async handle(
+    envelope: MessageEnvelope,
+    contactId: string,
+    now: Date,
+  ): Promise<EnvelopeHandlerResult> {
+    if (NON_MESSAGE_CATEGORIES.has(envelope.category)) {
+      throw new InvalidMessageEnvelopeError(
+        `category "${envelope.category}" is reserved for control envelopes`,
+      );
+    }
+
+    // Re-fetch the contact for the route check, then verify sender_domain.
+    const contact = await this.contactManager.getByLocalCredentialId(contactId);
+    if (!contact) {
+      // Should never happen — controller already resolved this contact.
+      throw new InvalidMessageEnvelopeError(
+        `contact ${contactId} not found during message handling`,
+      );
+    }
+    if (contact.blocked) throw new ContactBlockedError(contact.id);
+    if (
+      contact.remote_domain.toLowerCase() !==
+        envelope.sender_domain.toLowerCase()
+    ) {
+      throw new ContactSenderDomainMismatchError(
+        contact.remote_domain,
+        envelope.sender_domain,
+      );
+    }
+
+    // Spec §10.1 / req:contacts-011: receiver MUST enforce its own
+    // local_terms on every inbound message envelope.
+    if (!contact.local_terms.categories.includes(envelope.category)) {
+      throw new CategoryNotPermittedError(envelope.category);
+    }
+    const maxAllowed = CONTENT_RATINGS.indexOf(
+      contact.local_terms.max_content_rating,
     );
+    const incoming = CONTENT_RATINGS.indexOf(envelope.content_rating);
+    if (incoming > maxAllowed) {
+      throw new ContentRatingNotPermittedError(
+        envelope.content_rating,
+        contact.local_terms.max_content_rating,
+      );
+    }
 
-    const combined = new Uint8Array(data.length + bodyBytes.length);
-    combined.set(data, 0);
-    combined.set(bodyBytes, data.length);
+    await this.messageManager.store({
+      oid: contact.owner_oid,
+      contactId: contact.id,
+      remoteDomain: contact.remote_domain,
+      messageId: envelope.message_id,
+      category: envelope.category,
+      contentRating: envelope.content_rating,
+      sentAt: envelope.sent_at,
+      receivedAt: now,
+      subject: envelope.subject,
+      body: envelope.body,
+      ...(envelope.metadata !== undefined && { metadata: envelope.metadata }),
+    });
 
-    const computedSignature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      combined,
-    );
-
-    const computedHex = encodeHex(new Uint8Array(computedSignature));
-
-    return computedHex === presentedSignature.toLowerCase();
+    return { envelopeId: envelope.message_id };
   }
 }

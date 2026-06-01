@@ -11,75 +11,55 @@ Deno.test({
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ callTool }) => {
-        await t.step(
-          "opening a window returns a new policy with policy_id and receptive_until",
-          async () => {
-            const token = await issueToken({
-              oid: "oid-listener-win-001",
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
+        const issue = () =>
+          issueToken({
+            oid: crypto.randomUUID(),
+            scope: requiredScopes.join(" "),
+            name: "User",
+          });
 
-            const before = new Date();
+        await t.step(
+          "returns policy_id + receptive_until ≈ now+duration",
+          async () => {
+            const token = await issue();
+            const before = Date.now();
             const { status, result } = await callTool<{
               policy_id: string;
-              receptive_until?: string;
+              receptive_until: string;
               mode: string;
+              domain: string;
             }>(token, "open_receptive_window", { duration_seconds: 60 });
             assertEquals(status, 200);
             assertExists(result);
             assertExists(result.policy_id);
             assertExists(result.receptive_until);
-            assertEquals(result.mode, "all");
-
-            const receptiveUntil = new Date(result.receptive_until!);
+            const until = new Date(result.receptive_until).getTime();
+            assertEquals(until > before, true);
             assertEquals(
-              receptiveUntil > before,
+              until - before > 55_000 && until - before < 70_000,
               true,
-              "receptive_until should be in the future",
-            );
-            assertEquals(
-              receptiveUntil.getTime() - before.getTime() > 55_000,
-              true,
-              "receptive_until should be approximately 60 seconds from now",
             );
           },
         );
 
-        await t.step(
-          "window scope defaults to all when not specified",
-          async () => {
-            const token = await issueToken({
-              oid: "oid-listener-win-002",
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
-
-            const { status, result } = await callTool<{ mode: string }>(
-              token,
-              "open_receptive_window",
-              {
-                duration_seconds: 30,
-              },
-            );
-            assertEquals(status, 200);
-            assertExists(result);
-            assertEquals(result.mode, "all");
-          },
-        );
+        await t.step("default scope is 'all'", async () => {
+          const token = await issue();
+          const { result } = await callTool<{ mode: string }>(
+            token,
+            "open_receptive_window",
+            { duration_seconds: 30 },
+          );
+          assertExists(result);
+          assertEquals(result.mode, "all");
+        });
 
         await t.step(
-          "window with domain_filter scope stores the filter rules",
+          "scope=domain_filter stores the supplied rules",
           async () => {
-            const token = await issueToken({
-              oid: "oid-listener-win-003",
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
-
-            const { status, result } = await callTool<{
+            const token = await issue();
+            const { result } = await callTool<{
               mode: string;
-              domain_filter?: { rules?: unknown[] };
+              domain_filter?: { rules: unknown[] };
             }>(token, "open_receptive_window", {
               duration_seconds: 60,
               scope: "domain_filter",
@@ -87,51 +67,37 @@ Deno.test({
                 rules: [{ action: "allow", pattern: "**.edu" }],
               },
             });
-            assertEquals(status, 200);
             assertExists(result);
             assertEquals(result.mode, "domain_filter");
             assertExists(result.domain_filter);
-            assertEquals(result.domain_filter.rules?.length, 1);
+            assertEquals(result.domain_filter.rules.length, 1);
           },
         );
 
-        await t.step(
-          "opening multiple windows creates multiple stacked policies",
-          async () => {
-            const token = await issueToken({
-              oid: "oid-listener-win-004",
-              roles: [],
-              scope: requiredScopes.join(" "),
-            });
+        await t.step("windows stack with existing policies", async () => {
+          const token = await issue();
+          await callTool(token, "add_receptive_policy", { mode: "all" });
+          await callTool(token, "open_receptive_window", {
+            duration_seconds: 60,
+          });
+          const { result } = await callTool<{ policies: unknown[] }>(
+            token,
+            "get_receptive_policies",
+          );
+          assertExists(result);
+          assertEquals(result.policies.length, 2);
+        });
 
-            const { result: w1 } = await callTool<{ policy_id: string }>(
-              token,
-              "open_receptive_window",
-              {
-                duration_seconds: 3600,
-              },
-            );
-            const { result: w2 } = await callTool<{ policy_id: string }>(
-              token,
-              "open_receptive_window",
-              {
-                duration_seconds: 120,
-              },
-            );
-
-            assertExists(w1);
-            assertExists(w2);
-            // Two different policy_ids.
-            assertEquals(w1.policy_id !== w2.policy_id, true);
-
-            // Both appear in the list.
-            const { result: list } = await callTool<{
-              policies: Array<{ policy_id: string }>;
-            }>(token, "get_receptive_policies");
-            assertExists(list);
-            assertEquals(list.policies.length, 2);
-          },
-        );
+        await t.step("response includes the server's domain", async () => {
+          const token = await issue();
+          const { result } = await callTool<{ domain?: string }>(
+            token,
+            "open_receptive_window",
+            { duration_seconds: 30 },
+          );
+          assertExists(result);
+          assertExists(result.domain);
+        });
       });
     });
   },

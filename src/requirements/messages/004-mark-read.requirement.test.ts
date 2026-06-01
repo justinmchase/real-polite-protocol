@@ -1,15 +1,11 @@
-// req:messages-004 — Listeners can mark messages as read.
-//
-// Tests verify idempotency, ownership enforcement, and correct bucketing of
-// message_ids into marked / already_read / not_found.
-
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
 import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
-import { seedMessage } from "../helpers/seed-message.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
 
 Deno.test({
   name: "req:messages-004 - Listeners can mark messages as read",
@@ -17,185 +13,87 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          const messageId1 = await seedMessage({
-            kv,
-            callTool,
-            baseUrl,
-            accountOid,
-            token,
+          const contact = await seedContact(kv, { ownerOid });
+          const m1 = crypto.randomUUID();
+          const m2 = crypto.randomUUID();
+          for (const id of [m1, m2]) {
+            const r = await submitMessageEnvelope({
+              credential: contact.local_credential,
+              senderDomain: contact.remote_domain,
+              messageId: id,
+              baseUrl,
+            });
+            assertEquals(r.status, 202);
+            await r.body?.cancel();
+          }
+
+          const unknownId = crypto.randomUUID();
+
+          await t.step("marks unread messages as read", async () => {
+            const { status, result } = await callTool<{
+              marked: string[];
+              already_read: string[];
+              not_found: string[];
+            }>(token, "mark_read", { message_ids: [m1, m2, unknownId] });
+            assertEquals(status, 200);
+            assertExists(result);
+            assertEquals(result.marked.sort(), [m1, m2].sort());
+            assertEquals(result.already_read, []);
+            assertEquals(result.not_found, [unknownId]);
           });
-          const messageId2 = await seedMessage({
-            kv,
-            callTool,
-            baseUrl,
-            accountOid,
-            token,
+
+          await t.step(
+            "sets read=true and read_at on the records",
+            async () => {
+              const { result } = await callTool<{
+                read: boolean;
+                read_at?: string;
+              }>(token, "get_message", { message_id: m1 });
+              assertExists(result);
+              assertEquals(result.read, true);
+              assertExists(result.read_at);
+            },
+          );
+
+          await t.step("second call reports already_read", async () => {
+            const { result } = await callTool<{
+              marked: string[];
+              already_read: string[];
+              not_found: string[];
+            }>(token, "mark_read", { message_ids: [m1, m2] });
+            assertExists(result);
+            assertEquals(result.marked, []);
+            assertEquals(result.already_read.sort(), [m1, m2].sort());
           });
 
           await t.step(
-            "mark_read transitions unread messages and returns them in marked",
+            "messages of other accounts treated as not_found",
             async () => {
-              const { result } = await callTool<{
-                marked: string[];
-                already_read: string[];
-                not_found: string[];
-              }>(token, "mark_read", {
-                message_ids: [messageId1, messageId2],
-              });
-
-              assertExists(result);
-              assertEquals(
-                result.marked.sort(),
-                [messageId1, messageId2].sort(),
-              );
-              assertEquals(result.already_read, []);
-              assertEquals(result.not_found, []);
-            },
-          );
-
-          await t.step(
-            "mark_read is idempotent: already-read messages go into already_read",
-            async () => {
-              const { result } = await callTool<{
-                marked: string[];
-                already_read: string[];
-                not_found: string[];
-              }>(token, "mark_read", {
-                message_ids: [messageId1],
-              });
-
-              assertExists(result);
-              assertEquals(result.marked, []);
-              assertEquals(result.already_read, [messageId1]);
-              assertEquals(result.not_found, []);
-            },
-          );
-
-          await t.step(
-            "read_at is set on newly-marked messages and not updated for already-read",
-            async () => {
-              const messageId3 = await seedMessage({
-                kv,
-                callTool,
-                baseUrl,
-                accountOid,
-                token,
-              });
-
-              // First call — should set read_at
-              await callTool(token, "mark_read", {
-                message_ids: [messageId3],
-              });
-              const { result: first } = await callTool<{ read_at?: string }>(
-                token,
-                "get_message",
-                { message_id: messageId3 },
-              );
-              assertExists(first?.read_at);
-              const firstReadAt = first!.read_at!;
-
-              // Wait a tick so wall-clock time could advance, then call again
-              await new Promise((r) => setTimeout(r, 5));
-
-              await callTool(token, "mark_read", {
-                message_ids: [messageId3],
-              });
-              const { result: second } = await callTool<{ read_at?: string }>(
-                token,
-                "get_message",
-                { message_id: messageId3 },
-              );
-              assertEquals(second?.read_at, firstReadAt);
-            },
-          );
-
-          await t.step(
-            "mark_read returns unknown message_id in not_found",
-            async () => {
-              const unknownId = crypto.randomUUID();
-              const { result } = await callTool<{
-                marked: string[];
-                already_read: string[];
-                not_found: string[];
-              }>(token, "mark_read", { message_ids: [unknownId] });
-
-              assertExists(result);
-              assertEquals(result.marked, []);
-              assertEquals(result.already_read, []);
-              assertEquals(result.not_found, [unknownId]);
-            },
-          );
-
-          await t.step(
-            "mark_read silently ignores messages owned by a different account",
-            async () => {
-              // Create a second account with its own message
               const otherOid = crypto.randomUUID();
               const otherToken = await issueToken({
                 oid: otherOid,
                 scope: requiredScopes.join(" "),
-                name: "Other User",
+                name: "Other",
               });
               await callTool(otherToken, "set_user_verified_metadata");
-
-              const otherMessageId = await seedMessage({
-                kv,
-                callTool,
-                baseUrl,
-                accountOid: otherOid,
-                token: otherToken,
-              });
-
-              // Caller tries to mark the other account's message
               const { result } = await callTool<{
                 marked: string[];
                 already_read: string[];
                 not_found: string[];
-              }>(token, "mark_read", { message_ids: [otherMessageId] });
-
+              }>(otherToken, "mark_read", { message_ids: [m1] });
               assertExists(result);
-              // Must be in not_found, never in marked or already_read
               assertEquals(result.marked, []);
               assertEquals(result.already_read, []);
-              assertEquals(result.not_found, [otherMessageId]);
-            },
-          );
-
-          await t.step(
-            "mark_read handles mixed owned/unowned/unknown in one call",
-            async () => {
-              const messageId4 = await seedMessage({
-                kv,
-                callTool,
-                baseUrl,
-                accountOid,
-                token,
-              });
-              const unknownId = crypto.randomUUID();
-
-              const { result } = await callTool<{
-                marked: string[];
-                already_read: string[];
-                not_found: string[];
-              }>(token, "mark_read", {
-                // messageId1 is already read, messageId4 is unread, unknownId doesn't exist
-                message_ids: [messageId1, messageId4, unknownId],
-              });
-
-              assertExists(result);
-              assertEquals(result.marked, [messageId4]);
-              assertEquals(result.already_read, [messageId1]);
-              assertEquals(result.not_found, [unknownId]);
+              assertEquals(result.not_found, [m1]);
             },
           );
         } finally {

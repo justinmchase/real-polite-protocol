@@ -1,13 +1,17 @@
 // req:submit-005 — Envelope delivery bypasses outbound HTTP for same-domain recipients.
 //
-// Each tool that delivers an envelope (send_invitation, invite_contact,
-// send_message) must detect when the target domain equals the local server
-// domain and call the local handler directly, avoiding a 508 Loop Detected
-// error from Deno Deploy's self-loop detection.
+// When a tool delivers an envelope to the local domain itself, the server MUST
+// invoke the local handler directly rather than calling
+// POST /rpp/v1/envelopes on its own hostname (which Deno Deploy would refuse
+// with HTTP 508 Loop Detected).
 //
-// send_invitation and send_message same-domain bypasses are tested in their
-// own requirement test files (invitations/005, messages/001). This file tests
-// the invite_contact same-domain bypass.
+// This file exercises the three same-domain paths:
+//   - send_invitation (outbound invitation)
+//   - accept_invitation (outbound invitation_reply)
+//   - send_message (outbound message)
+//
+// Same-domain is asserted by the fact that each tool succeeds against a target
+// domain == the local test server's domain, with no remote stub registered.
 
 import { assertEquals, assertExists } from "@std/assert";
 import { withStartedServer } from "../helpers/with-started-server.ts";
@@ -15,6 +19,8 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedInboundInvitation } from "../helpers/seed-inbound-invitation.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
 
 Deno.test({
   name:
@@ -23,142 +29,214 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, port, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
-          const token = await issueToken({
-            oid: accountOid,
+          const localDomain = `localhost:${port}`;
+          const userOid = crypto.randomUUID();
+          const userToken = await issueToken({
+            oid: userOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
-
-          await callTool(token, "set_user_verified_metadata");
-
-          // The test server is both sender and receiver.
-          // Seed an invitation from localhost so accept_invitation creates a
-          // contact with domain = "localhost:{port}".
-          const receiverDomain = `localhost:${port}`;
-          const invId = crypto.randomUUID();
-          await kv.set(["invitations", invId], {
-            invitation_id: invId,
-            receiver_oid: accountOid,
-            sender_domain: receiverDomain,
-            status: "pending",
-            proposed_terms: { category: "billing" },
-            claims: { immutable: { domain_id: crypto.randomUUID() } },
-            created_at: new Date().toISOString(),
-          });
-          await callTool(token, "accept_invitation", { invitation_id: invId });
-
-          // Resolve the contact that was created by acceptance.
-          const { result: list } = await callTool<{
-            contacts: Array<{ id: string }>;
-          }>(token, "list_contacts", {});
-          assertExists(list);
-          const contactId = list!.contacts[0]?.id;
-          assertExists(contactId);
-
-          // Open a receptive window so invite_contact has a policy to target.
-          const { result: window } = await callTool<{ policy_id: string }>(
-            token,
-            "open_receptive_window",
-            { duration_seconds: 300 },
-          );
-          assertExists(window);
-          const policyId = window!.policy_id;
+          await callTool(userToken, "set_user_verified_metadata");
 
           await t.step(
-            "invite_contact same-domain delivery stores invitation without outbound HTTP",
+            "send_invitation to local domain succeeds (no self-loop)",
             async () => {
-              const { status, result } = await callTool<{
-                invitation_id?: string;
-                created_at?: string;
-              }>(token, "invite_contact", {
-                contact_id: contactId,
-                receptive_policy_id: policyId,
-                proposed_terms: { category: "billing" },
+              // Open a receptive window so there is a policy id to target.
+              const peerOid = crypto.randomUUID();
+              const peerToken = await issueToken({
+                oid: peerOid,
+                scope: requiredScopes.join(" "),
+                name: "Peer",
               });
+              await callTool(peerToken, "set_user_verified_metadata");
+              const { result: window } = await callTool<
+                { policy_id: string }
+              >(peerToken, "open_receptive_window", {
+                duration_seconds: 300,
+              });
+              assertExists(window);
 
+              const { status, result } = await callTool<
+                { invitation_id: string; created_at: string }
+              >(userToken, "send_invitation", {
+                receiver_domain: localDomain,
+                receptive_policy_id: window!.policy_id,
+                communication_terms: {
+                  categories: ["correspondence"],
+                  max_content_rating: "PG",
+                },
+              });
               assertEquals(status, 200);
               assertExists(result?.invitation_id);
               assertExists(result?.created_at);
 
-              // The invitation must be stored locally with a delivery block.
-              const stored = await kv.get([
-                "invitations",
-                result!.invitation_id!,
+              // Both the outbound (sender's view) and the inbound (receiver's
+              // view) sides MUST exist in KV after the same-domain bypass.
+              const outbound = await kv.get([
+                "invitations_by_owner",
+                userOid,
+                "outbound",
+                result!.invitation_id,
               ]);
-              assertExists(stored.value);
-              const inv = stored.value as Record<string, unknown>;
-              assertEquals(inv.status, "pending");
-
-              // delivery block must be present for receipt callbacks.
-              const delivery = inv.delivery as
-                | Record<string, unknown>
-                | undefined;
-              assertExists(delivery);
-              assertExists(delivery.token);
+              assertExists(outbound.value);
+              const inbound = await kv.get([
+                "invitations_by_owner",
+                peerOid,
+                "inbound",
+                result!.invitation_id,
+              ]);
+              assertExists(inbound.value);
             },
           );
 
           await t.step(
-            "accept_invitation same-domain records receipt summary on the sender's view of the invitation",
+            "accept_invitation against a same-domain inbound invitation succeeds (no self-loop on reply)",
             async () => {
-              // Provision a second account (BEAU = the sender) and have BEAU
-              // send an invitation to the original test account (USER) on the
-              // same local domain. After USER accepts, BEAU's review_invitation
-              // must surface the issued receipt summary (Section 9.7.3 step 5,
-              // adapted for same-domain delivery).
-              const beauOid = crypto.randomUUID();
-              const beauToken = await issueToken({
-                oid: beauOid,
+              // Seed an outbound invitation owned by USER addressed at PEER
+              // (so the same-domain accept reply has somewhere to land).
+              const peer2Oid = crypto.randomUUID();
+              const peer2Token = await issueToken({
+                oid: peer2Oid,
                 scope: requiredScopes.join(" "),
-                name: "Beau",
+                name: "Peer2",
               });
-              await callTool(beauToken, "set_user_verified_metadata");
+              await callTool(peer2Token, "set_user_verified_metadata");
 
-              // USER opens a fresh receptive window for BEAU to target.
-              const { result: userWindow } = await callTool<
-                { policy_id: string }
-              >(token, "open_receptive_window", { duration_seconds: 300 });
-              assertExists(userWindow);
+              // Seed an inbound invitation directly into PEER2's KV so PEER2
+              // can accept_invitation. The invitation must reference an
+              // outbound side owned by USER (with a known reply_credential) so
+              // the same-domain reply path can complete locally.
+              const invitationId = crypto.randomUUID();
+              const replyCred = {
+                contact_id: crypto.randomUUID(),
+                contact_secret: "s".repeat(32),
+              };
+              // Outbound side, owned by USER.
+              const localDomainId = crypto.randomUUID();
+              await kv.atomic()
+                .set(["invitations", userOid, invitationId], {
+                  invitation_id: invitationId,
+                  direction: "outbound",
+                  owner_oid: userOid,
+                  remote_domain: localDomain,
+                  status: "pending",
+                  communication_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                  reply_credential: replyCred,
+                  claims: { immutable: { domain_id: localDomainId } },
+                  sent_at: new Date(),
+                  created_at: new Date(),
+                })
+                .set(
+                  [
+                    "invitations_by_owner",
+                    userOid,
+                    "outbound",
+                    invitationId,
+                  ],
+                  invitationId,
+                )
+                .set(
+                  ["invitations_by_id", invitationId, "outbound"],
+                  userOid,
+                )
+                .commit();
 
-              // BEAU sends an invitation to USER on the same domain.
-              const { result: sent } = await callTool<{
-                invitation_id?: string;
-              }>(beauToken, "send_invitation", {
-                receiver_domain: receiverDomain,
-                receptive_policy_id: userWindow!.policy_id,
-                proposed_terms: { category: "billing" },
+              // Inbound side, owned by PEER2.
+              await seedInboundInvitation(kv, {
+                ownerOid: peer2Oid,
+                invitationId,
+                remoteDomain: localDomain,
+                replyCredential: replyCred,
               });
-              assertExists(sent?.invitation_id);
-              const beauInvId = sent!.invitation_id!;
 
-              // USER accepts.
-              const { result: acceptResult } = await callTool<{
-                receipt?: { id: string };
-              }>(token, "accept_invitation", {
-                invitation_id: beauInvId,
-                reason: "Looking forward to it",
-              });
-              assertExists(acceptResult?.receipt?.id);
-              const issuedReceiptId = acceptResult!.receipt!.id;
+              const { status } = await callTool(
+                peer2Token,
+                "accept_invitation",
+                {
+                  invitation_id: invitationId,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                },
+              );
+              assertEquals(status, 200);
 
-              // BEAU reviews the invitation and must see the acceptance state
-              // plus a receipt summary referencing the same receipt id.
-              const { result: review } = await callTool<{
-                status?: string;
-                receipt?: { id?: string; category?: string };
-                decision_reason?: string;
-              }>(beauToken, "review_invitation", {
-                invitation_id: beauInvId,
+              // USER's outbound invitation should now be `accepted` (the
+              // local-path reply handler ran the same transition the inbound
+              // HTTP path would have).
+              const outbound = await kv.get([
+                "invitations",
+                userOid,
+                invitationId,
+              ]);
+              assertExists(outbound.value);
+              assertEquals(
+                (outbound.value as { status: string }).status,
+                "accepted",
+              );
+            },
+          );
+
+          await t.step(
+            "send_message to a contact whose remote_domain == local domain succeeds (no self-loop)",
+            async () => {
+              // For same-domain delivery we must seed BOTH halves of the
+              // bilateral contact relationship — USER's view of PEER (used
+              // for outbound signing) AND PEER's view of USER (used by the
+              // inbound handler to route the message).
+              const peerSendOid = crypto.randomUUID();
+              const peerSendToken = await issueToken({
+                oid: peerSendOid,
+                scope: requiredScopes.join(" "),
+                name: "PeerSend",
               });
-              assertExists(review);
-              assertEquals(review!.status, "accepted");
-              assertExists(review!.receipt);
-              assertEquals(review!.receipt!.id, issuedReceiptId);
-              assertEquals(review!.receipt!.category, "billing");
-              assertEquals(review!.decision_reason, "Looking forward to it");
+              await callTool(peerSendToken, "set_user_verified_metadata");
+
+              // Credentials, in PEER's frame of reference:
+              //   - peerLocalCred: PEER issued to USER. USER uses to send
+              //     outbound. PEER uses to verify inbound.
+              //   - peerRemoteCred: USER issued to PEER.
+              const peerLocalCred = {
+                contact_id: crypto.randomUUID(),
+                contact_secret: "p".repeat(32),
+              };
+              const peerRemoteCred = {
+                contact_id: crypto.randomUUID(),
+                contact_secret: "u".repeat(32),
+              };
+
+              // USER's contact for PEER.
+              const userContact = await seedContact(kv, {
+                ownerOid: userOid,
+                remoteDomain: localDomain,
+                localCredential: peerRemoteCred,
+                remoteCredential: peerLocalCred,
+              });
+
+              // PEER's contact for USER (mirror image).
+              await seedContact(kv, {
+                ownerOid: peerSendOid,
+                remoteDomain: localDomain,
+                localCredential: peerLocalCred,
+                remoteCredential: peerRemoteCred,
+              });
+
+              const { status, result } = await callTool<
+                { message_id: string; accepted: boolean }
+              >(userToken, "send_message", {
+                contact_id: userContact.id,
+                category: "correspondence",
+                content_rating: "G",
+                body: { content_type: "text/markdown", content: "hi" },
+              });
+              assertEquals(status, 200);
+              assertExists(result?.message_id);
+              assertEquals(result!.accepted, true);
             },
           );
         } finally {

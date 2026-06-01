@@ -4,70 +4,91 @@ import {
   type IContext,
   type IState,
 } from "@justinmchase/grove";
-import { encodeHex } from "@std/encoding/hex";
-import type { KvService } from "../../services/kv/kv.service.ts";
+import { z } from "zod";
 import type {
   ContactManager,
   InvitationManager,
   MessageManager,
-  ReceiptManager,
   ReceptivePolicyManager,
 } from "../../managers/mod.ts";
+import type { KvService } from "../../services/kv/kv.service.ts";
+import { verifyEnvelopeHmac } from "./envelope-hmac.ts";
 import {
-  InvitationNotFoundError,
-} from "../../managers/invitation/invitation.error.ts";
+  InvitationEnvelopeHandler,
+  InvitationReplyEnvelopeHandler,
+  type MessageEnvelope,
+  MessageEnvelopeHandler,
+  MessageEnvelopeSchema,
+} from "./message-handler.ts";
 import {
-  DeliveryTokenInvalidError,
-  DuplicateMessageError,
+  DuplicateEnvelopeError,
+  EnvelopeTooLargeError,
   InvalidAuthHeadersError,
   InvalidBodyError,
   InvalidContentTypeError,
+  InvalidInvitationEnvelopeError,
   InvalidMessageEnvelopeError,
-  InvalidReceiptEnvelopeError,
   InvalidRequestBodyError,
-  MessageTooLargeError,
-  MissingReceiptIdError,
+  MissingContactIdError,
+  MissingReceptivePolicyIdError,
   MissingSignatureError,
   MissingTimestampError,
-  ReceiptInvalidSignatureError,
-  ReceiptNotFoundError,
   RequestStaleError,
+  SignatureInvalidError,
+  SubmitContactNotFoundError,
 } from "./submit.error.ts";
-import {
-  type InvitationEnvelope,
-  InvitationMessageHandler,
-  type ReceiptCallbackEnvelope,
-  ReceiptCallbackEnvelopeSchema,
-  ReceiptCallbackHandler,
-  ReceiptMessageHandler,
-  SubmitMessageEnvelopeSchema,
-} from "./message-handler.ts";
 
-const MAX_SIZE = 262144; // 256 KB
+import {
+  InvitationEnvelopeSchema,
+  InvitationReplyEnvelopeSchema,
+} from "../../models/invitation/invitation.model.ts";
+import { MESSAGE_CATEGORIES } from "../../models/message-category.ts";
+
+const MAX_ENVELOPE_SIZE = 262144; // 256 KB (spec §8.1.1)
 const ALLOWED_CONTENT_TYPES = new Set(["text/markdown", "application/json"]);
+const FRESHNESS_WINDOW_SECONDS = 60;
+const DEDUP_TTL_MS = 65_000;
+
+/**
+ * Coarse envelope category used for dedup keys, identity-header rules, and
+ * schema dispatch. Note: the message envelope's fine-grained `category`
+ * (`correspondence`, `marketing`, the wedding-`invitation` message category,
+ * etc.) all collapse to `"message"` here. We cannot use a single zod
+ * discriminated union on the wire `category` field because the message
+ * category enum legitimately contains the value `"invitation"`, which would
+ * collide with the invitation envelope's literal `"invitation"`.
+ */
+type EnvelopeCategory = "invitation" | "invitation_reply" | "message";
+
+const KNOWN_MESSAGE_CATEGORIES: ReadonlySet<string> = new Set(
+  MESSAGE_CATEGORIES,
+);
 
 export class SubmitController extends Controller {
-  private readonly invitationHandler: InvitationMessageHandler;
-  private readonly messageHandler: ReceiptMessageHandler;
-  private readonly callbackHandler: ReceiptCallbackHandler;
+  private readonly invitationHandler: InvitationEnvelopeHandler;
+  private readonly invitationReplyHandler: InvitationReplyEnvelopeHandler;
+  private readonly messageHandler: MessageEnvelopeHandler;
 
   constructor(
     private readonly kv: KvService,
-    invitationManager: InvitationManager,
+    private readonly invitationManager: InvitationManager,
     receptivePolicyManager: ReceptivePolicyManager,
-    receiptManager: ReceiptManager,
+    private readonly contactManager: ContactManager,
     messageManager: MessageManager,
-    contactManager?: ContactManager,
   ) {
     super();
-    this.invitationHandler = new InvitationMessageHandler(
-      kv,
+    this.invitationHandler = new InvitationEnvelopeHandler(
       invitationManager,
       receptivePolicyManager,
-      receiptManager,
     );
-    this.messageHandler = new ReceiptMessageHandler(kv, messageManager);
-    this.callbackHandler = new ReceiptCallbackHandler(kv, contactManager);
+    this.invitationReplyHandler = new InvitationReplyEnvelopeHandler(
+      invitationManager,
+      contactManager,
+    );
+    this.messageHandler = new MessageEnvelopeHandler(
+      messageManager,
+      contactManager,
+    );
   }
 
   // deno-lint-ignore require-await
@@ -75,203 +96,144 @@ export class SubmitController extends Controller {
     app: GroveApp<TContext, TState>,
   ): Promise<void> {
     app.post("/rpp/v1/envelopes", async (ctx) => {
-      const rawBuffer = await ctx.req.arrayBuffer();
-      const bodyBytes = new Uint8Array(rawBuffer);
+      const now = new Date();
+      const bodyBytes = new Uint8Array(await ctx.req.arrayBuffer());
 
-      // 1. Size check
-      if (bodyBytes.length > MAX_SIZE) {
-        throw new MessageTooLargeError(bodyBytes.length, MAX_SIZE);
+      if (bodyBytes.length > MAX_ENVELOPE_SIZE) {
+        throw new EnvelopeTooLargeError(bodyBytes.length, MAX_ENVELOPE_SIZE);
       }
 
-      // 2. Parse JSON
       let bodyJson: unknown;
       try {
         bodyJson = JSON.parse(new TextDecoder().decode(bodyBytes));
       } catch {
-        throw new InvalidRequestBodyError("Failed to parse JSON");
+        throw new InvalidRequestBodyError("failed to parse JSON");
       }
 
-      // 3. Exclusive identity headers
-      const receiptIdHeader = ctx.req.header("x-rpp-receipt-id");
-      const invitationIdHeader = ctx.req.header("x-rpp-invitation-id");
-      if (receiptIdHeader && invitationIdHeader) {
-        throw new InvalidAuthHeadersError();
-      }
+      const category = classifyEnvelope(bodyJson);
 
-      const signature = ctx.req.header("x-rpp-signature");
-      const timestamp = ctx.req.header("x-rpp-timestamp");
+      // Parse identity headers (exactly one required, must match category).
+      const contactIdHeader = ctx.req.header("x-rpp-contact-id");
+      const policyIdHeader = ctx.req.header("x-rpp-receptive-policy-id");
+      const shortcodeHeader = ctx.req.header("x-rpp-shortcode");
 
-      // 4. Route by category
-      const raw = bodyJson as Record<string, unknown>;
-      const category = raw?.category;
+      assertSingleIdentityHeader(
+        category,
+        contactIdHeader,
+        policyIdHeader,
+        shortcodeHeader,
+      );
 
-      if (category === "receipt") {
-        // --- Receipt callback path ---
-        const parsed = ReceiptCallbackEnvelopeSchema.safeParse(bodyJson);
-        if (!parsed.success) {
-          const issue = parsed.error.issues[0];
-          throw new InvalidReceiptEnvelopeError(
-            issue?.message ?? "invalid receipt envelope",
+      const signatureHeader = ctx.req.header("x-rpp-signature");
+      const timestampHeader = ctx.req.header("x-rpp-timestamp");
+
+      switch (category) {
+        case "invitation": {
+          const envelope = parseInvitation(bodyJson);
+          await this.assertNotDuplicate(
+            category,
+            envelope.sender_domain,
+            envelope.invitation_id,
           );
-        }
-
-        const envelope = parsed.data as ReceiptCallbackEnvelope;
-
-        // Auth: verify HMAC using delivery token stored with invitation
-        if (!signature) throw new MissingSignatureError();
-        if (!timestamp) throw new MissingTimestampError();
-
-        const requestTime = new Date(timestamp).getTime();
-        if (isNaN(requestTime)) throw new MissingTimestampError();
-        const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
-        if (diffSeconds > 60) {
-          throw new RequestStaleError(Math.round(diffSeconds));
-        }
-
-        const invEntry = await this.kv.store.get(
-          ["invitations", envelope.invitation_id],
-        );
-        if (!invEntry.value) {
-          throw new InvitationNotFoundError(envelope.invitation_id);
-        }
-
-        const inv = invEntry.value as {
-          delivery?: { token: string };
-          status?: string;
-        };
-        const deliveryToken = inv.delivery?.token;
-        if (!deliveryToken) {
-          throw new DeliveryTokenInvalidError();
-        }
-
-        const isValid = await this.verifyHmac(
-          deliveryToken,
-          timestamp,
-          bodyBytes,
-          signature,
-        );
-        if (!isValid) {
-          throw new DeliveryTokenInvalidError();
-        }
-
-        // Dispatch (also checks pending state)
-        const result = await this.callbackHandler.handle(envelope);
-        return ctx.json(
-          { ok: true, accepted: true, invitation_id: result.messageId },
-          202,
-        );
-      } else {
-        // --- Invitation / message path ---
-        const parsed = SubmitMessageEnvelopeSchema.safeParse(bodyJson);
-        if (!parsed.success) {
-          const issue = parsed.error.issues[0];
-          const path = issue?.path?.length ? issue.path.join(".") : "body";
-          throw new InvalidMessageEnvelopeError(
-            `${path}: ${issue?.message ?? "invalid payload"}`,
-          );
-        }
-
-        const envelope = parsed.data;
-
-        // Content-type check for message category
-        if (envelope.category === "message") {
-          const ct = envelope.message.body.content_type;
-          if (!ALLOWED_CONTENT_TYPES.has(ct)) {
-            throw new InvalidContentTypeError(ct);
-          }
-        }
-
-        // JSON well-formedness check for application/json message content
-        if (
-          envelope.category === "message" &&
-          envelope.message.body.content_type === "application/json"
-        ) {
-          try {
-            JSON.parse(envelope.message.body.content);
-          } catch {
-            throw new InvalidBodyError(
-              "message body content is not valid JSON",
+          // Authentication: receptive_policy_id (or shortcode) is the bearer
+          // credential (spec §6.1). No HMAC required, but the identity
+          // provided in the header MUST match the policy targeted by the
+          // envelope.
+          const envelopePolicy = envelope.receptive_policy_id;
+          if (
+            envelopePolicy && policyIdHeader &&
+            policyIdHeader !== envelopePolicy
+          ) {
+            throw new InvalidAuthHeadersError(
+              "x-rpp-receptive-policy-id does not match invitation.receptive_policy_id",
             );
           }
-        }
-
-        // Auth per category
-        if (envelope.category === "message") {
-          // x-rpp-invitation-id on a message envelope is a header-kind mismatch
-          if (invitationIdHeader) throw new InvalidAuthHeadersError();
-          if (!receiptIdHeader) throw new MissingReceiptIdError();
-          if (!signature) throw new MissingSignatureError();
-          if (!timestamp) throw new MissingTimestampError();
-
-          const requestTime = new Date(timestamp).getTime();
-          if (isNaN(requestTime)) throw new MissingTimestampError();
-          const diffSeconds = Math.abs(Date.now() - requestTime) / 1000;
-          if (diffSeconds > 60) {
-            throw new RequestStaleError(Math.round(diffSeconds));
+          if (
+            shortcodeHeader && envelope.shortcode &&
+            shortcodeHeader !== envelope.shortcode
+          ) {
+            throw new InvalidAuthHeadersError(
+              "x-rpp-shortcode does not match invitation.shortcode",
+            );
           }
-
-          const receiptEntry = await this.kv.store.get(
-            ["receipts", receiptIdHeader],
-          );
-          if (!receiptEntry.value) {
-            throw new ReceiptNotFoundError(receiptIdHeader);
+          if (!envelope.receptive_policy_id && !envelope.shortcode) {
+            throw new MissingReceptivePolicyIdError();
           }
-
-          const receipt = receiptEntry.value as { secret: string };
-          const isValid = await this.verifyHmac(
-            receipt.secret,
-            timestamp,
-            bodyBytes,
-            signature,
-          );
-          if (!isValid) throw new ReceiptInvalidSignatureError();
-        } else if (envelope.category === "invitation") {
-          // Invitation envelopes (both policy-based and receipt-based) require
-          // no additional HMAC auth at the transport layer. The InvitationMessageHandler
-          // validates the receipt status and policy for receipt-based invitations.
-        }
-
-        // Dedup
-        if (envelope.category === "message") {
-          const dedupKey = [
-            "dedup",
-            envelope.sender_domain,
-            envelope.message_id,
-          ];
-          const existing = await this.kv.store.get(dedupKey);
-          if (existing.value !== null) {
-            throw new DuplicateMessageError(envelope.message_id);
-          }
-          await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
-        } else if (envelope.category === "invitation") {
-          const inv = envelope as InvitationEnvelope;
-          const invId = inv.invitation.invitation_id;
-          const dedupKey = ["dedup", envelope.sender_domain, invId];
-          const existing = await this.kv.store.get(dedupKey);
-          if (existing.value !== null) {
-            throw new DuplicateMessageError(invId);
-          }
-          await this.kv.store.set(dedupKey, true, { expireIn: 65_000 });
-        }
-
-        // Dispatch
-        const context = {
-          bodyBytes,
-          receiptId: receiptIdHeader ?? undefined,
-          signature: signature ?? undefined,
-          timestamp: timestamp ?? undefined,
-        };
-
-        if (envelope.category === "invitation") {
-          const result = await this.invitationHandler.handle(envelope, context);
+          const result = await this.invitationHandler.handle(envelope, now);
           return ctx.json(
-            { ok: true, accepted: true, invitation_id: result.messageId },
+            { ok: true, accepted: true, envelope_id: result.envelopeId },
             202,
           );
-        } else {
-          const result = await this.messageHandler.handle(envelope, context);
+        }
+
+        case "invitation_reply": {
+          const envelope = parseInvitationReply(bodyJson);
+          await this.assertNotDuplicate(
+            category,
+            envelope.sender_domain,
+            envelope.invitation_id,
+          );
+
+          const timestamp = requireFreshTimestamp(timestampHeader, now);
+          if (!signatureHeader) throw new MissingSignatureError();
+          const contactId = contactIdHeader!;
+
+          // Resolve HMAC key from the outbound invitation's reply_credential.
+          const auth = await this.invitationReplyHandler.resolveAuth(
+            envelope.invitation_id,
+            contactId,
+          );
+          const valid = await verifyEnvelopeHmac(
+            auth.contactSecret,
+            timestamp,
+            bodyBytes,
+            signatureHeader,
+          );
+          if (!valid) throw new SignatureInvalidError();
+
+          const result = await this.invitationReplyHandler.handle(
+            envelope,
+            now,
+          );
           return ctx.json(
-            { ok: true, accepted: true, message_id: result.messageId },
+            { ok: true, accepted: true, envelope_id: result.envelopeId },
+            202,
+          );
+        }
+
+        case "message": {
+          const envelope = parseMessage(bodyJson);
+          enforceMessageBody(envelope);
+          await this.assertNotDuplicate(
+            category,
+            envelope.sender_domain,
+            envelope.message_id,
+          );
+
+          const timestamp = requireFreshTimestamp(timestampHeader, now);
+          if (!signatureHeader) throw new MissingSignatureError();
+          const contactId = contactIdHeader!;
+
+          const contact = await this.contactManager.getByLocalCredentialId(
+            contactId,
+          );
+          if (!contact) throw new SubmitContactNotFoundError(contactId);
+
+          const valid = await verifyEnvelopeHmac(
+            contact.local_credential.contact_secret,
+            timestamp,
+            bodyBytes,
+            signatureHeader,
+          );
+          if (!valid) throw new SignatureInvalidError();
+
+          const result = await this.messageHandler.handle(
+            envelope,
+            contactId,
+            now,
+          );
+          return ctx.json(
+            { ok: true, accepted: true, envelope_id: result.envelopeId },
             202,
           );
         }
@@ -279,34 +241,140 @@ export class SubmitController extends Controller {
     });
   }
 
-  private async verifyHmac(
-    secret: string,
-    timestamp: string,
-    bodyBytes: Uint8Array,
-    presentedSignature: string,
-  ): Promise<boolean> {
-    const key = new TextEncoder().encode(secret);
-    const data = new TextEncoder().encode(`${timestamp}.`);
+  /**
+   * Dedup envelopes by `(category, sender_domain, envelope_id)` for 60s (spec
+   * §6.1.1). Records the key on first sight; on duplicate raises
+   * `E_DUPLICATE_ENVELOPE`. `category` is included so that an invitation and
+   * its subsequent invitation_reply (which share `invitation_id`, and in
+   * same-domain delivery also share `sender_domain`) do not collide.
+   */
+  private async assertNotDuplicate(
+    category: EnvelopeCategory,
+    senderDomain: string,
+    envelopeId: string,
+  ): Promise<void> {
+    const key: Deno.KvKey = [
+      "dedup",
+      category,
+      senderDomain.toLowerCase(),
+      envelopeId,
+    ];
+    const existing = await this.kv.store.get(key);
+    if (existing.value !== null) {
+      throw new DuplicateEnvelopeError(envelopeId);
+    }
+    await this.kv.store.set(key, true, { expireIn: DEDUP_TTL_MS });
+  }
+}
 
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      key,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
+// ---------- Helpers ----------
+
+/**
+ * Determine which envelope schema applies based on the wire `category` field.
+ * Rejects any category that is not one of the known invitation/reply literals
+ * or a registered message category.
+ */
+function classifyEnvelope(body: unknown): EnvelopeCategory {
+  if (typeof body !== "object" || body === null) {
+    throw new InvalidRequestBodyError("envelope must be a JSON object");
+  }
+  const category = (body as Record<string, unknown>)["category"];
+  if (category === "invitation") return "invitation";
+  if (category === "invitation_reply") return "invitation_reply";
+  if (typeof category === "string" && KNOWN_MESSAGE_CATEGORIES.has(category)) {
+    return "message";
+  }
+  if (typeof category === "string") {
+    throw new InvalidMessageEnvelopeError(
+      `unknown envelope category: ${category}`,
     );
+  }
+  throw new InvalidMessageEnvelopeError("envelope missing category");
+}
 
-    const combined = new Uint8Array(data.length + bodyBytes.length);
-    combined.set(data, 0);
-    combined.set(bodyBytes, data.length);
-
-    const computedSignature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      combined,
+function assertSingleIdentityHeader(
+  category: EnvelopeCategory,
+  contactId: string | undefined,
+  policyId: string | undefined,
+  shortcode: string | undefined,
+): void {
+  const identityCount = (contactId ? 1 : 0) + (policyId ? 1 : 0) +
+    (shortcode ? 1 : 0);
+  if (identityCount > 1) {
+    throw new InvalidAuthHeadersError(
+      "multiple identity headers were provided; only one of x-rpp-contact-id, x-rpp-receptive-policy-id, or x-rpp-shortcode is permitted per request",
     );
+  }
+  if (category === "invitation") {
+    if (!policyId && !shortcode) {
+      throw new InvalidAuthHeadersError(
+        "x-rpp-receptive-policy-id or x-rpp-shortcode is required for invitation envelopes",
+      );
+    }
+  } else {
+    if (!contactId) throw new MissingContactIdError();
+  }
+}
 
-    const computedHex = encodeHex(new Uint8Array(computedSignature));
-    return computedHex === presentedSignature.toLowerCase();
+function requireFreshTimestamp(
+  timestamp: string | undefined,
+  now: Date,
+): string {
+  if (!timestamp) throw new MissingTimestampError();
+  const t = new Date(timestamp).getTime();
+  if (isNaN(t)) throw new MissingTimestampError();
+  const diff = Math.abs(now.getTime() - t) / 1000;
+  if (diff > FRESHNESS_WINDOW_SECONDS) {
+    throw new RequestStaleError(Math.round(diff));
+  }
+  return timestamp;
+}
+
+function parseInvitation(
+  body: unknown,
+): z.infer<typeof InvitationEnvelopeSchema> {
+  const parsed = InvitationEnvelopeSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new InvalidInvitationEnvelopeError(firstIssueMessage(parsed.error));
+  }
+  return parsed.data;
+}
+
+function parseInvitationReply(
+  body: unknown,
+): z.infer<typeof InvitationReplyEnvelopeSchema> {
+  const parsed = InvitationReplyEnvelopeSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new InvalidInvitationEnvelopeError(firstIssueMessage(parsed.error));
+  }
+  return parsed.data;
+}
+
+function parseMessage(body: unknown): MessageEnvelope {
+  const parsed = MessageEnvelopeSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new InvalidMessageEnvelopeError(firstIssueMessage(parsed.error));
+  }
+  return parsed.data;
+}
+
+function firstIssueMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "invalid payload";
+  const path = issue.path.length ? issue.path.join(".") : "body";
+  return `${path}: ${issue.message}`;
+}
+
+function enforceMessageBody(envelope: MessageEnvelope): void {
+  const ct = envelope.body.content_type;
+  if (!ALLOWED_CONTENT_TYPES.has(ct)) {
+    throw new InvalidContentTypeError(ct);
+  }
+  if (ct === "application/json") {
+    try {
+      JSON.parse(envelope.body.content);
+    } catch {
+      throw new InvalidBodyError("message body content is not valid JSON");
+    }
   }
 }

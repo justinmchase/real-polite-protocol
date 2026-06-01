@@ -4,142 +4,136 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
+import { seedInboundInvitation } from "../helpers/seed-inbound-invitation.ts";
+import { withRemoteServer } from "../helpers/with-remote-server.ts";
 
 Deno.test({
-  name: "req:contacts-002 - Contact field accumulation from invitation claims",
+  name: "req:contacts-002 - Contact field accumulation from envelope claims",
   fn: async (t) => {
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
-            name: "Test User",
+            name: "User",
           });
           await callTool(token, "set_user_verified_metadata");
 
-          const senderDomainId = crypto.randomUUID();
-
-          const inv1Id = crypto.randomUUID();
-          await kv.set(["invitations", inv1Id], {
-            invitation_id: inv1Id,
-            receiver_oid: accountOid,
-            sender_domain: "sender.example",
-            status: "pending",
-            proposed_terms: { category: "billing" },
-            claims: {
-              immutable: { domain_id: senderDomainId },
-              user: { name: "Alice" },
-              custom: { note: "first contact" },
-            },
-            created_at: new Date().toISOString(),
-          });
-
-          await callTool(token, "accept_invitation", { invitation_id: inv1Id });
-
-          let contactId: string | undefined;
-
           await t.step(
-            "fields from user and custom claim namespaces are stored on the contact",
+            "user/admin/custom claims are merged into contact.fields with the matching sources",
             async () => {
-              const { result } = await callTool<{
-                contacts: Array<{
-                  id: string;
+              await withRemoteServer(async (remoteDomain) => {
+                const senderDomainId = crypto.randomUUID();
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain,
+                  remoteDomainId: senderDomainId,
+                  claims: {
+                    immutable: { domain_id: senderDomainId },
+                    user: { name: "Alice", email: "alice@x" },
+                    admin: { dept: "Eng" },
+                    custom: { note: "hi" },
+                  },
+                });
+                const { result } = await callTool<{
+                  contact_id: string;
+                }>(token, "accept_invitation", {
+                  invitation_id: inv.invitation_id,
+                  local_terms: {
+                    categories: ["correspondence"],
+                    max_content_rating: "PG",
+                  },
+                });
+                assertExists(result);
+                const { result: contactResult } = await callTool<{
+                  fields: Record<
+                    string,
+                    Array<{ value: unknown; source: string }>
+                  >;
                   current_fields: Record<
                     string,
                     { value: unknown; source: string }
                   >;
-                }>;
-              }>(token, "list_contacts", {});
-              assertExists(result);
-              assertEquals(result.contacts.length, 1);
-              const contact = result.contacts[0];
-              contactId = contact.id;
-              assertExists(contact.current_fields.name);
-              assertEquals(contact.current_fields.name.value, "Alice");
-              assertEquals(
-                contact.current_fields.name.source,
-                "sender_verified",
-              );
-              assertExists(contact.current_fields.note);
-              assertEquals(
-                contact.current_fields.note.value,
-                "first contact",
-              );
-              assertEquals(contact.current_fields.note.source, "sender_custom");
-            },
-          );
-
-          await t.step(
-            "get_contact returns full field history per key",
-            async () => {
-              assertExists(contactId);
-              const { result } = await callTool<{
-                fields: Record<
-                  string,
-                  Array<{ value: unknown; source: string; recorded_at: string }>
-                >;
-              }>(token, "get_contact", { contact_id: contactId });
-              assertExists(result);
-              assertExists(result.fields.name);
-              assertEquals(result.fields.name.length, 1);
-              assertEquals(result.fields.name[0].value, "Alice");
-              assertEquals(result.fields.name[0].source, "sender_verified");
-              assertExists(result.fields.name[0].recorded_at);
-            },
-          );
-
-          await t.step(
-            "accepting a second invitation prepends new records to field history",
-            async () => {
-              const inv2Id = crypto.randomUUID();
-              await kv.set(["invitations", inv2Id], {
-                invitation_id: inv2Id,
-                receiver_oid: accountOid,
-                sender_domain: "sender.example",
-                status: "pending",
-                proposed_terms: { category: "support" },
-                claims: {
-                  immutable: { domain_id: senderDomainId },
-                  user: { name: "Alice Smith" },
-                  custom: { note: "name updated" },
-                },
-                created_at: new Date().toISOString(),
+                }>(token, "get_contact", { contact_id: result.contact_id });
+                assertExists(contactResult);
+                assertEquals(
+                  contactResult.fields.name[0].value,
+                  "Alice",
+                );
+                assertEquals(
+                  contactResult.fields.email[0].value,
+                  "alice@x",
+                );
+                assertEquals(
+                  contactResult.fields.dept[0].value,
+                  "Eng",
+                );
+                assertEquals(
+                  contactResult.fields.note[0].value,
+                  "hi",
+                );
+                // immutable.domain_id is NOT in fields.
+                assertEquals(
+                  contactResult.fields["domain_id"] === undefined,
+                  true,
+                );
+                // current_fields is the flat-merge.
+                assertEquals(
+                  contactResult.current_fields.name.value,
+                  "Alice",
+                );
               });
-              await callTool(token, "accept_invitation", {
-                invitation_id: inv2Id,
-              });
-
-              assertExists(contactId);
-              const { result } = await callTool<{
-                fields: Record<
-                  string,
-                  Array<{ value: unknown; source: string }>
-                >;
-              }>(token, "get_contact", { contact_id: contactId });
-              assertExists(result);
-              // History now has two name records; most-recent (index 0) is the new one
-              assertEquals(result.fields.name.length, 2);
-              assertEquals(result.fields.name[0].value, "Alice Smith");
-              assertEquals(result.fields.name[1].value, "Alice");
             },
           );
 
           await t.step(
-            "flat-merge current_fields reflects only the most-recent record",
+            "owner can add a field via set_contact_field (source=owner_note); history preserved",
             async () => {
-              assertExists(contactId);
-              const { result } = await callTool<{
-                current_fields: Record<
-                  string,
-                  { value: unknown; source: string }
-                >;
-              }>(token, "get_contact", { contact_id: contactId });
-              assertExists(result);
-              assertEquals(result.current_fields.name.value, "Alice Smith");
+              await withRemoteServer(async (remoteDomain) => {
+                const senderDomainId = crypto.randomUUID();
+                const inv = await seedInboundInvitation(kv, {
+                  ownerOid,
+                  remoteDomain,
+                  remoteDomainId: senderDomainId,
+                  claims: {
+                    immutable: { domain_id: senderDomainId },
+                    user: { name: "Bob" },
+                  },
+                });
+                const { result } = await callTool<{ contact_id: string }>(
+                  token,
+                  "accept_invitation",
+                  {
+                    invitation_id: inv.invitation_id,
+                    local_terms: {
+                      categories: ["correspondence"],
+                      max_content_rating: "PG",
+                    },
+                  },
+                );
+                assertExists(result);
+                await callTool(token, "set_contact_field", {
+                  contact_id: result.contact_id,
+                  key: "name",
+                  value: "Bobby (nickname)",
+                });
+                const { result: c } = await callTool<{
+                  fields: Record<
+                    string,
+                    Array<{ value: unknown; source: string }>
+                  >;
+                }>(token, "get_contact", { contact_id: result.contact_id });
+                assertExists(c);
+                assertEquals(c.fields.name.length, 2);
+                assertEquals(c.fields.name[0].value, "Bobby (nickname)");
+                assertEquals(c.fields.name[0].source, "owner_note");
+                // History preserved: the original sender-verified record is
+                // still present further down in the array.
+                assertEquals(c.fields.name[1].value, "Bob");
+              });
             },
           );
         } finally {

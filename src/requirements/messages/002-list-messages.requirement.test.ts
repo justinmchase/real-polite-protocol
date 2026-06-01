@@ -4,7 +4,8 @@ import {
   requiredScopes,
   withAuthTestContext,
 } from "../helpers/with-auth-test-context.ts";
-import { submitMessage } from "../helpers/submit-message.ts";
+import { seedContact } from "../helpers/seed-contact.ts";
+import { submitMessageEnvelope } from "../helpers/submit-message-envelope.ts";
 
 Deno.test({
   name: "req:messages-002 - Listeners can list messages in their inbox",
@@ -12,236 +13,200 @@ Deno.test({
     await withAuthTestContext(async ({ issueToken }) => {
       await withStartedServer(async ({ kvPath, callTool, baseUrl }) => {
         const kv = await Deno.openKv(kvPath);
-
         try {
-          const accountOid = crypto.randomUUID();
+          const ownerOid = crypto.randomUUID();
           const token = await issueToken({
-            oid: accountOid,
+            oid: ownerOid,
             scope: requiredScopes.join(" "),
             name: "Test User",
           });
-
           await callTool(token, "set_user_verified_metadata");
 
-          // Seed invitations from two different senders with different categories
-          const invitationIdA = crypto.randomUUID();
-          const invitationIdB = crypto.randomUUID();
-
-          await kv.set(["invitations", invitationIdA], {
-            invitation_id: invitationIdA,
-            receiver_oid: accountOid,
-            sender_domain: "alpha.example",
-            status: "pending",
-            proposed_terms: { category: "billing", max_content_rating: "G" },
-            created_at: new Date().toISOString(),
-          });
-          await kv.set(["invitations", invitationIdB], {
-            invitation_id: invitationIdB,
-            receiver_oid: accountOid,
-            sender_domain: "beta.example",
-            status: "pending",
-            proposed_terms: {
-              category: "correspondence",
-              max_content_rating: "G",
+          const contactA = await seedContact(kv, {
+            ownerOid,
+            remoteDomain: "alpha.example",
+            remoteTerms: {
+              categories: ["billing", "correspondence"],
+              max_content_rating: "PG",
             },
-            created_at: new Date().toISOString(),
+            localTerms: {
+              categories: ["billing", "correspondence"],
+              max_content_rating: "PG",
+            },
+          });
+          const contactB = await seedContact(kv, {
+            ownerOid,
+            remoteDomain: "beta.example",
+            remoteTerms: {
+              categories: ["correspondence"],
+              max_content_rating: "PG",
+            },
+            localTerms: {
+              categories: ["correspondence"],
+              max_content_rating: "PG",
+            },
           });
 
-          // Accept both invitations to issue receipts
-          const { result: resultA } = await callTool<{
-            receipt?: { id: string; secret: string };
-          }>(token, "accept_invitation", { invitation_id: invitationIdA });
-          const { result: resultB } = await callTool<{
-            receipt?: { id: string; secret: string };
-          }>(token, "accept_invitation", { invitation_id: invitationIdB });
-
-          const receiptIdA = resultA?.receipt?.id;
-          const receiptSecretA = resultA?.receipt?.secret;
-          const receiptIdB = resultB?.receipt?.id;
-          const receiptSecretB = resultB?.receipt?.secret;
-
-          assertExists(receiptIdA);
-          assertExists(receiptSecretA);
-          assertExists(receiptIdB);
-          assertExists(receiptSecretB);
-
-          // Submit two messages via receipt A and one via receipt B
-          const submitA1 = await submitMessage({
-            receiptId: receiptIdA,
-            receiptSecret: receiptSecretA,
-            senderDomain: "alpha.example",
+          const a1 = await submitMessageEnvelope({
+            credential: contactA.local_credential,
+            senderDomain: contactA.remote_domain,
+            category: "billing",
+            subject: "Invoice #1",
             baseUrl,
           });
-          assertEquals(submitA1.status, 202);
-          await submitA1.body?.cancel();
+          assertEquals(a1.status, 202);
+          await a1.body?.cancel();
 
-          const submitA2 = await submitMessage({
-            receiptId: receiptIdA,
-            receiptSecret: receiptSecretA,
-            senderDomain: "alpha.example",
+          const a2 = await submitMessageEnvelope({
+            credential: contactA.local_credential,
+            senderDomain: contactA.remote_domain,
+            category: "billing",
+            subject: "Invoice #2",
             baseUrl,
           });
-          assertEquals(submitA2.status, 202);
-          await submitA2.body?.cancel();
+          assertEquals(a2.status, 202);
+          await a2.body?.cancel();
 
-          const submitB1 = await submitMessage({
-            receiptId: receiptIdB,
-            receiptSecret: receiptSecretB,
-            senderDomain: "beta.example",
+          const b1 = await submitMessageEnvelope({
+            credential: contactB.local_credential,
+            senderDomain: contactB.remote_domain,
+            category: "correspondence",
+            subject: "Hello",
             baseUrl,
           });
-          assertEquals(submitB1.status, 202);
-          await submitB1.body?.cancel();
+          assertEquals(b1.status, 202);
+          await b1.body?.cancel();
+
+          await t.step("returns all messages for caller", async () => {
+            const { status, result } = await callTool<{
+              messages: Array<{
+                id: string;
+                contact_id: string;
+                message_id: string;
+                remote_domain: string;
+                category: string;
+                content_rating: string;
+                sent_at: string;
+                received_at: string;
+                read: boolean;
+                message: { subject: string; body: unknown };
+                sender_fields: Record<string, unknown>;
+              }>;
+              page_size: number;
+            }>(token, "list_messages", {});
+            assertEquals(status, 200);
+            assertExists(result);
+            assertEquals(result.messages.length, 3);
+            assertEquals(typeof result.page_size, "number");
+            const m = result.messages[0];
+            assertExists(m.id);
+            assertExists(m.contact_id);
+            assertExists(m.message_id);
+            assertExists(m.remote_domain);
+            assertExists(m.category);
+            assertExists(m.content_rating);
+            assertExists(m.sent_at);
+            assertExists(m.received_at);
+            assertEquals(typeof m.read, "boolean");
+            assertExists(m.message.subject);
+            assertExists(m.sender_fields);
+          });
 
           await t.step(
-            "list_messages returns all received messages for caller",
-            async () => {
-              const { status, result } = await callTool<{
-                messages: Array<{
-                  id: string;
-                  sender_domain: string;
-                  category: string;
-                  received_at: string;
-                }>;
-                page_size: number;
-              }>(token, "list_messages", {});
-
-              assertEquals(status, 200);
-              assertExists(result);
-              assertEquals(result.messages.length, 3);
-              assertEquals(typeof result.page_size, "number");
-            },
-          );
-
-          await t.step(
-            "list_messages results are ordered by received_at descending",
+            "results ordered by received_at descending",
             async () => {
               const { result } = await callTool<{
                 messages: Array<{ received_at: string }>;
               }>(token, "list_messages", {});
-
               assertExists(result);
-              const timestamps = result.messages.map((m) =>
+              const ts = result.messages.map((m) =>
                 new Date(m.received_at).getTime()
               );
-              for (let i = 1; i < timestamps.length; i++) {
-                assertEquals(
-                  timestamps[i - 1] >= timestamps[i],
-                  true,
-                  `Message at index ${i - 1} should be newer than index ${i}`,
-                );
+              for (let i = 1; i < ts.length; i++) {
+                assertEquals(ts[i - 1] >= ts[i], true);
               }
             },
           );
 
-          await t.step(
-            "list_messages filters by category",
-            async () => {
-              const { result } = await callTool<{
-                messages: Array<{ category: string }>;
-              }>(token, "list_messages", { category: "billing" });
+          await t.step("filters by category", async () => {
+            const { result } = await callTool<{
+              messages: Array<{ category: string }>;
+            }>(token, "list_messages", { category: "billing" });
+            assertExists(result);
+            assertEquals(result.messages.length, 2);
+            assertEquals(
+              result.messages.every((m) => m.category === "billing"),
+              true,
+            );
+          });
 
-              assertExists(result);
-              assertEquals(result.messages.length, 2);
-              assertEquals(
-                result.messages.every((m) => m.category === "billing"),
-                true,
-              );
-            },
-          );
+          await t.step("filters by contact_id", async () => {
+            const { result } = await callTool<{
+              messages: Array<{ contact_id: string }>;
+            }>(token, "list_messages", { contact_id: contactB.id });
+            assertExists(result);
+            assertEquals(result.messages.length, 1);
+            assertEquals(result.messages[0].contact_id, contactB.id);
+          });
 
-          await t.step(
-            "list_messages filters by sender_domain",
-            async () => {
-              const { result } = await callTool<{
-                messages: Array<{ sender_domain: string }>;
-              }>(token, "list_messages", { sender_domain: "beta.example" });
+          await t.step("filters by remote_domain", async () => {
+            const { result } = await callTool<{
+              messages: Array<{ remote_domain: string }>;
+            }>(token, "list_messages", { remote_domain: "beta.example" });
+            assertExists(result);
+            assertEquals(result.messages.length, 1);
+            assertEquals(result.messages[0].remote_domain, "beta.example");
+          });
 
-              assertExists(result);
-              assertEquals(result.messages.length, 1);
-              assertEquals(result.messages[0].sender_domain, "beta.example");
-            },
-          );
+          await t.step("filters by unread", async () => {
+            const { result } = await callTool<{
+              messages: Array<{ read: boolean }>;
+            }>(token, "list_messages", { read: false });
+            assertExists(result);
+            assertEquals(result.messages.length, 3);
+            assertEquals(
+              result.messages.every((m) => m.read === false),
+              true,
+            );
+          });
 
-          await t.step(
-            "list_messages filters by read status (unread only)",
-            async () => {
-              const { result } = await callTool<{
-                messages: Array<{ read: boolean }>;
-              }>(token, "list_messages", { read: false });
+          await t.step("messages isolated by owner OID", async () => {
+            const otherOid = crypto.randomUUID();
+            const otherToken = await issueToken({
+              oid: otherOid,
+              scope: requiredScopes.join(" "),
+              name: "Other",
+            });
+            await callTool(otherToken, "set_user_verified_metadata");
+            const { result } = await callTool<{
+              messages: Array<unknown>;
+            }>(otherToken, "list_messages", {});
+            assertExists(result);
+            assertEquals(result.messages.length, 0);
+          });
 
-              assertExists(result);
-              assertEquals(result.messages.length, 3);
-              assertEquals(
-                result.messages.every((m) => m.read === false),
-                true,
-              );
-            },
-          );
+          await t.step("paginates via resume_token", async () => {
+            const { result: p1 } = await callTool<{
+              messages: Array<{ id: string }>;
+              next_resume_token?: string;
+            }>(token, "list_messages", { page_size: 2 });
+            assertExists(p1);
+            assertEquals(p1.messages.length, 2);
+            assertExists(p1.next_resume_token);
 
-          await t.step(
-            "messages from other accounts are not visible",
-            async () => {
-              const otherOid = crypto.randomUUID();
-              const otherToken = await issueToken({
-                oid: otherOid,
-                scope: requiredScopes.join(" "),
-                name: "Other User",
-              });
-              await callTool(otherToken, "set_user_verified_metadata");
-
-              const { result } = await callTool<{
-                messages: Array<{ id: string }>;
-              }>(otherToken, "list_messages", {});
-
-              assertExists(result);
-              assertEquals(result.messages.length, 0);
-            },
-          );
-
-          await t.step(
-            "list_messages returns next_resume_token when more pages exist",
-            async () => {
-              const { result } = await callTool<{
-                messages: Array<unknown>;
-                next_resume_token?: string;
-              }>(token, "list_messages", { page_size: 2 });
-
-              assertExists(result);
-              assertEquals(result.messages.length, 2);
-              assertExists(result.next_resume_token);
-            },
-          );
-
-          await t.step(
-            "list_messages resumes from next_resume_token",
-            async () => {
-              const { result: page1 } = await callTool<{
-                messages: Array<{ id: string }>;
-                next_resume_token?: string;
-              }>(token, "list_messages", { page_size: 2 });
-
-              assertExists(page1);
-              assertExists(page1.next_resume_token);
-
-              const { result: page2 } = await callTool<{
-                messages: Array<{ id: string }>;
-                next_resume_token?: string;
-              }>(token, "list_messages", {
-                page_size: 2,
-                resume_token: page1.next_resume_token,
-              });
-
-              assertExists(page2);
-              assertEquals(page2.messages.length, 1);
-
-              // No overlap between pages
-              const idsPage1 = page1.messages.map((m) => m.id);
-              const idsPage2 = page2.messages.map((m) => m.id);
-              const overlap = idsPage1.filter((id) => idsPage2.includes(id));
-              assertEquals(overlap.length, 0);
-            },
-          );
+            const { result: p2 } = await callTool<{
+              messages: Array<{ id: string }>;
+              next_resume_token?: string;
+            }>(token, "list_messages", {
+              page_size: 2,
+              resume_token: p1.next_resume_token,
+            });
+            assertExists(p2);
+            assertEquals(p2.messages.length, 1);
+            const ids1 = p1.messages.map((m) => m.id);
+            const ids2 = p2.messages.map((m) => m.id);
+            assertEquals(ids1.filter((id) => ids2.includes(id)).length, 0);
+          });
         } finally {
           kv.close();
         }

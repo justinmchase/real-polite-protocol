@@ -1,44 +1,47 @@
 import { generate as generateUUIDv7 } from "@std/uuid/v7";
-import type { MessageEnvelope } from "../../controllers/submit/message-handler.ts";
+import type { ContentRating } from "../../models/content-rating.ts";
 import type { MessageCategory } from "../../models/message-category.ts";
-import type { StoredMessage } from "../../models/messages/stored-message.model.ts";
+import type {
+  MessageMetadata,
+  StoredMessage,
+} from "../../models/messages/stored-message.model.ts";
 import type {
   ListMessagesOptions,
   ListMessagesResult,
   MessageRepository,
 } from "../../repositories/messages/message.repository.ts";
 
+export interface StoreInboundMessageInput {
+  oid: string;
+  contactId: string;
+  remoteDomain: string;
+  messageId: string;
+  category: MessageCategory;
+  contentRating: ContentRating;
+  sentAt: Date;
+  receivedAt: Date;
+  subject: string;
+  body: { content_type: string; content: string };
+  metadata?: MessageMetadata;
+}
+
 export class MessageManager {
   constructor(private readonly messages: MessageRepository) {}
 
-  async store(
-    oid: string,
-    receiptId: string,
-    category: MessageCategory,
-    envelope: MessageEnvelope,
-  ): Promise<StoredMessage> {
+  async store(input: StoreInboundMessageInput): Promise<StoredMessage> {
     const msg: StoredMessage = {
       id: generateUUIDv7(),
-      oid,
-      receipt_id: receiptId,
-      message_id: envelope.message_id,
-      sender_domain: envelope.sender_domain,
-      sender_domain_id: envelope.sender_domain_id,
-      category,
-      sent_at: envelope.sent_at,
-      received_at: new Date(),
+      oid: input.oid,
+      contact_id: input.contactId,
+      message_id: input.messageId,
+      remote_domain: input.remoteDomain,
+      category: input.category,
+      content_rating: input.contentRating,
+      sent_at: input.sentAt,
+      received_at: input.receivedAt,
       read: false,
-      message: {
-        content_rating: envelope.message.content_rating,
-        subject: envelope.message.subject,
-        body: {
-          content_type: envelope.message.body.content_type,
-          content: envelope.message.body.content,
-        },
-      },
-      ...(envelope.metadata !== undefined && { metadata: envelope.metadata }),
-      ...(envelope.reply_invite !== undefined &&
-        { reply_invite: envelope.reply_invite }),
+      message: { subject: input.subject, body: input.body },
+      ...(input.metadata !== undefined && { metadata: input.metadata }),
     };
     return await this.messages.set(msg);
   }
@@ -68,5 +71,9 @@ export class MessageManager {
 
   async deleteByMessageId(oid: string, messageId: string): Promise<boolean> {
     return await this.messages.deleteByMessageId(oid, messageId);
+  }
+
+  async deleteByContact(oid: string, contactId: string): Promise<number> {
+    return await this.messages.deleteByContact(oid, contactId);
   }
 }

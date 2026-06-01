@@ -1,13 +1,13 @@
 {
   "servers": {
-    // "rpp": {
-    //     "url": "http://localhost:8000/mcp",
-    //     "type": "http",
-    //   }
     "rpp": {
-      "url": "https://real-polite-protocol.justinmchase.deno.net/mcp",
+      "url": "http://localhost:8000/mcp",
       "type": "http"
     }
+    // "rpp": {
+    //   "url": "https://real-polite-protocol.justinmchase.deno.net/mcp",
+    //   "type": "http"
+    // }
   },
   "inputs": []
 }

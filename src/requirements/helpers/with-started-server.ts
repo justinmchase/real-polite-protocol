@@ -5,7 +5,6 @@ import {
   callGetPermissions,
   type PermissionLevels,
 } from "./call-get-permissions.ts";
-import { submitMessage, type SubmitMessageOptions } from "./submit-message.ts";
 
 export interface StartedServerContext {
   kvPath: string;
@@ -16,9 +15,6 @@ export interface StartedServerContext {
     toolName: string,
     args?: Record<string, unknown>,
   ) => Promise<ToolCallResult<T>>;
-  submitMessage: (
-    opts: Omit<SubmitMessageOptions, "baseUrl">,
-  ) => Promise<Response>;
   callGetPermissions: (
     token: string,
     args?: Record<string, unknown>,
@@ -38,12 +34,10 @@ async function checkHealth(port: number): Promise<boolean> {
       const res = await fetch(`http://localhost:${port}/health`);
       if (res.ok) {
         const body = await res.json();
-        if (body.ok === true) {
-          return true;
-        }
+        if (body.ok === true) return true;
       }
     } catch {
-      // Server not ready yet.
+      // server not ready yet
     }
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -66,9 +60,6 @@ export async function withStartedServer(
     args: Record<string, unknown> = {},
   ) => callTool<T>(token, toolName, args, baseUrl);
 
-  const boundSubmitMessage = (opts: Omit<SubmitMessageOptions, "baseUrl">) =>
-    submitMessage({ ...opts, baseUrl });
-
   const boundCallGetPermissions = (
     token: string,
     args: Record<string, unknown> = {},
@@ -87,7 +78,6 @@ export async function withStartedServer(
       port,
       baseUrl,
       callTool: boundCallTool,
-      submitMessage: boundSubmitMessage,
       callGetPermissions: boundCallGetPermissions,
     });
   } finally {

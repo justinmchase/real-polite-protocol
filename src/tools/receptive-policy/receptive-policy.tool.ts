@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AuthInfo } from "../../context.ts";
 import type { ReceptivePolicyManager } from "../../managers/mod.ts";
+import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { outputDate } from "../date-schema.ts";
 
@@ -20,36 +21,31 @@ const DomainFilterSchema = z.object({
   ),
 });
 
+const ContactPolicyEntrySchema = z.object({
+  domain: z.string().describe("Issuing hostname"),
+  domain_id: z.string().describe("domain_id scoped to domain"),
+});
+
 const ReceptivePolicyOutputSchema = {
-  policy_id: z.string().uuid().describe("Unique identifier for this policy"),
-  oid: z.string().describe("User object identifier"),
-  mode: z.enum(["all", "domain_filter", "contact", "receipt", "closed"])
-    .describe(
-      'Receptive mode: "all", "domain_filter", "contact", "receipt", or "closed"',
-    ),
+  policy_id: z.string().describe("Unique identifier for this policy"),
+  oid: z.string().describe("Owner OID"),
+  mode: z.enum(["all", "domain_filter", "contact", "closed"]).describe(
+    'Receptive mode: "all", "domain_filter", "contact", or "closed"',
+  ),
   domain_filter: DomainFilterSchema.optional().describe(
     "Domain filter rules applied when mode is domain_filter",
   ),
-  contact_ids: z.array(z.string().uuid()).optional().describe(
-    "[Deprecated] Use contacts instead",
-  ),
-  contacts: z.array(z.object({
-    domain: z.string().describe("Issuing hostname"),
-    domain_id: z.string().uuid().describe("domain_id UUID scoped to domain"),
-  })).optional().describe(
-    "List of (domain, domain_id) pairs that may send invitations (mode: contact)",
-  ),
-  receipt_id: z.string().uuid().optional().describe(
-    "Receipt ID this policy is bound to (mode: receipt)",
+  contacts: z.array(ContactPolicyEntrySchema).optional().describe(
+    "(domain, domain_id) pairs allowed to send invitations (mode: contact)",
   ),
   receptive_until: outputDate().optional().describe(
     "ISO 8601 expiry timestamp for time-bounded policies",
   ),
   shortcode: z.string().optional().describe(
-    "Short 8-character alphanumeric code for time-bounded windows. Share this along with your domain so a sender can address you without knowing your policy_id UUID.",
+    "Short 8-character alphanumeric code for time-bounded windows.",
   ),
   domain: z.string().optional().describe(
-    "The server's RPP domain. Present on open_receptive_window responses so the caller can share it with the sender alongside the shortcode.",
+    "The server's RPP domain. Present on open_receptive_window responses so the caller can share it alongside the shortcode.",
   ),
   created_at: outputDate().describe(
     "ISO 8601 timestamp when this policy was created",
@@ -67,22 +63,16 @@ const GetReceptivePoliciesInputSchema = {
   page_size: z.number().int().min(1).max(100).optional().describe(
     "Maximum number of results to return (default 50)",
   ),
-  include_receipt_policies: z.boolean().optional().describe(
-    'When true, include auto-created mode:"receipt" policies in the results. Defaults to false to reduce clutter.',
-  ),
 };
 
 const AddReceptivePolicyInputSchema = {
   mode: z.enum(["all", "domain_filter", "contact", "closed"]).describe(
-    'Receptive mode: "all" accepts any sender, "domain_filter" applies rules, "contact" accepts only listed domain_id UUIDs, "closed" explicitly rejects all senders',
+    'Receptive mode: "all" accepts any sender, "domain_filter" applies rules, "contact" accepts only listed (domain, domain_id) pairs, "closed" explicitly rejects all senders',
   ),
   domain_filter: DomainFilterSchema.optional().describe(
     "Domain filter rules to apply when mode is domain_filter",
   ),
-  contacts: z.array(z.object({
-    domain: z.string().describe("Issuing hostname"),
-    domain_id: z.string().uuid().describe("domain_id UUID scoped to domain"),
-  })).optional().describe(
+  contacts: z.array(ContactPolicyEntrySchema).optional().describe(
     "(domain, domain_id) pairs that may send invitations (required when mode is contact)",
   ),
 };
@@ -100,26 +90,23 @@ const OpenReceptiveWindowInputSchema = {
 };
 
 const RemoveReceptivePolicyInputSchema = {
-  policy_id: z.string().uuid().describe("ID of the policy to remove"),
+  policy_id: z.string().describe("ID of the policy to remove"),
 };
 
 const RemoveReceptivePolicyOutputSchema = {
-  policy_id: z.string().uuid().describe("ID of the removed policy"),
+  policy_id: z.string().describe("ID of the removed policy"),
   deleted: z.boolean().describe("Whether the policy was removed"),
 };
 
 type GetReceptivePoliciesArgs = z.infer<
   z.ZodObject<typeof GetReceptivePoliciesInputSchema>
 >;
-
 type AddReceptivePolicyArgs = z.infer<
   z.ZodObject<typeof AddReceptivePolicyInputSchema>
 >;
-
 type OpenReceptiveWindowArgs = z.infer<
   z.ZodObject<typeof OpenReceptiveWindowInputSchema>
 >;
-
 type RemoveReceptivePolicyArgs = z.infer<
   z.ZodObject<typeof RemoveReceptivePolicyInputSchema>
 >;
@@ -127,7 +114,7 @@ type RemoveReceptivePolicyArgs = z.infer<
 export class ReceptivePolicyTool {
   constructor(
     private readonly receptivePolicyManager: ReceptivePolicyManager,
-    private readonly domain: string,
+    private readonly config: ConfigService,
   ) {}
 
   register(server: McpServer, auth: AuthInfo): void {
@@ -141,12 +128,8 @@ export class ReceptivePolicyTool {
       },
       withToolErrorHandling(async (params: GetReceptivePoliciesArgs) => {
         const all = await this.receptivePolicyManager.getPolicies(auth.oid);
-        const includeReceipt = params.include_receipt_policies ?? false;
-        const filtered = includeReceipt
-          ? all
-          : all.filter((p) => p.mode !== "receipt");
         const pageSize = params.page_size ?? 50;
-        const policies = filtered.slice(0, pageSize);
+        const policies = all.slice(0, pageSize);
         return toolResult({ policies, page_size: policies.length });
       }),
     );
@@ -155,7 +138,7 @@ export class ReceptivePolicyTool {
       "add_receptive_policy",
       {
         description:
-          'Add a new receptive policy. Policies stack — multiple can be active simultaneously. Supports modes: "all", "domain_filter", or "contact".',
+          'Add a new receptive policy. Policies stack — multiple can be active simultaneously. Supports modes: "all", "domain_filter", "contact", or "closed".',
         inputSchema: AddReceptivePolicyInputSchema,
         outputSchema: ReceptivePolicyOutputSchema,
       },
@@ -177,10 +160,8 @@ export class ReceptivePolicyTool {
           "Open a time-bounded receptive window that stacks with existing policies. " +
           "Returns a shortcode (8 lowercase alphanumeric characters) tied to this window. " +
           "IMPORTANT: After calling this tool you MUST immediately display the shortcode and " +
-          "the server domain to the user in a clearly copyable format — for example:\n\n" +
-          "```\nShortcode: abc12xyz\nDomain:    real-polite-protocol.justinmchase.deno.net\n```\n\n" +
-          "The user needs to share BOTH values with the person who wants to send them an invitation. " +
-          "The shortcode expires when the window closes, so share it right away.",
+          "the server domain to the user in a clearly copyable format. " +
+          "The user needs to share BOTH values with the person who wants to send them an invitation.",
         inputSchema: OpenReceptiveWindowInputSchema,
         outputSchema: ReceptivePolicyOutputSchema,
       },
@@ -191,7 +172,7 @@ export class ReceptivePolicyTool {
           params.scope ?? "all",
           params.domain_filter,
         );
-        return toolResult({ ...policy, domain: this.domain });
+        return toolResult({ ...policy, domain: this.config.domain });
       }),
     );
 
@@ -199,7 +180,7 @@ export class ReceptivePolicyTool {
       "remove_receptive_policy",
       {
         description:
-          "Remove a receptive policy. For time-bounded windows this closes the window early. Does not affect already-delivered invitations.",
+          "Remove a receptive policy. For time-bounded windows this closes the window early.",
         inputSchema: RemoveReceptivePolicyInputSchema,
         outputSchema: RemoveReceptivePolicyOutputSchema,
       },
