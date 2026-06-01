@@ -91,6 +91,12 @@ const AcceptInvitationInputSchema = {
   local_terms: CommunicationTermsSchema.describe(
     "Communication terms the local user is willing to receive (becomes contact.local_terms).",
   ),
+  include_user_claims: z.array(z.string()).optional().describe(
+    "Keys of user-verified claims to attach to the invitation_reply envelope.",
+  ),
+  include_admin_claims: z.array(z.string()).optional().describe(
+    "Keys of admin-verified claims to attach to the invitation_reply envelope.",
+  ),
   message: z.string().max(1024).optional().describe(
     "Optional human-readable message sent in the invitation_reply envelope.",
   ),
@@ -365,7 +371,13 @@ export class InvitationTool {
       {
         description:
           "Accept an inbound invitation. Creates a bilateral contact, generates a fresh local credential, " +
-          "and dispatches an `invitation_reply` envelope to the remote (spec §10.4 / §11.2 path 1).",
+          "and dispatches an `invitation_reply` envelope to the remote (spec §10.4 / §11.2 path 1). " +
+          "IMPORTANT: before calling this tool the agent MUST ask the user which verified claims they " +
+          "want to share with the inviter in the reply. Call list_verifiable_users (or " +
+          "get_user_verified_metadata for the accepter's oid) to enumerate the available user-verified " +
+          "and admin-verified claim keys, present them to the user, and pass the user's selection in " +
+          "include_user_claims / include_admin_claims. Do not include any claims the user did not " +
+          "explicitly approve.",
         inputSchema: AcceptInvitationInputSchema,
         outputSchema: AcceptInvitationOutputSchema,
       },
@@ -387,6 +399,13 @@ export class InvitationTool {
 
         const now = new Date();
         const localDomainId = await this.resolveLocalDomainId(auth.oid);
+        const claims = await this.resolveClaims(
+          auth.oid,
+          localDomainId,
+          params.include_user_claims,
+          params.include_admin_claims,
+          undefined,
+        );
 
         // Create / upsert the contact. The manager generates a fresh
         // local_credential and persists the inbound reply_credential as the
@@ -418,9 +437,7 @@ export class InvitationTool {
           sent_at: now,
           communication_terms: params.local_terms,
           reply_credential: contact.local_credential,
-          claims: {
-            immutable: { domain_id: localDomainId },
-          },
+          claims,
           ...(params.message !== undefined && { message: params.message }),
         };
 
@@ -473,13 +490,7 @@ export class InvitationTool {
         description:
           "Send an invitation envelope to a remote RPP domain (spec §10.1). " +
           "Provide exactly one of receptive_policy_id or shortcode. The local domain generates " +
-          "a fresh reply_credential the remote will use to authenticate their reply. " +
-          "IMPORTANT: before calling this tool the agent MUST ask the user which verified " +
-          "claims they want to share with the invitee. Call list_verifiable_users (or " +
-          "get_user_verified_metadata for the sender's oid) to enumerate the available " +
-          "user-verified and admin-verified claim keys, present them to the user, and pass " +
-          "the user's selection in include_user_claims / include_admin_claims. Do not " +
-          "include any claims the user did not explicitly approve.",
+          "a fresh reply_credential the remote will use to authenticate their reply.",
         inputSchema: SendInvitationInputSchema,
         outputSchema: SendInvitationOutputSchema,
       },
