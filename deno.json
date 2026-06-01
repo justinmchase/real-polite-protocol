@@ -23,8 +23,14 @@
     "as": "deno run -A scripts/dev/test-user.ts",
     "notify": "deno run -A scripts/notify-watcher.ts",
     "migrate": "deno run -A scripts/migrate.ts",
+    "migrate:remote": "deno run -A --tunnel scripts/migrate.ts",
     "test": "deno test -A --ignore=src/scenarios src/",
     "scenarios": "deno test -A src/scenarios/",
     "check": "deno fmt && deno lint && deno task test && deno task scenarios"
+  },
+  "deploy": {
+    "org": "justinmchase",
+    "app": "real-polite-protocol"
   }
 }
+

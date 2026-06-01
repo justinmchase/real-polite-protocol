@@ -1,13 +1,17 @@
 /**
  * One-shot KV migration runner. Usage:
  *
- *   deno task migrate                       # local (uses RPP_KV_PATH or default)
- *   deno task migrate --dry-run             # don't write, just report
+ *   deno task migrate                          # local sqlite (RPP_KV_PATH or default)
+ *   deno task migrate --dry-run                # don't write, just report
  *   deno task migrate --only 001-contacts-v1
  *
- * Against a remote Deno Deploy KV database, set:
- *   DENO_KV_ACCESS_TOKEN=<token>
- *   RPP_KV_PATH=https://api.deno.com/databases/<database-id>/connect
+ * Against the remote Deno Deploy KV for this app, run via the Deploy tunnel:
+ *
+ *   deno run -A --tunnel scripts/migrate.ts
+ *
+ * `--tunnel` makes `Deno.openKv()` (with no args) connect to the app's hosted
+ * KV instance. Set RPP_KV_PATH to an explicit path/URL only when you need to
+ * bypass the tunnel.
  */
 import { ConsoleLogger, MigrationRunner } from "@justinmchase/grove";
 import { MIGRATIONS } from "../src/migrations/mod.ts";
@@ -23,16 +27,16 @@ function parseArgs(args: string[]): { dryRun: boolean; only: string[] } {
 
 async function main(): Promise<void> {
   const { dryRun, only } = parseArgs(Deno.args);
-  const kvPath = Deno.env.get("RPP_KV_PATH") ?? ".data/kv.sqlite3";
+  const kvPath = Deno.env.get("RPP_KV_PATH");
   const logger = new ConsoleLogger();
 
   logger.info(
-    `opening kv at ${kvPath}${dryRun ? " (dry-run)" : ""}${
+    `opening kv at ${kvPath ?? "<default>"}${dryRun ? " (dry-run)" : ""}${
       only.length > 0 ? ` only=${only.join(",")}` : ""
     }`,
   );
 
-  const kv = await Deno.openKv(kvPath);
+  const kv = kvPath ? await Deno.openKv(kvPath) : await Deno.openKv();
   try {
     const runner = new MigrationRunner(kv, logger, MIGRATIONS);
     const reports = await runner.runPending({
