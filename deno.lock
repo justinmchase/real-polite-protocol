@@ -2,12 +2,13 @@
   "version": "5",
   "specifiers": {
     "jsr:@cliffy/command@1": "1.1.1",
+    "jsr:@cliffy/command@^1.1.1": "1.1.1",
     "jsr:@cliffy/flags@1.1.1": "1.1.1",
     "jsr:@cliffy/internal@1.1.1": "1.1.1",
     "jsr:@cliffy/table@1.1.1": "1.1.1",
     "jsr:@hono/hono@^4.12.12": "4.12.23",
     "jsr:@justinmchase/github-api@0.5.17": "0.5.17",
-    "jsr:@justinmchase/grove@1.0.1": "1.0.1",
+    "jsr:@justinmchase/grove@1.0.2": "1.0.2",
     "jsr:@justinmchase/serializable@~0.3.13": "0.3.15",
     "jsr:@justinmchase/serializable@~0.3.15": "0.3.15",
     "jsr:@justinmchase/type@~0.2.4": "0.2.4",
@@ -16,6 +17,7 @@
     "jsr:@std/async@^1.2.0": "1.4.0",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
     "jsr:@std/crypto@^1.1.0": "1.1.0",
+    "jsr:@std/data-structures@^1.1.0": "1.1.0",
     "jsr:@std/dotenv@~0.225.6": "0.225.7",
     "jsr:@std/encoding@0.224.0": "0.224.0",
     "jsr:@std/encoding@^1.0.10": "1.0.10",
@@ -23,23 +25,25 @@
     "jsr:@std/fmt@^1.0.5": "1.0.10",
     "jsr:@std/fmt@^1.0.9": "1.0.10",
     "jsr:@std/fs@^1.0.11": "1.0.24",
+    "jsr:@std/fs@^1.0.24": "1.0.24",
     "jsr:@std/internal@0.224": "0.224.0",
-    "jsr:@std/internal@^1.0.12": "1.0.13",
+    "jsr:@std/internal@^1.0.12": "1.0.14",
+    "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/io@~0.225.2": "0.225.3",
-    "jsr:@std/jsonc@1": "1.0.2",
+    "jsr:@std/jsonc@^1.0.2": "1.0.2",
     "jsr:@std/log@~0.224.14": "0.224.14",
-    "jsr:@std/path@1": "1.1.4",
-    "jsr:@std/testing@^1.0.18": "1.0.18",
+    "jsr:@std/path@^1.1.5": "1.1.5",
+    "jsr:@std/semver@^1.0.8": "1.0.8",
+    "jsr:@std/testing@^1.0.19": "1.0.19",
     "jsr:@std/text@^1.0.17": "1.0.19",
     "jsr:@std/uuid@1.1.1": "1.1.1",
     "jsr:@std/uuid@^1.1.1": "1.1.1",
-    "jsr:@std/yaml@1": "1.1.0",
+    "jsr:@std/yaml@^1.1.1": "1.1.1",
     "jsr:@zaubrik/djwt@^3.0.2": "3.0.2",
     "npm:@azure/storage-blob@^12.31.0": "12.31.0",
-    "npm:@modelcontextprotocol/sdk@^1.29.0": "1.29.0_zod@4.3.6",
-    "npm:mongodb@^7.1.1": "7.1.1",
-    "npm:zod@*": "4.3.6",
-    "npm:zod@^4.3.6": "4.3.6"
+    "npm:@modelcontextprotocol/sdk@^1.29.0": "1.29.0_zod@4.4.3",
+    "npm:mongodb@^7.1.1": "7.2.0",
+    "npm:zod@^4.4.3": "4.4.3"
   },
   "jsr": {
     "@cliffy/command@1.1.1": {
@@ -49,6 +53,7 @@
         "jsr:@cliffy/internal",
         "jsr:@cliffy/table",
         "jsr:@std/fmt@^1.0.9",
+        "jsr:@std/semver",
         "jsr:@std/text"
       ]
     },
@@ -81,10 +86,10 @@
         "jsr:@zaubrik/djwt"
       ]
     },
-    "@justinmchase/grove@1.0.1": {
-      "integrity": "e9c946b24f18f9e7b84e6888c39fc67652437aacb237e28d26ead2c1f268a1f6",
+    "@justinmchase/grove@1.0.2": {
+      "integrity": "47ff5ea7224ce95ce80be42917d290eae5c7a630c1ef358625d49f657a4f3987",
       "dependencies": [
-        "jsr:@cliffy/command",
+        "jsr:@cliffy/command@1",
         "jsr:@hono/hono",
         "jsr:@justinmchase/github-api",
         "jsr:@justinmchase/serializable@~0.3.13",
@@ -127,6 +132,9 @@
     "@std/crypto@1.1.0": {
       "integrity": "b8d6d0a6377a32b213af2661ed7bf1062d94feac0c57def5526a8e74a95c3ec8"
     },
+    "@std/data-structures@1.1.0": {
+      "integrity": "c35ae4ad5d8e41a38573c2fe3e19b18ea2505f63cfea201edcb8720aca1f7f58"
+    },
     "@std/dotenv@0.225.7": {
       "integrity": "11d8db03ca4ad5aba9eba809f2e8058b2a4f320b7b09fea4b360e162928329e3"
     },
@@ -143,7 +151,11 @@
       "integrity": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
     },
     "@std/fs@1.0.24": {
-      "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877"
+      "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.14",
+        "jsr:@std/path"
+      ]
     },
     "@std/internal@0.224.0": {
       "integrity": "afc50644f9cdf4495eeb80523a8f6d27226b4b36c45c7c195dfccad4b8509291",
@@ -153,6 +165,9 @@
     },
     "@std/internal@1.0.13": {
       "integrity": "2f9546691d4ac2d32859c82dff284aaeac980ddeca38430d07941e7e288725c0"
+    },
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     },
     "@std/io@0.225.3": {
       "integrity": "27b07b591384d12d7b568f39e61dff966b8230559122df1e9fd11cc068f7ddd1"
@@ -164,20 +179,27 @@
       "integrity": "257f7adceee3b53bb2bc86c7242e7d1bc59729e57d4981c4a7e5b876c808f05e",
       "dependencies": [
         "jsr:@std/fmt@^1.0.5",
-        "jsr:@std/fs",
+        "jsr:@std/fs@^1.0.11",
         "jsr:@std/io"
       ]
     },
-    "@std/path@1.1.4": {
-      "integrity": "1d2d43f39efb1b42f0b1882a25486647cb851481862dc7313390b2bb044314b5",
+    "@std/path@1.1.5": {
+      "integrity": "ccea00982ea28c36becaf6e62f855406c76a8c32d462f66f415bbb7d83a271bc",
       "dependencies": [
-        "jsr:@std/internal@^1.0.12"
+        "jsr:@std/internal@^1.0.14"
       ]
     },
-    "@std/testing@1.0.18": {
-      "integrity": "d3152f57b11666bf6358d0e127c7e3488e91178b0c2d8fbf0793e1c53cd13cb1",
+    "@std/semver@1.0.8": {
+      "integrity": "dc830e8b8b6a380c895d53fbfd1258dc253704ca57bbe1629ac65fd7830179b7"
+    },
+    "@std/testing@1.0.19": {
+      "integrity": "f4236172365b216728dc3cc8b5e80a9f4c33083d1e4ede7613d5b25b4014898e",
       "dependencies": [
-        "jsr:@std/assert@^1.0.19"
+        "jsr:@std/assert@^1.0.19",
+        "jsr:@std/data-structures",
+        "jsr:@std/fs@^1.0.24",
+        "jsr:@std/internal@^1.0.14",
+        "jsr:@std/path"
       ]
     },
     "@std/text@1.0.19": {
@@ -192,6 +214,9 @@
     },
     "@std/yaml@1.1.0": {
       "integrity": "fc1c5c63e05c4c5eb6118355f557958035d41940d6c29d35b306ef7155d6edb0"
+    },
+    "@std/yaml@1.1.1": {
+      "integrity": "a57665ecf3d17b926380593a56625d8a10cc7281802f1e993b5ebc94a48e71f8"
     },
     "@zaubrik/djwt@3.0.2": {
       "integrity": "8070adaa49cd9e5d2b8ae82fd461132c966ef2f8ff8378db4a4da8df4f17c664",
@@ -329,7 +354,7 @@
         "hono"
       ]
     },
-    "@modelcontextprotocol/sdk@1.29.0_zod@4.3.6": {
+    "@modelcontextprotocol/sdk@1.29.0_zod@4.4.3": {
       "integrity": "sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==",
       "dependencies": [
         "@hono/node-server",
@@ -351,11 +376,14 @@
         "zod-to-json-schema"
       ]
     },
-    "@mongodb-js/saslprep@1.4.6": {
-      "integrity": "sha512-y+x3H1xBZd38n10NZF/rEBlvDOOMQ6LKUTHqr8R9VkJ+mmQOYtJFxIlkkK8fZrtOiL6VixbOBWMbZGBdal3Z1g==",
+    "@mongodb-js/saslprep@1.4.11": {
+      "integrity": "sha512-o9rAHc0IpIjuPSxRutWpE1F62x7n+4mVS4rCNHkzhIUMQcc18bb6xEq5wd2NdN0WjepIyXIppRshYI2kQDOZVA==",
       "dependencies": [
         "sparse-bitfield"
       ]
+    },
+    "@nodable/entities@2.1.1": {
+      "integrity": "sha512-Pig3HxDIoMgjdEH8OCf/dkcTmLFjJRjWuq8jSnklu284/TKOPibSRERmOykiwmyXTtv61mP+44f3GMx0tLAyjg=="
     },
     "@types/webidl-conversions@7.0.3": {
       "integrity": "sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA=="
@@ -562,18 +590,21 @@
     "fast-uri@3.1.0": {
       "integrity": "sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA=="
     },
-    "fast-xml-builder@1.1.4": {
-      "integrity": "sha512-f2jhpN4Eccy0/Uz9csxh3Nu6q4ErKxf0XIsasomfOihuSUa3/xw6w8dnOtCDgEItQFJG8KyXPzQXzcODDrrbOg==",
+    "fast-xml-builder@1.2.0": {
+      "integrity": "sha512-00aAWieqff+ZJhsXA4g1g7M8k+7AYoMUUHF+/zFb5U6Uv/P0Vl4QZo84/IcufzYalLuEj9928bXN9PbbFzMF0Q==",
       "dependencies": [
-        "path-expression-matcher"
+        "path-expression-matcher",
+        "xml-naming"
       ]
     },
-    "fast-xml-parser@5.5.11": {
-      "integrity": "sha512-QL0eb0YbSTVWF6tTf1+LEMSgtCEjBYPpnAjoLC8SscESlAjXEIRJ7cHtLG0pLeDFaZLa4VKZLArtA/60ZS7vyA==",
+    "fast-xml-parser@5.8.0": {
+      "integrity": "sha512-6bIM7fsJxeo3uXv7OncQYsBAMPJ7V16Slahl/6M98C/i2q+vB1+4a0MtrvYwDFEUrwDSbAmeLDRXsOBwrL7yAg==",
       "dependencies": [
+        "@nodable/entities",
         "fast-xml-builder",
         "path-expression-matcher",
-        "strnum"
+        "strnum",
+        "xml-naming"
       ],
       "bin": true
     },
@@ -716,8 +747,8 @@
         "whatwg-url"
       ]
     },
-    "mongodb@7.1.1": {
-      "integrity": "sha512-067DXiMjcpYQl6bGjWQoTUEE9UoRViTtKFcoqX7z08I+iDZv/emH1g8XEFiO3qiDfXAheT5ozl1VffDTKhIW/w==",
+    "mongodb@7.2.0": {
+      "integrity": "sha512-F/2+BMZtLVhY30ioZp0dAmZ+IRZMBqI+nrv6t5+9/1AIwCa8sMRC3jBf81lpxMhnZgqq8CoUD503Z1oZWq1/sw==",
       "dependencies": [
         "@mongodb-js/saslprep",
         "bson",
@@ -889,8 +920,8 @@
     "statuses@2.0.2": {
       "integrity": "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw=="
     },
-    "strnum@2.2.3": {
-      "integrity": "sha512-oKx6RUCuHfT3oyVjtnrmn19H1SiCqgJSg+54XqURKp5aCMbrXrhLjRN9TjuwMjiYstZ0MzDrHqkGZ5dFTKd+zg=="
+    "strnum@2.3.0": {
+      "integrity": "sha512-ums3KNd42PGyx5xaoVTO1mjU1bH3NpY4vsrVlnv9PNGqQj8wd7rJ6nEypLrJ7z5vxK5RP0yMLo6J/Gsm62DI5Q=="
     },
     "toidentifier@1.0.1": {
       "integrity": "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="
@@ -938,14 +969,17 @@
     "wrappy@1.0.2": {
       "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="
     },
-    "zod-to-json-schema@3.25.2_zod@4.3.6": {
+    "xml-naming@0.1.0": {
+      "integrity": "sha512-k8KO9hrMyNk6tUWqUfkTEZbezRRpONVOzUTnc97VnCvyj6Tf9lyUR9EDAIeiVLv56jsMcoXEwjW8Kv5yPY52lw=="
+    },
+    "zod-to-json-schema@3.25.2_zod@4.4.3": {
       "integrity": "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==",
       "dependencies": [
         "zod"
       ]
     },
-    "zod@4.3.6": {
-      "integrity": "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="
+    "zod@4.4.3": {
+      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="
     }
   },
   "remote": {
@@ -960,19 +994,19 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@cliffy/command@1",
-      "jsr:@justinmchase/grove@1.0.1",
+      "jsr:@cliffy/command@^1.1.1",
+      "jsr:@justinmchase/grove@1.0.2",
       "jsr:@justinmchase/serializable@~0.3.15",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/encoding@^1.0.10",
-      "jsr:@std/fs@1",
-      "jsr:@std/jsonc@1",
-      "jsr:@std/path@1",
-      "jsr:@std/testing@^1.0.18",
+      "jsr:@std/fs@^1.0.24",
+      "jsr:@std/jsonc@^1.0.2",
+      "jsr:@std/path@^1.1.5",
+      "jsr:@std/testing@^1.0.19",
       "jsr:@std/uuid@^1.1.1",
-      "jsr:@std/yaml@1",
+      "jsr:@std/yaml@^1.1.1",
       "npm:@modelcontextprotocol/sdk@^1.29.0",
-      "npm:zod@^4.3.6"
+      "npm:zod@^4.4.3"
     ]
   }
 }
