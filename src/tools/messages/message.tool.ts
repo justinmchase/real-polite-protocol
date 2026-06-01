@@ -13,7 +13,7 @@ import { MessageMetadataSchema } from "../../models/messages/stored-message.mode
 import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { inputDate, outputDate } from "../date-schema.ts";
-import { dispatchMessageEnvelope } from "../envelope-dispatch.ts";
+import type { EnvelopeDispatcher } from "../envelope-dispatch.ts";
 import { EnvelopeTooLargeError } from "../../controllers/submit/submit.error.ts";
 import {
   CategoryNotPermittedError,
@@ -190,6 +190,7 @@ export class MessageTool {
     private readonly sentMessageManager: SentMessageManager,
     private readonly contactManager: ContactManager,
     private readonly config: ConfigService,
+    private readonly envelopeDispatcher: EnvelopeDispatcher,
   ) {}
 
   private async senderFields(
@@ -269,7 +270,7 @@ export class MessageTool {
           throw new EnvelopeTooLargeError(bodyBytes.byteLength, MAX_BODY_BYTES);
         }
 
-        const result = await dispatchMessageEnvelope(
+        const result = await this.envelopeDispatcher.dispatchMessage(
           contact.remote_domain,
           envelope,
           contact.remote_credential,

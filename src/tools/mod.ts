@@ -8,8 +8,10 @@ import { DomainAdminTool } from "./domain-admin/mod.ts";
 import { ReceptivePolicyTool } from "./receptive-policy/mod.ts";
 import { InvitationTool } from "./invitations/mod.ts";
 import { MessageTool } from "./messages/mod.ts";
+import { EnvelopeDispatcher } from "./envelope-dispatch.ts";
 
 export * from "./tool-result.ts";
+export { EnvelopeDispatcher } from "./envelope-dispatch.ts";
 
 /** Common interface every MCP tool registration class implements. */
 export interface Tool {
@@ -20,6 +22,13 @@ export function initTools(
   managers: Managers,
   config: ConfigService,
 ): Tool[] {
+  const envelopeDispatcher = new EnvelopeDispatcher(
+    config,
+    managers.invitations,
+    managers.receptivePolicy,
+    managers.contacts,
+    managers.messages,
+  );
   return [
     new AccountTool(managers.accounts),
     new ContactTool(managers.contacts),
@@ -31,12 +40,14 @@ export function initTools(
       managers.contacts,
       managers.receptivePolicy,
       config,
+      envelopeDispatcher,
     ),
     new MessageTool(
       managers.messages,
       managers.sentMessages,
       managers.contacts,
       config,
+      envelopeDispatcher,
     ),
   ];
 }

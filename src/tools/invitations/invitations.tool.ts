@@ -21,10 +21,7 @@ import type {
 import type { ConfigService } from "../../services/config/config.service.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
 import { inputDate, outputDate } from "../date-schema.ts";
-import {
-  dispatchInvitationEnvelope,
-  dispatchInvitationReplyEnvelope,
-} from "../envelope-dispatch.ts";
+import type { EnvelopeDispatcher } from "../envelope-dispatch.ts";
 
 const ClaimValueSchema = z.union([
   z.string().max(512),
@@ -210,6 +207,7 @@ export class InvitationTool {
     private readonly contactManager: ContactManager,
     private readonly receptivePolicyManager: ReceptivePolicyManager,
     private readonly config: ConfigService,
+    private readonly envelopeDispatcher: EnvelopeDispatcher,
   ) {}
 
   private async resolveLocalDomainId(oid: string): Promise<string> {
@@ -426,7 +424,7 @@ export class InvitationTool {
           ...(params.message !== undefined && { message: params.message }),
         };
 
-        const result = await dispatchInvitationReplyEnvelope(
+        const result = await this.envelopeDispatcher.dispatchInvitationReply(
           invitation.remote_domain,
           replyEnvelope,
           invitation.reply_credential,
@@ -519,7 +517,7 @@ export class InvitationTool {
           ...(params.message !== undefined && { message: params.message }),
         };
 
-        const result = await dispatchInvitationEnvelope(
+        const result = await this.envelopeDispatcher.dispatchInvitation(
           params.receiver_domain,
           envelope,
           {
@@ -603,7 +601,7 @@ export class InvitationTool {
         // Best-effort delivery; ignore non-2xx so the local state advances
         // regardless. The remote may already have decided the invitation.
         try {
-          await dispatchInvitationEnvelope(
+          await this.envelopeDispatcher.dispatchInvitation(
             invitation.remote_domain,
             cancelEnvelope,
             { receptivePolicyId: "00000000-0000-0000-0000-000000000000" },
@@ -665,7 +663,7 @@ export class InvitationTool {
           ...(params.message !== undefined && { message: params.message }),
         };
 
-        const result = await dispatchInvitationEnvelope(
+        const result = await this.envelopeDispatcher.dispatchInvitation(
           contact.remote_domain,
           envelope,
           { receptivePolicyId: params.receptive_policy_id },
