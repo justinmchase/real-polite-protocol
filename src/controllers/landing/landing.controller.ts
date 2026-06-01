@@ -5,7 +5,151 @@ import {
   type IState,
 } from "@justinmchase/grove";
 
-const HTML = `<!DOCTYPE html>
+const DEV_INSPECTOR_HTML = `
+    <div class="spec-box" id="kv-inspector" style="margin-top:1rem;">
+      <h3>Dev: KV inspector</h3>
+      <p>Local development only — visible because <code>RPP_DEV_MODE</code> is enabled.</p>
+      <div id="kv-toolbar" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:1rem;">
+        <button id="kv-back" class="btn btn-secondary" style="display:none;">← prefixes</button>
+        <span id="kv-breadcrumb" style="font-family:ui-monospace,monospace;font-size:0.85rem;color:var(--muted);"></span>
+        <input id="kv-filter" placeholder="filter (substring of key/value JSON)" style="flex:1;min-width:200px;padding:0.4rem 0.6rem;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);font-family:ui-monospace,monospace;font-size:0.85rem;display:none;" />
+        <button id="kv-reload" class="btn btn-secondary">reload</button>
+      </div>
+      <div id="kv-content" style="margin-top:1rem;font-family:ui-monospace,monospace;font-size:0.8rem;"></div>
+      <div id="kv-sentinel" style="height:1px;"></div>
+    </div>
+    <script>
+    (() => {
+      const root = document.getElementById("kv-inspector");
+      if (!root) return;
+      const back = document.getElementById("kv-back");
+      const crumb = document.getElementById("kv-breadcrumb");
+      const filter = document.getElementById("kv-filter");
+      const reload = document.getElementById("kv-reload");
+      const content = document.getElementById("kv-content");
+      const sentinel = document.getElementById("kv-sentinel");
+
+      const state = { mode: "prefixes", prefix: [], cursor: null, q: "", loading: false, done: false };
+      let observer = null;
+
+      const escape = (s) => String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+      async function loadPrefixes() {
+        state.mode = "prefixes";
+        state.prefix = [];
+        back.style.display = "none";
+        filter.style.display = "none";
+        crumb.textContent = "indexes";
+        content.innerHTML = '<div style="color:var(--muted);">loading…</div>';
+        try {
+          const res = await fetch("/_dev/kv/prefixes");
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = await res.json();
+          const rows = data.prefixes.map((p) =>
+            '<div class="kv-row" data-prefix="' + escape(p.prefix) + '" style="display:flex;justify-content:space-between;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.25rem;cursor:pointer;background:var(--bg);">'
+            + '<span style="color:var(--accent);">' + escape(p.prefix) + '</span>'
+            + '<span style="color:var(--muted);">' + p.count + '</span></div>'
+          ).join("");
+          content.innerHTML = (rows || '<div style="color:var(--muted);">empty</div>')
+            + '<div style="margin-top:0.75rem;color:var(--muted);">total: ' + data.total + '</div>';
+          content.querySelectorAll(".kv-row").forEach((el) => {
+            el.addEventListener("click", () => loadList([el.dataset.prefix]));
+          });
+        } catch (err) {
+          content.innerHTML = '<div style="color:#f88;">error: ' + escape(err.message) + '</div>';
+        }
+      }
+
+      async function loadList(prefix, append = false) {
+        if (!append) {
+          state.mode = "list";
+          state.prefix = prefix;
+          state.cursor = null;
+          state.done = false;
+          state.q = filter.value || "";
+          back.style.display = "";
+          filter.style.display = "";
+          crumb.textContent = "prefix: " + JSON.stringify(prefix);
+          content.innerHTML = "";
+          attachObserver();
+        }
+        if (state.loading || state.done) return;
+        state.loading = true;
+        const params = new URLSearchParams({
+          prefix: JSON.stringify(prefix),
+          limit: "50",
+        });
+        if (state.cursor) params.set("cursor", state.cursor);
+        if (state.q) params.set("q", state.q);
+        try {
+          const res = await fetch("/_dev/kv/list?" + params.toString());
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = await res.json();
+          for (const entry of data.entries) {
+            const div = document.createElement("div");
+            div.style.cssText = "padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.25rem;background:var(--bg);";
+            div.innerHTML = '<div style="color:var(--accent);word-break:break-all;">'
+              + escape(JSON.stringify(entry.key)) + '</div>'
+              + '<pre style="margin-top:0.25rem;color:var(--text);white-space:pre-wrap;word-break:break-all;font-size:0.75rem;">'
+              + escape(JSON.stringify(entry.value, null, 2)) + '</pre>';
+            content.appendChild(div);
+          }
+          state.cursor = data.cursor;
+          if (!data.cursor) {
+            state.done = true;
+            const note = document.createElement("div");
+            note.style.cssText = "color:var(--muted);padding:0.5rem 0;text-align:center;";
+            note.textContent = data.entries.length === 0
+              ? (data.truncated ? "no matches in first " + data.scanned + " records" : "no entries")
+              : "end of results";
+            content.appendChild(note);
+          }
+        } catch (err) {
+          const div = document.createElement("div");
+          div.style.cssText = "color:#f88;padding:0.5rem 0;";
+          div.textContent = "error: " + err.message;
+          content.appendChild(div);
+        } finally {
+          state.loading = false;
+        }
+      }
+
+      function attachObserver() {
+        if (observer) observer.disconnect();
+        observer = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting && state.mode === "list") {
+            loadList(state.prefix, true);
+          }
+        }, { rootMargin: "200px" });
+        observer.observe(sentinel);
+      }
+
+      back.addEventListener("click", () => loadPrefixes());
+      reload.addEventListener("click", () => {
+        if (state.mode === "prefixes") loadPrefixes();
+        else loadList(state.prefix);
+      });
+      let filterTimer;
+      filter.addEventListener("input", () => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(() => {
+          if (state.mode === "list") loadList(state.prefix);
+        }, 250);
+      });
+
+      loadPrefixes();
+    })();
+    </script>`;
+
+function renderHtml(devMode: boolean): string {
+  return BASE_HTML.replace(
+    "<!--KV_INSPECTOR-->",
+    devMode ? DEV_INSPECTOR_HTML : "",
+  );
+}
+
+const BASE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -197,6 +341,7 @@ const HTML = `<!DOCTYPE html>
         Browse requirements →
       </a>
     </div>
+    <!--KV_INSPECTOR-->
   </main>
 
   <footer>
@@ -207,12 +352,17 @@ const HTML = `<!DOCTYPE html>
 </html>`;
 
 export class LandingController extends Controller {
+  constructor(private readonly devMode: boolean) {
+    super();
+  }
+
   // deno-lint-ignore require-await
   async use<TContext extends IContext, TState extends IState<TContext>>(
     app: GroveApp<TContext, TState>,
   ): Promise<void> {
+    const html = renderHtml(this.devMode);
     app.get("/", (ctx) => {
-      return ctx.html(HTML);
+      return ctx.html(html);
     });
 
     // Disallow all crawlers. This server exposes machine-to-machine APIs and

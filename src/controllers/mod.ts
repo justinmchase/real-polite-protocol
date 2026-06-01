@@ -8,6 +8,7 @@ import {
 } from "@justinmchase/grove";
 import type { Context, State } from "../context.ts";
 import { AuthDiscoveryController } from "./auth-discovery/mod.ts";
+import { KvInspectorController } from "./dev/kv-inspector.controller.ts";
 import { AuthMiddleware } from "./middleware/auth.middleware.ts";
 import { LandingController } from "./landing/landing.controller.ts";
 import { McpController } from "./mcp/mcp.controller.ts";
@@ -21,7 +22,10 @@ export async function initControllers(
   await new HealthController().use(app);
   await new IsHtmlController().use(app);
   await new LogController().use(app);
-  await new LandingController().use(app);
+  await new LandingController(context.services.config.devMode).use(app);
+  if (context.services.config.devMode) {
+    await new KvInspectorController(context.services.kv).use(app);
+  }
   await new SubmitController(
     context.services.kv,
     context.managers.invitations,

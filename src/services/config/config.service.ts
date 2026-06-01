@@ -52,8 +52,10 @@ export class ConfigService {
     return new ConfigService(
       hostname,
       port,
-      readOptionalString(env, "RPP_KV_PATH") ??
-        (Deno.env.get("DENO_DEPLOYMENT_ID") ? undefined : ".data/kv.sqlite3"),
+      readOptionalBoolean(env, "RPP_KV_TUNNEL")
+        ? undefined
+        : readOptionalString(env, "RPP_KV_PATH") ??
+          (Deno.env.get("DENO_DEPLOYMENT_ID") ? undefined : ".data/kv.sqlite3"),
       readOptionalString(env, "AZURE_TENANT_ID") ??
         "22dddbf3-6a10-486d-94dc-b3eca6a4d13e",
       readOptionalString(env, "AZURE_API_APP_CLIENT_ID") ??

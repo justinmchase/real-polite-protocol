@@ -473,7 +473,13 @@ export class InvitationTool {
         description:
           "Send an invitation envelope to a remote RPP domain (spec §10.1). " +
           "Provide exactly one of receptive_policy_id or shortcode. The local domain generates " +
-          "a fresh reply_credential the remote will use to authenticate their reply.",
+          "a fresh reply_credential the remote will use to authenticate their reply. " +
+          "IMPORTANT: before calling this tool the agent MUST ask the user which verified " +
+          "claims they want to share with the invitee. Call list_verifiable_users (or " +
+          "get_user_verified_metadata for the sender's oid) to enumerate the available " +
+          "user-verified and admin-verified claim keys, present them to the user, and pass " +
+          "the user's selection in include_user_claims / include_admin_claims. Do not " +
+          "include any claims the user did not explicitly approve.",
         inputSchema: SendInvitationInputSchema,
         outputSchema: SendInvitationOutputSchema,
       },
