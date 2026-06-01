@@ -355,11 +355,9 @@ export class InvitationTool {
       },
       withToolErrorHandling(async (params: ReviewInvitationArgs) => {
         const invitation = await this.invitationManager.require(
+          auth.oid,
           params.invitation_id,
         );
-        if (invitation.owner_oid !== auth.oid) {
-          throw new Error(`Invitation ${params.invitation_id} not found`);
-        }
         return toolResult(projectInvitation(invitation));
       }),
     );
@@ -375,12 +373,10 @@ export class InvitationTool {
       },
       withToolErrorHandling(async (params: AcceptInvitationArgs) => {
         const invitation = await this.invitationManager.requireDirection(
+          auth.oid,
           params.invitation_id,
           "inbound",
         );
-        if (invitation.owner_oid !== auth.oid) {
-          throw new Error(`Invitation ${params.invitation_id} not found`);
-        }
 
         const remoteDomainId =
           (invitation.claims?.immutable["domain_id"] as string | undefined) ??
@@ -410,6 +406,7 @@ export class InvitationTool {
         });
 
         const accepted = await this.invitationManager.accept(
+          auth.oid,
           invitation.invitation_id,
           now,
         );
@@ -459,13 +456,12 @@ export class InvitationTool {
       },
       withToolErrorHandling(async (params: RejectInvitationArgs) => {
         const invitation = await this.invitationManager.requireDirection(
+          auth.oid,
           params.invitation_id,
           "inbound",
         );
-        if (invitation.owner_oid !== auth.oid) {
-          throw new Error(`Invitation ${params.invitation_id} not found`);
-        }
         const updated = await this.invitationManager.reject(
+          auth.oid,
           invitation.invitation_id,
           new Date(),
         );
@@ -573,12 +569,10 @@ export class InvitationTool {
       },
       withToolErrorHandling(async (params: CancelInvitationArgs) => {
         const invitation = await this.invitationManager.requireDirection(
+          auth.oid,
           params.invitation_id,
           "outbound",
         );
-        if (invitation.owner_oid !== auth.oid) {
-          throw new Error(`Invitation ${params.invitation_id} not found`);
-        }
 
         const now = new Date();
         // Resolve receptive policy used at send time: we did not persist it on
@@ -619,6 +613,7 @@ export class InvitationTool {
         }
 
         const cancelled = await this.invitationManager.cancelOutbound(
+          auth.oid,
           invitation.invitation_id,
           now,
         );

@@ -227,7 +227,7 @@ Deno.test({
             const kv = await Deno.openKv(kvPath);
             try {
               const entry = await kv.get<Record<string, unknown>>(
-                ["invitations", invResult.invitation_id],
+                ["invitations", "oid-target-user", invResult.invitation_id],
               );
               assertExists(entry.value, "invitation must be stored in KV");
               const claims = entry.value.claims as

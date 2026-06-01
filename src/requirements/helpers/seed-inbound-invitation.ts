@@ -70,10 +70,14 @@ export async function seedInboundInvitation(
   };
 
   await kv.atomic()
-    .set(["invitations", invitationId], invitation)
+    .set(["invitations", opts.ownerOid, invitationId], invitation)
     .set(
       ["invitations_by_owner", opts.ownerOid, "inbound", invitationId],
       invitationId,
+    )
+    .set(
+      ["invitations_by_id", invitationId, "inbound"],
+      opts.ownerOid,
     )
     .commit();
 

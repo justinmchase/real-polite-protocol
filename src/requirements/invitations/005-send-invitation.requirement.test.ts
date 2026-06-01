@@ -72,6 +72,7 @@ Deno.test({
                 // Outbound invitation record persisted as pending.
                 const outbound = await kv.get<Record<string, unknown>>([
                   "invitations",
+                  ownerOid,
                   result.invitation_id as string,
                 ]);
                 assertExists(outbound.value);

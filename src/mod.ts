@@ -1,8 +1,13 @@
-import { ConsoleLogger, Grove, WebMode } from "@justinmchase/grove";
+import {
+  ConsoleLogger,
+  Grove,
+  MigrationRunner,
+  WebMode,
+} from "@justinmchase/grove";
 import type { Context, State } from "./context.ts";
 import { initControllers } from "./controllers/mod.ts";
 import { initManagers } from "./managers/mod.ts";
-import { MigrationRunner, MIGRATIONS } from "./migrations/mod.ts";
+import { MIGRATIONS } from "./migrations/mod.ts";
 import { initRepositories } from "./repositories/mod.ts";
 import { initServices } from "./services/mod.ts";
 import type { Services } from "./services/mod.ts";

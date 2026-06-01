@@ -122,7 +122,11 @@ export class InvitationEnvelopeHandler {
     // Cancellation: spec §10.3. Re-submitted invitation with the same id and
     // `cancelled: true` transitions a pending inbound invitation to cancelled.
     if (envelope.cancelled) {
-      await this.invitationManager.cancel(envelope.invitation_id, now);
+      await this.invitationManager.cancel(
+        policy.oid,
+        envelope.invitation_id,
+        now,
+      );
       return { envelopeId: envelope.invitation_id };
     }
 
@@ -172,7 +176,7 @@ export class InvitationReplyEnvelopeHandler {
     invitationId: string,
     contactId: string,
   ): Promise<InvitationReplyAuthContext> {
-    const invitation = await this.invitationManager.requireDirection(
+    const invitation = await this.invitationManager.requireByIdAndDirection(
       invitationId,
       "outbound",
     );
@@ -195,7 +199,7 @@ export class InvitationReplyEnvelopeHandler {
     // The outbound invitation was already required for HMAC resolution; fetch
     // again here to perform the actual transition + contact creation. If the
     // status has since changed we surface the standard not-pending error.
-    const invitation = await this.invitationManager.requireDirection(
+    const invitation = await this.invitationManager.requireByIdAndDirection(
       envelope.invitation_id,
       "outbound",
     );
@@ -240,6 +244,7 @@ export class InvitationReplyEnvelopeHandler {
     });
 
     await this.invitationManager.markOutboundAccepted(
+      invitation.owner_oid,
       invitation.invitation_id,
       now,
     );

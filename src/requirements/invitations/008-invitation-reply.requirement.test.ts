@@ -44,6 +44,7 @@ Deno.test({
 
               const updated = await kv.get<Record<string, unknown>>([
                 "invitations",
+                ownerOid,
                 outbound.invitation_id,
               ]);
               assertExists(updated.value);

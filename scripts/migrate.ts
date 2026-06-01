@@ -9,8 +9,8 @@
  *   DENO_KV_ACCESS_TOKEN=<token>
  *   RPP_KV_PATH=https://api.deno.com/databases/<database-id>/connect
  */
-import { ConsoleLogger } from "@justinmchase/grove";
-import { MigrationRunner, MIGRATIONS } from "../src/migrations/mod.ts";
+import { ConsoleLogger, MigrationRunner } from "@justinmchase/grove";
+import { MIGRATIONS } from "../src/migrations/mod.ts";
 
 function parseArgs(args: string[]): { dryRun: boolean; only: string[] } {
   const dryRun = args.includes("--dry-run");

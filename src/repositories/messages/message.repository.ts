@@ -40,6 +40,13 @@ export class MessageRepository {
     return entry.value ? StoredMessageSchema.parse(entry.value) : undefined;
   }
 
+  async tryGet(id: string): Promise<StoredMessage | undefined> {
+    const entry = await this.kv.store.get<unknown>([...MESSAGE_PREFIX, id]);
+    if (!entry.value) return undefined;
+    const result = StoredMessageSchema.safeParse(entry.value);
+    return result.success ? result.data : undefined;
+  }
+
   async set(message: StoredMessage): Promise<StoredMessage> {
     await this.kv.store
       .atomic()
@@ -94,7 +101,7 @@ export class MessageRepository {
     const iter = this.kv.store.list<string>({ prefix });
     let deleted = 0;
     for await (const entry of iter) {
-      const msg = await this.get(entry.value);
+      const msg = await this.tryGet(entry.value);
       if (!msg) continue;
       if (msg.contact_id !== contactId) continue;
       await this.kv.store

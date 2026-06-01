@@ -115,7 +115,7 @@ Deno.test({
               // Outbound side, owned by USER.
               const localDomainId = crypto.randomUUID();
               await kv.atomic()
-                .set(["invitations", invitationId], {
+                .set(["invitations", userOid, invitationId], {
                   invitation_id: invitationId,
                   direction: "outbound",
                   owner_oid: userOid,
@@ -138,6 +138,10 @@ Deno.test({
                     invitationId,
                   ],
                   invitationId,
+                )
+                .set(
+                  ["invitations_by_id", invitationId, "outbound"],
+                  userOid,
                 )
                 .commit();
 
@@ -165,7 +169,11 @@ Deno.test({
               // USER's outbound invitation should now be `accepted` (the
               // local-path reply handler ran the same transition the inbound
               // HTTP path would have).
-              const outbound = await kv.get(["invitations", invitationId]);
+              const outbound = await kv.get([
+                "invitations",
+                userOid,
+                invitationId,
+              ]);
               assertExists(outbound.value);
               assertEquals(
                 (outbound.value as { status: string }).status,

@@ -93,21 +93,28 @@ export class InvitationManager {
     return await this.invitations.set(invitation);
   }
 
-  async get(invitationId: string): Promise<Invitation | undefined> {
-    return await this.invitations.get(invitationId);
+  async get(
+    ownerOid: string,
+    invitationId: string,
+  ): Promise<Invitation | undefined> {
+    return await this.invitations.get(ownerOid, invitationId);
   }
 
-  async require(invitationId: string): Promise<Invitation> {
-    const invitation = await this.invitations.get(invitationId);
+  async require(
+    ownerOid: string,
+    invitationId: string,
+  ): Promise<Invitation> {
+    const invitation = await this.invitations.get(ownerOid, invitationId);
     if (!invitation) throw new InvitationNotFoundError(invitationId);
     return invitation;
   }
 
   async requireDirection(
+    ownerOid: string,
     invitationId: string,
     direction: InvitationDirection,
   ): Promise<Invitation> {
-    const invitation = await this.require(invitationId);
+    const invitation = await this.require(ownerOid, invitationId);
     if (invitation.direction !== direction) {
       throw new InvitationDirectionMismatchError(
         invitationId,
@@ -116,6 +123,31 @@ export class InvitationManager {
       );
     }
     return invitation;
+  }
+
+  /**
+   * Server-internal: resolve which local account owns the invitation with
+   * this id + direction. Used by the submit handler to look up the local
+   * record without trusting any caller-provided oid.
+   */
+  async findOwner(
+    invitationId: string,
+    direction: InvitationDirection,
+  ): Promise<string | undefined> {
+    return await this.invitations.findOwner(invitationId, direction);
+  }
+
+  /**
+   * Server-internal: look up an invitation by id + direction. Resolves the
+   * owner via the reverse index and returns the record (or throws).
+   */
+  async requireByIdAndDirection(
+    invitationId: string,
+    direction: InvitationDirection,
+  ): Promise<Invitation> {
+    const ownerOid = await this.invitations.findOwner(invitationId, direction);
+    if (!ownerOid) throw new InvitationNotFoundError(invitationId);
+    return await this.require(ownerOid, invitationId);
   }
 
   async list(
@@ -130,8 +162,16 @@ export class InvitationManager {
    * creating the contact and dispatching the `invitation_reply` envelope
    * (spec §10.4).
    */
-  async accept(invitationId: string, decidedAt: Date): Promise<Invitation> {
-    const invitation = await this.requireDirection(invitationId, "inbound");
+  async accept(
+    ownerOid: string,
+    invitationId: string,
+    decidedAt: Date,
+  ): Promise<Invitation> {
+    const invitation = await this.requireDirection(
+      ownerOid,
+      invitationId,
+      "inbound",
+    );
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }
@@ -142,8 +182,16 @@ export class InvitationManager {
     });
   }
 
-  async reject(invitationId: string, decidedAt: Date): Promise<Invitation> {
-    const invitation = await this.requireDirection(invitationId, "inbound");
+  async reject(
+    ownerOid: string,
+    invitationId: string,
+    decidedAt: Date,
+  ): Promise<Invitation> {
+    const invitation = await this.requireDirection(
+      ownerOid,
+      invitationId,
+      "inbound",
+    );
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }
@@ -158,8 +206,16 @@ export class InvitationManager {
    * Mark an inbound invitation as `cancelled` after a remote cancellation
    * envelope (spec §10.3).
    */
-  async cancel(invitationId: string, decidedAt: Date): Promise<Invitation> {
-    const invitation = await this.requireDirection(invitationId, "inbound");
+  async cancel(
+    ownerOid: string,
+    invitationId: string,
+    decidedAt: Date,
+  ): Promise<Invitation> {
+    const invitation = await this.requireDirection(
+      ownerOid,
+      invitationId,
+      "inbound",
+    );
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }
@@ -175,10 +231,15 @@ export class InvitationManager {
    * a cancellation envelope to the remote (spec §10.3, sender side).
    */
   async cancelOutbound(
+    ownerOid: string,
     invitationId: string,
     decidedAt: Date,
   ): Promise<Invitation> {
-    const invitation = await this.requireDirection(invitationId, "outbound");
+    const invitation = await this.requireDirection(
+      ownerOid,
+      invitationId,
+      "outbound",
+    );
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }
@@ -194,10 +255,15 @@ export class InvitationManager {
    * `invitation_reply` envelope was received (spec §10.4 + §11.2 path 2).
    */
   async markOutboundAccepted(
+    ownerOid: string,
     invitationId: string,
     decidedAt: Date,
   ): Promise<Invitation> {
-    const invitation = await this.requireDirection(invitationId, "outbound");
+    const invitation = await this.requireDirection(
+      ownerOid,
+      invitationId,
+      "outbound",
+    );
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }
@@ -208,8 +274,12 @@ export class InvitationManager {
     });
   }
 
-  async expire(invitationId: string, decidedAt: Date): Promise<Invitation> {
-    const invitation = await this.require(invitationId);
+  async expire(
+    ownerOid: string,
+    invitationId: string,
+    decidedAt: Date,
+  ): Promise<Invitation> {
+    const invitation = await this.require(ownerOid, invitationId);
     if (invitation.status !== "pending") {
       throw new InvitationNotPendingError(invitationId, invitation.status);
     }

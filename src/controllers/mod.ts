@@ -38,6 +38,7 @@ export async function initControllers(
     context.services.mcp,
     context.managers.accounts,
     context.tools,
+    context.logger,
   ).use(app);
   await new NotFoundController().use(app);
 }

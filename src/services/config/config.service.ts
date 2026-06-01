@@ -32,6 +32,9 @@ export class ConfigService {
     public readonly audience: string | undefined,
     public readonly authDebugLogTokenPayload: boolean,
     public readonly authDebugLogRawAccessToken: boolean,
+    public readonly devMode: boolean,
+    public readonly devIssuer: string,
+    public readonly devPublicKeyPath: string,
   ) {
     const isLocalhost = hostname === "localhost";
     this.protocol = isLocalhost ? "http" : "https";
@@ -61,6 +64,12 @@ export class ConfigService {
       readOptionalString(env, "AUTH_AUDIENCE"),
       readOptionalBoolean(env, "AUTH_DEBUG_LOG_TOKEN_PAYLOAD") ?? false,
       readOptionalBoolean(env, "AUTH_DEBUG_LOG_RAW_ACCESS_TOKEN") ?? false,
+      // Dev mode is force-disabled when running on Deno Deploy.
+      (readOptionalBoolean(env, "RPP_DEV_MODE") ?? false) &&
+        !Deno.env.get("DENO_DEPLOYMENT_ID"),
+      readOptionalString(env, "RPP_DEV_ISSUER") ?? "urn:rpp:dev",
+      readOptionalString(env, "RPP_DEV_PUBLIC_KEY_PATH") ??
+        ".dev/keys/dev.pub.jwk.json",
     );
   }
 }
