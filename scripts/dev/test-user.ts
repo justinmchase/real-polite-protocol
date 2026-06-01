@@ -14,26 +14,15 @@
 // with RPP_DEV_MODE=1 (see `deno task dev`) to accept the minted tokens.
 
 import { Command } from "@cliffy/command";
-import { mintToken } from "./mint.ts";
-import { loadPersona, type Persona } from "./personas.ts";
+import {
+  PersonaCallError,
+  PersonaClient,
+  personaClient,
+} from "./persona-client.ts";
 
-const SERVER = Deno.env.get("RPP_SERVER") ?? "http://localhost:8000";
-const AUDIENCE = Deno.env.get("RPP_AUDIENCE") ??
-  `api://${
-    Deno.env.get("AZURE_API_APP_CLIENT_ID") ??
-      "03c7765e-c8c3-462f-a155-d863f44ea1ed"
-  }`;
-const API_APP_CLIENT_ID = Deno.env.get("AZURE_API_APP_CLIENT_ID") ??
-  "03c7765e-c8c3-462f-a155-d863f44ea1ed";
-
-interface Ctx {
-  persona: Persona;
-  token: string;
-}
-
-let _ctx: Ctx | undefined;
-async function ctx(): Promise<Ctx> {
-  if (_ctx) return _ctx;
+let _client: PersonaClient | undefined;
+async function client(): Promise<PersonaClient> {
+  if (_client) return _client;
   const personaName = Deno.args[0];
   if (!personaName || personaName.startsWith("-")) {
     console.error(
@@ -42,74 +31,28 @@ async function ctx(): Promise<Ctx> {
     );
     Deno.exit(2);
   }
-  const persona = await loadPersona(personaName);
-  const token = await mintToken({
-    persona,
-    audience: AUDIENCE,
-    apiAppClientId: API_APP_CLIENT_ID,
-  });
-  _ctx = { persona, token };
-  return _ctx;
+  _client = await personaClient(personaName);
+  return _client;
 }
 
 async function callTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const { token, persona } = await ctx();
-  const body = {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name, arguments: args },
-  };
-  const res = await fetch(`${SERVER}/mcp`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "accept": "application/json, text/event-stream",
-      "authorization": `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    console.error(`[${persona.name}] HTTP ${res.status}: ${text}`);
-    Deno.exit(1);
-  }
-  // Streamable HTTP transport may return SSE; pull the first JSON-RPC message.
-  const json = parseMcpResponse(text);
-  if (json && typeof json === "object" && "error" in json) {
-    console.error(`[${persona.name}] MCP error:`, json.error);
-    Deno.exit(1);
-  }
-  const result = (json as { result?: { content?: Array<{ text?: string }> } })
-    ?.result;
-  // MCP tool results wrap JSON in a text content block; unwrap when present.
-  const firstText = result?.content?.[0]?.text;
-  if (typeof firstText === "string") {
-    try {
-      return JSON.parse(firstText);
-    } catch {
-      return firstText;
+  const c = await client();
+  try {
+    return await c.call(name, args);
+  } catch (err) {
+    if (err instanceof PersonaCallError) {
+      if (err.mcpError !== undefined) {
+        console.error(`[${err.persona}] MCP error:`, err.mcpError);
+      } else {
+        console.error(`[${err.persona}] HTTP ${err.status}: ${err.body}`);
+      }
+      Deno.exit(1);
     }
+    throw err;
   }
-  return result;
-}
-
-function parseMcpResponse(body: string): unknown {
-  const trimmed = body.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    return JSON.parse(trimmed);
-  }
-  // SSE: look for `data:` lines and parse the first valid JSON payload.
-  for (const line of trimmed.split(/\r?\n/)) {
-    if (line.startsWith("data:")) {
-      const payload = line.slice(5).trim();
-      if (payload && payload !== "[DONE]") return JSON.parse(payload);
-    }
-  }
-  return trimmed;
 }
 
 function print(value: unknown): void {
@@ -147,14 +90,14 @@ const program = new Command()
 
 program.command("token", "Print the dev JWT for this persona.")
   .action(async () => {
-    const { token } = await ctx();
-    console.log(token);
+    const c = await client();
+    console.log(c.token);
   });
 
 program.command("whoami", "Print the persona record.")
   .action(async () => {
-    const { persona } = await ctx();
-    print(persona);
+    const c = await client();
+    print(c.persona);
   });
 
 program.command("call <tool:string>", "Call any MCP tool by name.")
@@ -237,8 +180,8 @@ program.command("list-invitations")
   });
 
 program.command("list-sent-invitations")
-  .option("--status <status:string>")
-  .option("--domain <domain:string>")
+  .option("--status <status:string>", "Filter by invitation status.")
+  .option("--domain <domain:string>", "Filter by remote domain.")
   .action(async ({ status, domain }) => {
     const args: Record<string, unknown> = {};
     if (status) args.status = status;
@@ -323,9 +266,9 @@ program.command("send-message")
   });
 
 program.command("list-messages")
-  .option("--contact <id:string>")
+  .option("--contact <id:string>", "Contact ID.")
   .option("--unread", "Only unread messages.")
-  .option("--category <name:string>")
+  .option("--category <name:string>", "Message category.")
   .action(async ({ contact, unread, category }) => {
     const args: Record<string, unknown> = {};
     if (contact) args.contact_id = contact;
@@ -349,9 +292,9 @@ program.command("reply <message_id:string>")
     "Reply to a message by resolving its contact and calling send_message.",
   )
   .option("--body <text:string>", "Reply body.", { required: true })
-  .option("--subject <text:string>")
-  .option("--category <name:string>", { default: "direct" })
-  .option("--rating <rating:string>", { default: "general" })
+  .option("--subject <text:string>", "Subject")
+  .option("--category <name:string>", "Category", { default: "direct" })
+  .option("--rating <rating:string>", "Content rating", { default: "general" })
   .action(async ({ body, subject, category, rating }, messageId) => {
     const source = await callTool("get_message", { message_id: messageId }) as
       | { contact_id?: string; subject?: string }
@@ -372,5 +315,18 @@ program.command("reply <message_id:string>")
     print(await callTool("send_message", args));
   });
 
-// Drop the first positional (persona) before handing off to cliffy.
-await program.parse(Deno.args.slice(1));
+program.command("script <file:string>")
+  .description(
+    "Run a multi-persona scenario script. The file is a JSON(C) array of " +
+      "steps; see scripts/dev/persona-script.ts for the schema.",
+  )
+  .action(async (_o, file) => {
+    const { runPersonaScript } = await import("./persona-script.ts");
+    await runPersonaScript(file);
+  });
+
+// `script <file>` is the only subcommand that does not require a persona as the
+// first positional. Detect it and pass argv through unmodified; otherwise drop
+// the leading persona name before handing off to cliffy.
+const argv = Deno.args[0] === "script" ? Deno.args : Deno.args.slice(1);
+await program.parse(argv);

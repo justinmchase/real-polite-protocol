@@ -93,6 +93,9 @@ Deno.test({
           undefined, // audience
           false, // authDebugLogTokenPayload
           false, // authDebugLogRawAccessToken
+          false, // devMode
+          "urn:rpp:dev", // devIssuer
+          ".dev/keys/dev.pub.jwk.json", // devPublicKeyPath
         );
         assertEquals(
           config.domain,
@@ -116,6 +119,9 @@ Deno.test({
           undefined,
           false,
           false,
+          false,
+          "urn:rpp:dev",
+          ".dev/keys/dev.pub.jwk.json",
         );
         assertEquals(config.domain, "example.com:8080");
       },

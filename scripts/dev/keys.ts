@@ -50,8 +50,12 @@ async function generateAndWrite(): Promise<DevKeyPair> {
     ["sign", "verify"],
   ) as CryptoKeyPair;
 
-  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
-  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey) as
+    & JsonWebKey
+    & Record<string, unknown>;
+  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey) as
+    & JsonWebKey
+    & Record<string, unknown>;
   privateJwk.kid = KID;
   publicJwk.kid = KID;
   privateJwk.alg = "RS256";

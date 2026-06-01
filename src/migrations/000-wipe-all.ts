@@ -14,7 +14,8 @@ const DELETE_BATCH = 100;
  */
 export const wipeAllMigration: Migration = {
   id: "000-wipe-all",
-  description: "delete all data except migration markers to clear legacy records",
+  description:
+    "delete all data except migration markers to clear legacy records",
   async run(ctx: MigrationContext): Promise<MigrationResult> {
     let scanned = 0;
     let upgraded = 0;
