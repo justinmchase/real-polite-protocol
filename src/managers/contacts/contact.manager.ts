@@ -15,7 +15,10 @@ import type {
   ListContactsOptions,
   ListContactsResult,
 } from "../../repositories/contacts/contact.repository.ts";
-import { ContactNotFoundError } from "./contact.error.ts";
+import {
+  ContactFieldRevisionNotFoundError,
+  ContactNotFoundError,
+} from "./contact.error.ts";
 import { generateContactCredential } from "./credential.ts";
 
 /**
@@ -242,16 +245,59 @@ export class ContactManager {
     const contact = await this.contacts.get(ownerOid, contactId);
     if (!contact) throw new ContactNotFoundError(contactId);
 
+    const existing = contact.fields[key] ?? [];
+    const recordedAt = nextRecordedAt(existing, new Date());
     const record: ContactFieldRecord = {
       value,
       source: "owner_note",
-      recorded_at: new Date(),
+      recorded_at: recordedAt,
     };
-    const existing = contact.fields[key] ?? [];
     return await this.contacts.set({
       ...contact,
       fields: { ...contact.fields, [key]: [record, ...existing] },
       updated_at: record.recorded_at,
+    });
+  }
+
+  /**
+   * Remove a single historical `ContactFieldRecord` from a contact's field
+   * history, identified by `(key, recorded_at)` (spec §11.7).
+   *
+   * Works on any revision — not just the most recent. When the last revision
+   * for a key is removed, the key itself is removed from `fields`.
+   */
+  async removeFieldRevision(
+    ownerOid: string,
+    contactId: string,
+    key: string,
+    recordedAt: Date,
+  ): Promise<Contact> {
+    const contact = await this.contacts.get(ownerOid, contactId);
+    if (!contact) throw new ContactNotFoundError(contactId);
+
+    const existing = contact.fields[key];
+    const target = recordedAt.getTime();
+    const index =
+      existing?.findIndex((r) => r.recorded_at.getTime() === target) ??
+        -1;
+    if (!existing || index < 0) {
+      throw new ContactFieldRevisionNotFoundError(contactId, key, recordedAt);
+    }
+
+    const remaining = [
+      ...existing.slice(0, index),
+      ...existing.slice(index + 1),
+    ];
+    const nextFields = { ...contact.fields };
+    if (remaining.length === 0) {
+      delete nextFields[key];
+    } else {
+      nextFields[key] = remaining;
+    }
+    return await this.contacts.set({
+      ...contact,
+      fields: nextFields,
+      updated_at: new Date(),
     });
   }
 }
@@ -274,14 +320,32 @@ function mergeClaimFields(
   for (const { data, source } of namespaces) {
     if (!data) continue;
     for (const [key, value] of Object.entries(data)) {
+      const existing = merged[key] ?? [];
       const record: ContactFieldRecord = {
         value: value as ContactFieldRecord["value"],
         source,
-        recorded_at: recordedAt,
+        recorded_at: nextRecordedAt(existing, recordedAt),
       };
-      merged[key] = [record, ...(merged[key] ?? [])];
+      merged[key] = [record, ...existing];
     }
   }
 
   return merged;
+}
+
+/**
+ * Per spec §11.7, `recorded_at` MUST uniquely identify a `ContactFieldRecord`
+ * within `(contact_id, key)`. When prepending, bump the candidate forward by
+ * 1ms while it collides with the current newest entry. This also preserves
+ * newest-first ordering even when callers pass an older `recordedAt`.
+ */
+function nextRecordedAt(
+  existing: ContactFieldRecord[],
+  candidate: Date,
+): Date {
+  if (existing.length === 0) return candidate;
+  const newest = existing[0].recorded_at.getTime();
+  let ts = candidate.getTime();
+  if (ts <= newest) ts = newest + 1;
+  return new Date(ts);
 }

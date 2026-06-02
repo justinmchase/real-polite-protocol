@@ -1015,6 +1015,33 @@ When presenting a contact (e.g., `list_contacts`, `get_contact`):
 The contact owner MAY add custom fields at any time via `set_contact_field`
 (source `"owner_note"`).
 
+### 11.7 Field Revision Removal
+
+The contact owner MAY remove individual historical entries ("revisions") from a
+field's history via `remove_contact_field_revision`. Removal is permanent and
+local-only; no envelope is dispatched to the remote.
+
+- A revision is identified by the tuple `(contact_id, key, recorded_at)`. Within
+  a single field key on a single contact, `recorded_at` MUST uniquely identify a
+  `ContactFieldRecord`. The local domain MUST guarantee unique `recorded_at`
+  values per `(contact_id, key)` when appending new records (regenerating the
+  timestamp on collision is acceptable).
+- The tool MUST accept any revision in the history — not only the most recent.
+- Removing the only remaining revision for a key MUST also remove the key from
+  `fields` and from `current_fields`.
+- Removing the most recent revision MUST cause `current_fields` to expose the
+  next-most-recent surviving revision for that key (or omit the key entirely if
+  none remain).
+- The local domain MUST NOT alter the `recorded_at` or `value` of any surviving
+  revision when another revision is removed.
+- Removal of revisions sourced from `"sender_verified"`, `"domain_admin"`, or
+  `"sender_custom"` is permitted; future inbound invitations or
+  invitation_replies that re-deliver the same claim MAY re-introduce a new
+  revision (with a fresh `recorded_at`).
+- If the requested revision does not exist, the tool MUST return
+  `E_CONTACT_FIELD_REVISION_NOT_FOUND`.
+- The contact's `updated_at` MUST advance on every successful removal.
+
 ## 12. MCP Tool Catalog
 
 This section defines the RECOMMENDED MCP tools the local domain SHOULD expose to
@@ -1066,14 +1093,15 @@ Schema) and MUST include both:
 
 ### 12.4 Contact Tools
 
-| Tool                | Description                                                                                                                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_contacts`     | List the local user's contacts, returning `current_fields` per contact, plus identity, terms, and `blocked` state.                                                          |
-| `get_contact`       | Retrieve a single contact including full field history.                                                                                                                     |
-| `delete_contact`    | Permanently delete a contact. Removes credential mappings; subsequent inbound envelopes from the remote sender are rejected with `E_CONTACT_NOT_FOUND`.                     |
-| `block_contact`     | Set `blocked = true` on a contact (§11.4).                                                                                                                                  |
-| `unblock_contact`   | Set `blocked = false` on a contact (§11.4).                                                                                                                                 |
-| `set_contact_field` | Add an owner-authored custom field to a contact. Prepends a new `ContactFieldRecord` with `source: "owner_note"` to the field's history. Does not replace existing history. |
+| Tool                            | Description                                                                                                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_contacts`                 | List the local user's contacts, returning `current_fields` per contact, plus identity, terms, and `blocked` state.                                                                                   |
+| `get_contact`                   | Retrieve a single contact including full field history.                                                                                                                                              |
+| `delete_contact`                | Permanently delete a contact. Removes credential mappings; subsequent inbound envelopes from the remote sender are rejected with `E_CONTACT_NOT_FOUND`.                                              |
+| `block_contact`                 | Set `blocked = true` on a contact (§11.4).                                                                                                                                                           |
+| `unblock_contact`               | Set `blocked = false` on a contact (§11.4).                                                                                                                                                          |
+| `set_contact_field`             | Add an owner-authored custom field to a contact. Prepends a new `ContactFieldRecord` with `source: "owner_note"` to the field's history. Does not replace existing history.                          |
+| `remove_contact_field_revision` | Permanently remove a single historical `ContactFieldRecord` from a contact's field history, identified by `(contact_id, key, recorded_at)`. Works on any revision, not just the most recent (§11.7). |
 
 ### 12.5 Identity Tools
 

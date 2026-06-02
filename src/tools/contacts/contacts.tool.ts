@@ -10,7 +10,7 @@ import type {
 } from "../../models/mod.ts";
 import { flatMerge } from "../../managers/contacts/contact.manager.ts";
 import { toolResult, withToolErrorHandling } from "../tool-result.ts";
-import { outputDate } from "../date-schema.ts";
+import { inputDate, outputDate } from "../date-schema.ts";
 
 const ClaimValueOutputSchema = z.union([
   z.string(),
@@ -119,6 +119,16 @@ const SetContactFieldInputSchema = {
   ),
 };
 
+const RemoveContactFieldRevisionInputSchema = {
+  contact_id: z.string().describe("ID of the contact to update"),
+  key: z.string().min(1).max(64).describe(
+    "Field key whose revision should be removed",
+  ),
+  recorded_at: inputDate().describe(
+    "ISO 8601 timestamp identifying the specific revision to remove. Must match an existing record's recorded_at exactly.",
+  ),
+};
+
 type ListContactsArgs = z.infer<z.ZodObject<typeof ListContactsInputSchema>>;
 type GetContactArgs = z.infer<z.ZodObject<typeof GetContactInputSchema>>;
 type DeleteContactArgs = z.infer<z.ZodObject<typeof DeleteContactInputSchema>>;
@@ -128,6 +138,9 @@ type UnblockContactArgs = z.infer<
 >;
 type SetContactFieldArgs = z.infer<
   z.ZodObject<typeof SetContactFieldInputSchema>
+>;
+type RemoveContactFieldRevisionArgs = z.infer<
+  z.ZodObject<typeof RemoveContactFieldRevisionInputSchema>
 >;
 
 function projectContact(contact: Contact): Record<string, unknown> {
@@ -266,6 +279,26 @@ export class ContactTool {
           params.contact_id,
           params.key,
           params.value as ContactFieldRecord["value"],
+        );
+        return toolResult(projectContact(contact));
+      }),
+    );
+
+    server.registerTool(
+      "remove_contact_field_revision",
+      {
+        description:
+          "Permanently remove a single historical revision from a contact's field history, " +
+          "identified by (contact_id, key, recorded_at). Works on any revision — not just the most recent (spec §11.7).",
+        inputSchema: RemoveContactFieldRevisionInputSchema,
+        outputSchema: ContactOutputSchema,
+      },
+      withToolErrorHandling(async (params: RemoveContactFieldRevisionArgs) => {
+        const contact = await this.contactManager.removeFieldRevision(
+          auth.oid,
+          params.contact_id,
+          params.key,
+          params.recorded_at,
         );
         return toolResult(projectContact(contact));
       }),

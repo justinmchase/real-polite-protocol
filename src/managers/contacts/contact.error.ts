@@ -21,3 +21,13 @@ export class ContactSenderDomainMismatchError extends ApplicationError {
     );
   }
 }
+
+export class ContactFieldRevisionNotFoundError extends ApplicationError {
+  constructor(contactId: string, key: string, recordedAt: Date) {
+    super(
+      404,
+      "E_CONTACT_FIELD_REVISION_NOT_FOUND",
+      `Contact ${contactId} field "${key}" has no revision recorded at ${recordedAt.toISOString()}`,
+    );
+  }
+}

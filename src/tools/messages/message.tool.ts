@@ -314,7 +314,9 @@ export class MessageTool {
       "list_messages",
       {
         description:
-          "List messages received by the authenticated account, ordered by received_at descending.",
+          "Pure-query: list messages received by the authenticated account, ordered by received_at descending. " +
+          "Does NOT mark messages as read. Use this for unread counts, filtering, pagination, or any inspection " +
+          "where you do not intend to consume the message. Use read_messages when presenting content to the user.",
         inputSchema: ListMessagesInputSchema,
         outputSchema: ListMessagesOutputSchema,
       },
@@ -371,7 +373,9 @@ export class MessageTool {
       "get_message",
       {
         description:
-          "Retrieve a single received message by its wire message_id.",
+          "Pure-query: retrieve a single received message by its wire message_id without marking it as read. " +
+          "Use this to inspect a message's metadata or content without consuming it. " +
+          "Use read_message when presenting the content to the user.",
         inputSchema: GetMessageInputSchema,
         outputSchema: GetMessageOutputSchema,
       },
@@ -393,6 +397,112 @@ export class MessageTool {
           received_at: m.received_at,
           read: m.read,
           ...(m.read_at !== undefined && { read_at: m.read_at }),
+          message: m.message,
+          ...(m.metadata !== undefined && { metadata: m.metadata }),
+          sender_fields,
+        });
+      }),
+    );
+
+    server.registerTool(
+      "read_messages",
+      {
+        description:
+          "Fetch messages for presentation to the user AND mark them all as read. " +
+          "Accepts the same filters as list_messages. Call this when you intend to display message content. " +
+          "Use list_messages instead when checking unread counts, browsing, or filtering without consuming.",
+        inputSchema: ListMessagesInputSchema,
+        outputSchema: ListMessagesOutputSchema,
+      },
+      withToolErrorHandling(async (params: ListMessagesArgs) => {
+        const { normalizePageSize, normalizeResumeToken } = await import(
+          "../../utils/pagination.ts"
+        );
+        const pageSize = normalizePageSize(params.page_size);
+        const cursor = normalizeResumeToken(params.resume_token);
+
+        const result = await this.messageManager.listByOid(auth.oid, {
+          pageSize,
+          ...(cursor !== undefined && { cursor }),
+          ...(params.category !== undefined && { category: params.category }),
+          ...(params.contact_id !== undefined &&
+            { contactId: params.contact_id }),
+          ...(params.remote_domain !== undefined &&
+            { remoteDomain: params.remote_domain }),
+          ...(params.received_after !== undefined &&
+            { receivedAfter: params.received_after }),
+          ...(params.received_before !== undefined &&
+            { receivedBefore: params.received_before }),
+          ...(params.read !== undefined && { read: params.read }),
+        });
+
+        const readAt = new Date();
+        const unreadIds = result.messages
+          .filter((m) => !m.read)
+          .map((m) => m.message_id);
+        if (unreadIds.length > 0) {
+          await this.messageManager.markRead(auth.oid, unreadIds);
+        }
+
+        const messages = await Promise.all(
+          result.messages.map(async (m) => ({
+            id: m.id,
+            contact_id: m.contact_id,
+            message_id: m.message_id,
+            remote_domain: m.remote_domain,
+            category: m.category,
+            content_rating: m.content_rating,
+            sent_at: m.sent_at,
+            received_at: m.received_at,
+            read: true,
+            read_at: m.read_at ?? readAt,
+            message: m.message,
+            ...(m.metadata !== undefined && { metadata: m.metadata }),
+            sender_fields: await this.senderFields(auth.oid, m.contact_id),
+          })),
+        );
+
+        return toolResult({
+          messages,
+          page_size: pageSize,
+          ...(result.nextCursor !== undefined &&
+            { next_resume_token: result.nextCursor }),
+        });
+      }),
+    );
+
+    server.registerTool(
+      "read_message",
+      {
+        description:
+          "Retrieve a single received message by its wire message_id AND mark it as read. " +
+          "Use this when presenting the message body to the user. " +
+          "Use get_message if you only need to inspect without marking as read.",
+        inputSchema: GetMessageInputSchema,
+        outputSchema: GetMessageOutputSchema,
+      },
+      withToolErrorHandling(async (params: GetMessageArgs) => {
+        const m = await this.messageManager.getByMessageId(
+          auth.oid,
+          params.message_id,
+        );
+        if (!m) throw new MessageNotFoundError(params.message_id);
+        const readAt = new Date();
+        if (!m.read) {
+          await this.messageManager.markRead(auth.oid, [params.message_id]);
+        }
+        const sender_fields = await this.senderFields(auth.oid, m.contact_id);
+        return toolResult({
+          id: m.id,
+          contact_id: m.contact_id,
+          message_id: m.message_id,
+          remote_domain: m.remote_domain,
+          category: m.category,
+          content_rating: m.content_rating,
+          sent_at: m.sent_at,
+          received_at: m.received_at,
+          read: true,
+          read_at: m.read_at ?? readAt,
           message: m.message,
           ...(m.metadata !== undefined && { metadata: m.metadata }),
           sender_fields,

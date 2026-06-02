@@ -11,6 +11,9 @@ enumerate messages addressed to their account (§12.4).
 
 ## Expected behavior
 
+- The tool is a **pure query** — it MUST NOT change the `read` state of any
+  message. Callers that intend to present content to the user SHOULD use
+  `read_messages` (`req:messages-009`) instead.
 - The tool is available to any authenticated account.
 - The tool returns only messages addressed to a contact owned by the calling
   account (by OID). Messages addressed to other accounts MUST NOT be visible.
