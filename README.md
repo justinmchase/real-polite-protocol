@@ -9,13 +9,141 @@ This repository contains:
 - **A reference implementation** — a lightweight implementation of the spec,
   targeting [Deno Deploy](https://deno.com/deploy)
 
-## Status
-
-Early design phase. Spec and implementation are both under active development.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## Spec-Driven Development
+
+RPP is built spec-first. The protocol is defined as a written specification,
+that spec is decomposed into machine-readable requirement documents, and every
+requirement is verified by an executable test. Implementation code is the
+*last* artifact in the chain, not the first.
+
+This is enforced by a strict authority order that applies to every change in
+the repository:
+
+1. **RFC / spec** — [spec/rpp-spec.md](spec/rpp-spec.md)
+2. **Requirement documents** — [.github/requirements/](.github/requirements/)
+3. **Requirement tests** — [src/requirements/](src/requirements/)
+4. **Scenarios** — [.github/scenarios/](.github/scenarios/) +
+   [src/scenarios/](src/scenarios/)
+5. **Implementation code** — [src/](src/)
+
+A lower-authority artifact MUST NOT contradict a higher-authority one. When a
+test fails, the implementation gets fixed — the test is not weakened. When the
+desired behavior conflicts with a requirement, the requirement (and possibly
+the spec) is changed deliberately and explicitly, then the tests and code
+follow. This keeps the spec, the requirements, the tests, and the running code
+in lock-step.
+
+### Requirement documents
+
+Each requirement is a small Markdown file under `.github/requirements/`,
+grouped into folders by feature area (`invitations/`, `messages/`, `contacts/`,
+`receptive-policy/`, `domain-admin/`, ...). Every document carries
+frontmatter with a stable `id`, a human-readable `title`, and a `spec_ref`
+pointing back to the relevant section(s) of the RPP spec:
+
+```yaml
+---
+id: invitations-003
+title: Listeners can accept a pending invitation
+spec_ref: "10.2, 10.4, 11.2, 12.2"
+---
+```
+
+The body describes the expected behavior in plain language — what the system
+must do, what inputs it accepts, what error codes it returns, and what state
+transitions it performs — at a level of detail that both humans and agents can
+implement and verify against.
+
+### Requirement tests
+
+Every requirement document has a mirrored test file under `src/requirements/`
+that uses the exact same path. For example:
+
+| Requirement document                                                  | Test file                                                                |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `.github/requirements/startup.requirement.md`                         | `src/requirements/startup.requirement.test.ts`                           |
+| `.github/requirements/invitations/003-accept-invitation.requirement.md` | `src/requirements/invitations/003-accept-invitation.requirement.test.ts` |
+
+Each test file has a single top-level `Deno.test()` named after the
+requirement id, with individual assertions grouped into `t.step()` calls:
+
+```ts
+Deno.test("req:invitations-003 - Listeners can accept a pending invitation", async (t) => {
+  await t.step("creates a bilateral contact", async () => { ... });
+  await t.step("dispatches an invitation_reply envelope", async () => { ... });
+  await t.step("rejects non-pending invitations with E_INVITATION_NOT_PENDING", async () => { ... });
+});
+```
+
+Requirement tests are integration-scoped: they exercise the real controllers,
+managers, and repositories against an isolated Deno KV store. Reusable test
+helpers live in [src/requirements/helpers/](src/requirements/helpers/) — test
+files themselves contain only imports and `Deno.test()` calls, never inline
+helpers or shared fixtures.
+
+### Scenarios
+
+Where requirement tests verify a single normative behavior in-process,
+**scenarios** verify whole-system, multi-user journeys end-to-end through the
+running MCP HTTP endpoint. Each scenario is a Markdown document under
+`.github/scenarios/` describing a real-world flow in plain English (e.g.
+"Alice opens a receptive window; Justin sends her an invitation; Alice
+accepts and replies"), paired with a mirrored
+`src/scenarios/**/<name>.scenario.test.ts` that drives the journey using
+authenticated persona clients. Scenarios sit below requirement tests in the
+authority chain and complement — but never replace — them.
+
+### Coverage and gap analysis
+
+The repository is audited continuously against its own spec. Two reports live
+under [spec/reports/](spec/reports/) and are regenerated as the codebase
+evolves:
+
+- [spec/reports/gap-analysis-report.md](spec/reports/gap-analysis-report.md) —
+  structural coverage: which RFC sections have requirement docs, which
+  requirement docs have tests, and what is missing.
+- [spec/reports/evaluate-report.md](spec/reports/evaluate-report.md) —
+  semantic coverage: how thoroughly each requirement test actually verifies
+  the *meaning* of its requirement document, with concrete suggestions for
+  closing gaps.
+
+Coverage is reported in the form `X/Y requirements covered by tests (Z%)`,
+and significant gaps (missing requirements, weak normative language, untested
+behaviors) are called out explicitly so they can be addressed before they
+become regressions.
+
+### Working with the system
+
+When adding a new behavior, the workflow is always:
+
+1. If the spec does not already mandate the behavior, propose a spec change
+   first.
+2. Add or update a requirement document under `.github/requirements/` with a
+   stable `id` and a `spec_ref` back to the relevant spec section(s).
+3. Add or update a mirrored requirement test under `src/requirements/` that
+   fails until the behavior is implemented.
+4. Implement the behavior in `src/` until the test passes.
+5. Where the behavior spans multiple personas or HTTP round-trips, add a
+   scenario under `.github/scenarios/` + `src/scenarios/` as well.
+6. Re-run the gap-analysis and evaluate reports and address any regressions.
+
+Run everything together with:
+
+```sh
+deno test
+```
+
+No special configuration is needed — Deno discovers all `*.test.ts` files
+(requirement tests, scenario tests, and unit tests) automatically.
+
+---
 
 ## Local Data
 
@@ -84,6 +212,7 @@ endpoint.
 | `list_contacts`     | List contacts owned by the authenticated account. Returns the bilateral contact records established via accepted invitations (spec §11). Supports filtering by blocked status. |
 | `get_contact`       | Retrieve a single contact by id. Returns 404 when not owned by the caller.                                                                                                     |
 | `set_contact_field` | Record an owner-supplied field value for a contact. The new record is appended as source `owner_note`; existing values from other sources are preserved.                       |
+| `remove_contact_field_revision` | Permanently remove a single historical revision from a contact's field history, identified by `(contact_id, key, recorded_at)`. Works on any revision, not just the most recent (spec §11.7).            |
 | `block_contact`     | Mark a contact as blocked. Inbound and outbound messaging through this contact is refused until the contact is unblocked (spec §11.6).                                         |
 | `unblock_contact`   | Clear the blocked flag on a contact, restoring inbound and outbound messaging.                                                                                                 |
 | `delete_contact`    | Permanently delete a contact and its history. Both directions of communication become unsignable; pending invitations are unaffected.                                          |
@@ -103,14 +232,16 @@ endpoint.
 
 ### Messages
 
-| Tool                 | Description                                                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `list_messages`      | List messages received by the authenticated account, ordered by received_at descending.                                                    |
-| `get_message`        | Retrieve a single received message by its wire message_id.                                                                                 |
-| `mark_read`          | Mark one or more received messages as read.                                                                                                |
-| `delete_message`     | Permanently delete a received message from the local inbox. Deletion is local-only.                                                        |
-| `send_message`       | Send a `message` envelope to a contact. The local domain HMAC-signs the request with the contact's remote_credential (spec §11.3 / §11.5). |
-| `list_sent_messages` | List messages dispatched by the authenticated account, ordered by sent_at descending.                                                      |
+| Tool                 | Description                                                                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_messages`      | Pure-query: list messages received by the authenticated account, ordered by received_at descending. Does NOT mark messages as read. Use for unread counts, filtering, or pagination without consuming.                 |
+| `read_messages`      | Fetch messages for presentation to the user AND mark them all as read. Accepts the same filters as `list_messages`. Call this when displaying message content.                                                         |
+| `get_message`        | Retrieve a single received message by its wire message_id. Does NOT mark the message as read.                                                                                                                          |
+| `read_message`       | Retrieve a single received message by its wire message_id AND mark it as read. Use when presenting the message body to the user.                                                                                       |
+| `mark_read`          | Mark one or more received messages as read.                                                                                                                                                                            |
+| `delete_message`     | Permanently delete a received message from the local inbox. Deletion is local-only.                                                                                                                                    |
+| `send_message`       | Send a `message` envelope to a contact. The local domain HMAC-signs the request with the contact's remote_credential (spec §11.3 / §11.5).                                                                             |
+| `list_sent_messages` | List messages dispatched by the authenticated account, ordered by sent_at descending.                                                                                                                                  |
 
 ### Receptive Policies
 
